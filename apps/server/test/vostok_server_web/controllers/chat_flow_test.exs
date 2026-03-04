@@ -245,6 +245,27 @@ defmodule VostokServerWeb.ChatFlowTest do
              }
            } = json_response(react_message_conn, 200)
 
+    reply_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "client-reply",
+        ciphertext: ciphertext,
+        header: header,
+        message_kind: "text",
+        reply_to_message_id: first_message_id,
+        recipient_envelopes: %{
+          device_id => recipient_envelope
+        }
+      })
+
+    assert %{
+             "message" => %{
+               "message_kind" => "text",
+               "reply_to_message_id" => ^first_message_id
+             }
+           } = json_response(reply_message_conn, 201)
+
     attachment_message_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
@@ -273,7 +294,7 @@ defmodule VostokServerWeb.ChatFlowTest do
              "chats" => [
                %{
                  "id" => ^chat_id,
-                 "message_count" => 2
+                 "message_count" => 3
                }
              ]
            } = json_response(chats_conn, 200)
@@ -297,7 +318,12 @@ defmodule VostokServerWeb.ChatFlowTest do
                    }
                  ],
                  "recipient_envelope" => ^recipient_envelope,
+                 "reply_to_message_id" => nil,
                  "sender_device_id" => ^device_id
+               },
+               %{
+                 "message_kind" => "text",
+                 "reply_to_message_id" => ^first_message_id
                },
                %{
                  "message_kind" => "attachment"

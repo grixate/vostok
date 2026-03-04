@@ -21,7 +21,8 @@ defmodule VostokServerWeb.OpsFlowTest do
     assert %{
              "overview" => %{
                "users" => users,
-               "federation_peers" => 0
+               "federation_peers" => 0,
+               "queued_federation_deliveries" => 0
              }
            } = json_response(overview_conn, 200)
 
@@ -84,6 +85,76 @@ defmodule VostokServerWeb.OpsFlowTest do
                }
              ]
            } = json_response(list_peers_conn, 200)
+
+    queue_delivery_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/admin/federation/peers/#{peer_id}/deliveries", %{
+        event_type: "message_relay",
+        payload: %{
+          envelope_id: "env-1",
+          chat_id: "chat-1"
+        }
+      })
+
+    assert %{
+             "delivery" => %{
+               "id" => delivery_job_id,
+               "peer_id" => ^peer_id,
+               "event_type" => "message_relay",
+               "status" => "queued",
+               "attempt_count" => 0
+             }
+           } = json_response(queue_delivery_conn, 201)
+
+    list_deliveries_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/admin/federation/deliveries")
+
+    assert %{
+             "deliveries" => [
+               %{
+                 "id" => ^delivery_job_id,
+                 "status" => "queued"
+               }
+             ]
+           } = json_response(list_deliveries_conn, 200)
+
+    fail_delivery_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/admin/federation/deliveries/#{delivery_job_id}/attempt", %{
+        outcome: "failed",
+        last_error: "Peer was offline"
+      })
+
+    assert %{
+             "delivery" => %{
+               "id" => ^delivery_job_id,
+               "status" => "failed",
+               "attempt_count" => 1,
+               "last_error" => "Peer was offline"
+             }
+           } = json_response(fail_delivery_conn, 200)
+
+    deliver_delivery_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/admin/federation/deliveries/#{delivery_job_id}/attempt", %{
+        outcome: "delivered"
+      })
+
+    assert %{
+             "delivery" => %{
+               "id" => ^delivery_job_id,
+               "status" => "delivered",
+               "attempt_count" => 2,
+               "delivered_at" => delivered_at
+             }
+           } = json_response(deliver_delivery_conn, 200)
+
+    assert is_binary(delivered_at)
 
     turn_conn =
       build_conn()

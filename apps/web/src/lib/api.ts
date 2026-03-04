@@ -32,6 +32,7 @@ export type ChatMessage = {
   inserted_at: string
   header: string | null
   ciphertext: string
+  reply_to_message_id: string | null
   recipient_device_ids: string[]
   reactions: Array<{
     reaction_key: string
@@ -105,6 +106,7 @@ export type AdminOverview = {
   chats: number
   media_uploads: number
   federation_peers: number
+  queued_federation_deliveries?: number
   pending_federation_peers: number
 }
 
@@ -332,6 +334,7 @@ export async function createMessage(
     ciphertext: string
     message_kind: string
     header?: string
+    reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
   }
 ): Promise<{ message: ChatMessage }> {

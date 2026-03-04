@@ -45,6 +45,15 @@ defmodule VostokServerWeb.Router do
     get "/admin/overview", AdminController, :overview
     get "/admin/federation/peers", AdminController, :federation_peers
     post "/admin/federation/peers", AdminController, :create_federation_peer
+    get "/admin/federation/deliveries", AdminController, :federation_deliveries
+
+    post "/admin/federation/peers/:peer_id/deliveries",
+         AdminController,
+         :create_federation_delivery
+
+    post "/admin/federation/deliveries/:job_id/attempt",
+         AdminController,
+         :attempt_federation_delivery
 
     post "/admin/federation/peers/:peer_id/status",
          AdminController,

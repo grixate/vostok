@@ -32,7 +32,7 @@ This repository now includes the current practical Stage 3 slice.
 - The client now tracks a local per-session ratchet state and caches skipped message keys for limited out-of-order delivery
 - Recipient-wrapped message envelopes for devices that have published an encryption public key
 - Legacy browser-local AES-GCM fallback for older devices and previously stored local-only messages
-- Local message cache in browser storage for the active chat
+- IndexedDB-backed local message cache for the active chat, with localStorage fallback/migration
 - Phoenix Channel realtime fanout on `chat:{chat_id}` for live message delivery in the active chat
 
 ## Not Yet Implemented
@@ -40,7 +40,6 @@ This repository now includes the current practical Stage 3 slice.
 - Signal X3DH session establishment
 - Double Ratchet
 - Cross-device decryptability
-- IndexedDB-backed offline store
 
 ## Current Meaning of Stage 3
 

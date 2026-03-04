@@ -14,10 +14,12 @@ This is the Phoenix backend for the Vostok foundation, identity, and early messa
 - persisted direct-chat session bootstrap endpoints
 - opaque message envelope persistence
 - persisted message reactions
+- persisted message replies via `reply_to_message_id`
 - recipient device discovery for chat participants with encryption keys
 - recipient-wrapped envelope metadata on message create/read
 - membership-gated `chat:{chat_id}` realtime fanout
 - operator federation-peer status and heartbeat controls
+- durable outbound federation delivery queue entries with automatic Oban enqueue plus manual enqueue/attempt APIs
 - lightweight persisted call sessions with `call:{chat_id}` realtime state fanout
 - persisted call participants plus a supervised `membrane_rtc_engine` room bootstrap per active call
 - per-device Membrane WebRTC endpoint APIs backed by live `Membrane.RTC.Engine.Endpoint.WebRTC` instances
@@ -75,6 +77,9 @@ If the native Membrane dependencies fail to find OpenSSL during compile, export:
 - `GET /api/v1/admin/overview`
 - `GET /api/v1/admin/federation/peers`
 - `POST /api/v1/admin/federation/peers`
+- `GET /api/v1/admin/federation/deliveries`
+- `POST /api/v1/admin/federation/peers/:peer_id/deliveries`
+- `POST /api/v1/admin/federation/deliveries/:job_id/attempt`
 - `POST /api/v1/admin/federation/peers/:peer_id/status`
 - `POST /api/v1/admin/federation/peers/:peer_id/heartbeat`
 - `GET /api/v1/chats/:chat_id/calls/active`
@@ -104,7 +109,7 @@ If the native Membrane dependencies fail to find OpenSSL during compile, export:
 
 - Signal-grade X3DH transcript hardening on top of the current explicit initiator ephemeral bootstrap
 - full sender-key and group interaction rules
-- mTLS federation transport and durable peer queues
+- mTLS federation transport and automatic worker-driven peer queue delivery
 - protocol-native `membrane-webrtc-js` signaling and SFU-backed media orchestration on top of the live WebRTC endpoints
 - SDP/ICE handling backed by the future WebRTC transport layer instead of stub payloads
 - safety-number verification UX

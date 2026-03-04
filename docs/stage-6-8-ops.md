@@ -11,6 +11,9 @@ This repository now includes early operator scaffolding that reaches into the la
   - `POST /api/v1/admin/federation/peers`
   - `POST /api/v1/admin/federation/peers/:peer_id/status`
   - `POST /api/v1/admin/federation/peers/:peer_id/heartbeat`
+  - `GET /api/v1/admin/federation/deliveries`
+  - `POST /api/v1/admin/federation/peers/:peer_id/deliveries`
+  - `POST /api/v1/admin/federation/deliveries/:job_id/attempt`
 - TURN credential API:
   - `POST /api/v1/calls/turn-credentials`
 - Call session APIs:
@@ -27,6 +30,8 @@ This repository now includes early operator scaffolding that reaches into the la
   - `POST /api/v1/calls/:call_id/leave`
   - `POST /api/v1/calls/:call_id/end`
 - Persisted `federation_peers` table for remote peer configuration
+- Persisted `federation_delivery_jobs` table for durable outbound queue state
+- Queued federation deliveries now auto-enqueue background Oban jobs for worker-driven dispatch
 - Persisted `call_sessions` table for lightweight call signaling state
 - Persisted `call_participants` table for device-level join/leave state
 - Persisted `call_signals` table for offer/answer/ICE signaling state
@@ -63,8 +68,13 @@ This repository now includes early operator scaffolding that reaches into the la
 - Full desktop packaging now succeeds locally and produces both `Vostok.app` and a distributable `.dmg`
 - The desktop shell now reacts to native Tauri resize/move/focus events, keeping window maximize/focus state live in the UI
 - The desktop shell now exposes a real always-on-top control with live state in both the titlebar and the desktop host panel
+- The desktop shell now also exposes native fullscreen state and controls in both the titlebar and the desktop host panel
+- The desktop shell now persists the always-on-top preference locally and reapplies it when the Tauri app relaunches
 - The native desktop window title now tracks the active chat and live call mode instead of staying static
 - The desktop wrapper now restores and re-persists its last window frame, so reopened sessions keep their prior size and position
+- The desktop host card can now reset the native window back to its default centered frame, and `Cmd/Ctrl+Shift+0` exposes the same action from the keyboard
+- The desktop host card can now copy a full desktop diagnostics snapshot to the clipboard for debugging and support, and `Cmd/Ctrl+Shift+D` exposes the same action from the keyboard
+- The repo now includes a desktop release-manifest generator that hashes built artifacts into `apps/desktop/release-manifest.json`
 - Untargeted signals now fan out to joined participant device endpoints by default, with sender-loopback only as a fallback
 - The web call panel now exposes an explicit "Broadcast to joined peers" signal target, matching the backend fanout behavior
 - Backend coverage now includes a real two-device joined-call fanout test for untargeted signal bridging
@@ -73,7 +83,7 @@ This repository now includes early operator scaffolding that reaches into the la
 ## Not Yet Implemented
 
 - mTLS federation transport
-- queue-based cross-instance delivery
+- real cross-instance delivery over the new durable queue (the queue now auto-enqueues background workers, but transport is still local-only)
 - full replacement of the fallback browser `RTCPeerConnection` lab with the native `membrane-webrtc-js` path
 - camera/microphone track attachment and binding those transports into the real Membrane RTC Engine pipeline
 - signed desktop bundles and installer flows

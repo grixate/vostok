@@ -4,6 +4,7 @@ defmodule VostokServerWeb.Api.V1.AdminController do
   import Ecto.Query
 
   alias VostokServer.Federation
+  alias VostokServer.Federation.DeliveryJob
   alias VostokServer.Federation.Peer
   alias VostokServer.Identity.User
   alias VostokServer.Media.Upload
@@ -17,6 +18,10 @@ defmodule VostokServerWeb.Api.V1.AdminController do
         chats: Repo.aggregate(Chat, :count, :id),
         media_uploads: Repo.aggregate(Upload, :count, :id),
         federation_peers: Repo.aggregate(Peer, :count, :id),
+        queued_federation_deliveries:
+          DeliveryJob
+          |> where([job], job.status in ["queued", "processing", "failed"])
+          |> Repo.aggregate(:count, :id),
         pending_federation_peers:
           Peer
           |> where([peer], peer.status == "pending")
@@ -35,6 +40,32 @@ defmodule VostokServerWeb.Api.V1.AdminController do
         conn
         |> put_status(:created)
         |> json(%{peer: peer})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def federation_deliveries(conn, _params) do
+    json(conn, %{deliveries: Federation.list_delivery_jobs()})
+  end
+
+  def create_federation_delivery(conn, %{"peer_id" => peer_id} = params) do
+    case Federation.queue_delivery(peer_id, params) do
+      {:ok, delivery_job} ->
+        conn
+        |> put_status(:created)
+        |> json(%{delivery: delivery_job})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def attempt_federation_delivery(conn, %{"job_id" => job_id} = params) do
+    case Federation.attempt_delivery(job_id, params) do
+      {:ok, delivery_job} ->
+        json(conn, %{delivery: delivery_job})
 
       {:error, {kind, message}} ->
         render_error(conn, kind, message)

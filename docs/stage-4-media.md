@@ -14,11 +14,11 @@ This repository now includes the first practical Stage 4 attachment slice.
 - Browser-side attachment download and local decryption
 - Attachment descriptors sent over the existing encrypted message transport
 - Attachment message rendering in the current chat shell
+- Browser-side inline thumbnail generation for image attachments, stored inside the encrypted attachment descriptor for fast preview rendering
 
 ## Not Yet Implemented
 
 - Resumable multi-part chunk tracking beyond sequential append
-- Attachment thumbnails
 - Voice note waveform UI
 - Round video recording and playback
 - Link preview cards

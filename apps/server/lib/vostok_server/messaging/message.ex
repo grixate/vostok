@@ -17,6 +17,7 @@ defmodule VostokServer.Messaging.Message do
 
     belongs_to :chat, VostokServer.Messaging.Chat
     belongs_to :sender_device, VostokServer.Identity.Device
+    belongs_to :reply_to_message, __MODULE__
     has_many :recipient_envelopes, VostokServer.Messaging.MessageRecipient
     has_many :reactions, VostokServer.Messaging.MessageReaction
 
@@ -25,9 +26,10 @@ defmodule VostokServer.Messaging.Message do
 
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:client_id, :header, :ciphertext, :message_kind])
+    |> cast(attrs, [:client_id, :header, :ciphertext, :message_kind, :reply_to_message_id])
     |> validate_required([:client_id, :ciphertext, :message_kind])
     |> validate_inclusion(:message_kind, ["text", "system", "media", "attachment"])
+    |> assoc_constraint(:reply_to_message)
     |> unique_constraint(:client_id)
   end
 end

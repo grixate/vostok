@@ -35,7 +35,8 @@ Desktop wrapper:
 
 - `npm run setup:desktop`
 - `npm run dev:desktop`
-- `npm run build:desktop`
+- `npm run build:desktop` (now also regenerates the desktop release manifest)
+- `npm run manifest:desktop`
 
 Helpful endpoints:
 
@@ -63,6 +64,9 @@ Helpful endpoints:
 - `GET /api/v1/admin/overview`
 - `GET /api/v1/admin/federation/peers`
 - `POST /api/v1/admin/federation/peers`
+- `GET /api/v1/admin/federation/deliveries`
+- `POST /api/v1/admin/federation/peers/:peer_id/deliveries`
+- `POST /api/v1/admin/federation/deliveries/:job_id/attempt`
 - `POST /api/v1/admin/federation/peers/:peer_id/status`
 - `POST /api/v1/admin/federation/peers/:peer_id/heartbeat`
 - `GET /api/v1/chats/:chat_id/calls/active`

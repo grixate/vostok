@@ -10,6 +10,7 @@ export type DesktopWindowState = {
   maximized: boolean
   focused: boolean
   alwaysOnTop: boolean
+  fullscreen: boolean
 }
 
 export type DesktopWindowGeometry = {
@@ -68,16 +69,18 @@ export async function setDesktopWindowTitle(title: string): Promise<void> {
 export async function fetchDesktopWindowState(): Promise<DesktopWindowState> {
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   const appWindow = getCurrentWindow()
-  const [maximized, focused, alwaysOnTop] = await Promise.all([
+  const [maximized, focused, alwaysOnTop, fullscreen] = await Promise.all([
     appWindow.isMaximized(),
     appWindow.isFocused(),
-    appWindow.isAlwaysOnTop()
+    appWindow.isAlwaysOnTop(),
+    appWindow.isFullscreen()
   ])
 
   return {
     maximized,
     focused,
-    alwaysOnTop
+    alwaysOnTop,
+    fullscreen
   }
 }
 
@@ -87,6 +90,23 @@ export async function toggleDesktopWindowAlwaysOnTop(): Promise<boolean> {
   const nextValue = !(await appWindow.isAlwaysOnTop())
 
   await appWindow.setAlwaysOnTop(nextValue)
+  return nextValue
+}
+
+export async function setDesktopWindowAlwaysOnTop(nextValue: boolean): Promise<boolean> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const appWindow = getCurrentWindow()
+
+  await appWindow.setAlwaysOnTop(nextValue)
+  return appWindow.isAlwaysOnTop()
+}
+
+export async function toggleDesktopWindowFullscreen(): Promise<boolean> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const appWindow = getCurrentWindow()
+  const nextValue = !(await appWindow.isFullscreen())
+
+  await appWindow.setFullscreen(nextValue)
   return nextValue
 }
 
@@ -112,6 +132,30 @@ export async function applyDesktopWindowGeometry(geometry: DesktopWindowGeometry
 
   await appWindow.setPosition(new PhysicalPosition(geometry.x, geometry.y))
   await appWindow.setSize(new PhysicalSize(geometry.width, geometry.height))
+}
+
+export async function resetDesktopWindowGeometry(
+  width = 1440,
+  height = 960
+): Promise<DesktopWindowGeometry> {
+  const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
+    import('@tauri-apps/api/window'),
+    import('@tauri-apps/api/dpi')
+  ])
+  const appWindow = getCurrentWindow()
+
+  if (await appWindow.isFullscreen()) {
+    await appWindow.setFullscreen(false)
+  }
+
+  if (await appWindow.isMaximized()) {
+    await appWindow.unmaximize()
+  }
+
+  await appWindow.setSize(new LogicalSize(width, height))
+  await appWindow.center()
+
+  return fetchDesktopWindowGeometry()
 }
 
 export async function subscribeDesktopWindowState(

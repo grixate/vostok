@@ -187,6 +187,7 @@ defmodule VostokServer.Messaging do
              is_binary(current_device_id) and is_map(attrs) do
     with {:ok, _membership} <- ensure_membership(chat_id, user_id),
          {:ok, normalized} <- normalize_message_attrs(attrs),
+         {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
          {:ok, recipient_device_ids} <- recipient_device_ids(chat_id) do
       Multi.new()
       |> Multi.insert(:message, build_message_changeset(chat_id, sender_device_id, normalized))
@@ -219,6 +220,7 @@ defmodule VostokServer.Messaging do
               :inserted_at,
               :header,
               :ciphertext,
+              :reply_to_message_id,
               :recipient_envelopes,
               :reactions
             ])
@@ -626,6 +628,7 @@ defmodule VostokServer.Messaging do
          {:ok, ciphertext} <- fetch_base64(attrs, "ciphertext", "ciphertext"),
          {:ok, header} <- fetch_optional_base64(attrs, "header"),
          {:ok, message_kind} <- fetch_string(attrs, "message_kind", "message kind"),
+         {:ok, reply_to_message_id} <- fetch_optional_string(attrs, "reply_to_message_id"),
          {:ok, recipient_envelopes} <- fetch_optional_recipient_envelopes(attrs) do
       {:ok,
        %{
@@ -633,6 +636,7 @@ defmodule VostokServer.Messaging do
          ciphertext: ciphertext,
          header: header,
          message_kind: message_kind,
+         reply_to_message_id: reply_to_message_id,
          recipient_envelopes: recipient_envelopes
        }}
     end
@@ -644,7 +648,8 @@ defmodule VostokServer.Messaging do
       client_id: normalized.client_id,
       header: normalized.header,
       ciphertext: normalized.ciphertext,
-      message_kind: normalized.message_kind
+      message_kind: normalized.message_kind,
+      reply_to_message_id: normalized.reply_to_message_id
     })
   end
 
@@ -819,6 +824,7 @@ defmodule VostokServer.Messaging do
       inserted_at: DateTime.to_iso8601(message.inserted_at),
       header: encode_binary(message.header),
       ciphertext: Base.encode64(message.ciphertext),
+      reply_to_message_id: message.reply_to_message_id,
       recipient_device_ids: Enum.map(message.recipient_envelopes, & &1.device_id),
       reactions: summarize_reactions(Map.get(message, :reactions, []), current_user_id),
       recipient_envelope:
@@ -862,6 +868,10 @@ defmodule VostokServer.Messaging do
       nil -> {:error, {:validation, "#{label} is required."}}
       value -> {:ok, value}
     end
+  end
+
+  defp fetch_optional_string(attrs, key) do
+    {:ok, attrs |> Map.get(key) |> normalize_string()}
   end
 
   defp fetch_base64(attrs, key, label) do
@@ -996,6 +1006,16 @@ defmodule VostokServer.Messaging do
 
   defp ensure_message_chat(%Message{}, _chat_id),
     do: {:error, {:not_found, "Message not found in this chat."}}
+
+  defp validate_reply_target(_chat_id, nil), do: {:ok, nil}
+
+  defp validate_reply_target(chat_id, reply_to_message_id) when is_binary(reply_to_message_id) do
+    case Repo.get(Message, reply_to_message_id) do
+      %Message{chat_id: ^chat_id} = message -> {:ok, message}
+      %Message{} -> {:error, {:validation, "Reply target must belong to this chat."}}
+      nil -> {:error, {:not_found, "Reply target not found."}}
+    end
+  end
 
   defp broadcast_message(chat_id, message_id) do
     Endpoint.broadcast("chat:#{chat_id}", "message:new", %{

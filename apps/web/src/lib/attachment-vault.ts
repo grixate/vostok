@@ -50,6 +50,34 @@ export async function decryptAttachmentFile(
   return new Blob([plaintext], { type: contentType || 'application/octet-stream' })
 }
 
+export async function generateAttachmentThumbnailDataUrl(file: File): Promise<string | null> {
+  if (!file.type.startsWith('image/')) {
+    return null
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+
+  try {
+    const image = await loadImage(objectUrl)
+    const canvas = document.createElement('canvas')
+    const maxEdge = 280
+    const scale = Math.min(1, maxEdge / Math.max(image.width, image.height))
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      return null
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.78)
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
 async function importAesKey(rawKey: Uint8Array, usages: KeyUsage[]): Promise<CryptoKey> {
   return window.crypto.subtle.importKey(
     'raw',
@@ -68,4 +96,13 @@ function ensureWebCrypto() {
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Failed to render an attachment thumbnail.'))
+    image.src = src
+  })
 }

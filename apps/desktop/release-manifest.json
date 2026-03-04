@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-03-04T17:12:58.938Z",
+  "bundle_root": "/Users/grigorymikhailov/Documents/vostok/apps/desktop/src-tauri/target/release/bundle",
+  "artifact_count": 6,
+  "artifacts": [
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/dmg/bundle_dmg.sh",
+      "bytes": 19300,
+      "sha256": "3b21448e5eef9b7c4f6bd8593e6c5f577ee5c64db2a237a4908e63fb6d81a89e"
+    },
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/macos/rw.61125.Vostok_0.1.0_aarch64.dmg",
+      "bytes": 34643456,
+      "sha256": "845d180a4d2f5972be80cebb76aa5ff5b86c88746e2a8c8fff617d3db4b66801"
+    },
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/macos/Vostok.app/Contents/Info.plist",
+      "bytes": 1004,
+      "sha256": "222fa400dcc67d102f3be349912123d07bc9950c53c341c89c39c4c7f4dc7c72"
+    },
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/macos/Vostok.app/Contents/MacOS/vostok_desktop",
+      "bytes": 8325472,
+      "sha256": "ac0bd2cfdab3c3e12966524537ea43cdd075d0116544fb62b50e295106d41ccd"
+    },
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/share/create-dmg/support/eula-resources-template.xml",
+      "bytes": 2376,
+      "sha256": "7d61d948ba7f118306d61107fead78f04e3338585e2ec729abb65d5d2e21012d"
+    },
+    {
+      "relative_path": "apps/desktop/src-tauri/target/release/bundle/share/create-dmg/support/template.applescript",
+      "bytes": 1828,
+      "sha256": "13727c7930c50be639a1eb191e893f1ebc72c270268d4611391b41410a3e862a"
+    }
+  ]
+}

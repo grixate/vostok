@@ -10,6 +10,7 @@
     "build": "npm run build --workspace @vostok/web",
     "build:web": "npm run build --workspace @vostok/web",
     "build:desktop": "cd apps/desktop && npm run build",
+    "manifest:desktop": "node ops/generate-desktop-release-manifest.mjs",
     "dev:web": "npm run dev --workspace @vostok/web",
     "dev:desktop": "cd apps/desktop && npm run dev",
     "setup:desktop": "cd apps/desktop && npm install",

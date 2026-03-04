@@ -18,12 +18,14 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - authenticated group-chat creation
 - authenticated attachment uploads and encrypted file download
 - quick reaction toggles for recent messages
+- reply composer state with inline reply previews for current-thread messages
 - persisted direct-chat session bootstrap with explicit initiator ephemeral keys, handshake assertions, and local session-key caching
 - recipient-wrapped message encryption for devices with published encryption keys
 - per-message derived session-key encryption with local ratchet state and skipped-message handling when a full chat session map is available
 - legacy browser-local AES-GCM fallback for older local-only messages
-- local message cache for the selected chat
+- IndexedDB-backed local message cache for the selected chat
 - Phoenix Channel subscription for live updates in the active chat
+- image attachments now include inline encrypted thumbnail previews for faster message rendering
 - realtime call-state subscription for the active chat
 - realtime participant updates for the active call room
 - realtime call-signal updates for offer/answer/ICE scaffolding
@@ -62,8 +64,12 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - the desktop titlebar now uses a real Tauri window-state query and a draggable region, so its controls and state label stay aligned with the host window
 - the desktop shell now listens to native Tauri window resize/move/focus events, so maximize and focus state stay synchronized without manual refresh
 - the desktop titlebar and host card now expose an always-on-top toggle, including a `Cmd/Ctrl+Shift+P` shortcut
+- the desktop shell now reapplies the saved always-on-top preference on startup, so pinning survives relaunches
+- the desktop titlebar and host card now also expose native fullscreen mode, including a `Cmd/Ctrl+Shift+U` shortcut
 - the desktop shell now synchronizes the native Tauri window title with the active chat and call mode
 - the desktop shell now persists and restores the native window frame (size and position) across launches
+- the desktop host card now includes a `Reset Window Frame` action, and `Cmd/Ctrl+Shift+0` restores the default centered desktop frame
+- the desktop host card can now copy a runtime/window/layout diagnostics snapshot to the clipboard for debugging, with a `Cmd/Ctrl+Shift+D` shortcut
 
 ## Commands
 

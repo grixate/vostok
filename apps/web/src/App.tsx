@@ -88,7 +88,11 @@ import {
   encryptMessageEnvelope
 } from './lib/message-vault'
 import { subscribeToCallStream, subscribeToChatStream } from './lib/realtime'
-import { decryptAttachmentFile, encryptAttachmentFile } from './lib/attachment-vault'
+import {
+  decryptAttachmentFile,
+  encryptAttachmentFile,
+  generateAttachmentThumbnailDataUrl
+} from './lib/attachment-vault'
 import {
   attachLocalMediaTracks,
   applyRemoteAnswer,
@@ -122,10 +126,13 @@ import {
   type DesktopWindowGeometry,
   isDesktopShell,
   minimizeDesktopWindow,
+  resetDesktopWindowGeometry,
+  setDesktopWindowAlwaysOnTop as applyDesktopWindowAlwaysOnTop,
   subscribeDesktopWindowGeometry,
   setDesktopWindowTitle,
   subscribeDesktopWindowState,
   toggleDesktopWindowAlwaysOnTop,
+  toggleDesktopWindowFullscreen,
   toggleDesktopWindowMaximize,
   type DesktopRuntimeInfo
 } from './lib/desktop-shell'
@@ -160,12 +167,14 @@ type AttachmentDescriptor = {
   fileName: string
   contentType: string
   size: number
+  thumbnailDataUrl?: string
   contentKeyBase64: string
   ivBase64: string
 }
 
 const STORAGE_KEY = 'vostok.device'
 const DETAIL_RAIL_STORAGE_KEY = 'vostok.layout.detail_rail_visible'
+const DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY = 'vostok.desktop.always_on_top'
 const DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY = 'vostok.desktop.window_geometry'
 const DESKTOP_DETAIL_RAIL_BREAKPOINT = 1200
 const CALL_SIGNAL_BROADCAST = '__broadcast__'
@@ -266,9 +275,11 @@ function App() {
   const [desktopWindowMaximized, setDesktopWindowMaximized] = useState<boolean | null>(null)
   const [desktopWindowFocused, setDesktopWindowFocused] = useState<boolean | null>(null)
   const [desktopWindowAlwaysOnTop, setDesktopWindowAlwaysOnTop] = useState<boolean | null>(null)
+  const [desktopWindowFullscreen, setDesktopWindowFullscreen] = useState<boolean | null>(null)
   const [desktopWindowGeometry, setDesktopWindowGeometry] = useState<DesktopWindowGeometry | null>(null)
   const [messageItems, setMessageItems] = useState<CachedMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [replyTargetMessageId, setReplyTargetMessageId] = useState<string | null>(null)
   const [newChatUsername, setNewChatUsername] = useState('')
   const [newGroupTitle, setNewGroupTitle] = useState('')
   const [newGroupMembers, setNewGroupMembers] = useState('')
@@ -930,23 +941,30 @@ function App() {
   useEffect(() => {
     if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
       setChatSessions([])
+      setReplyTargetMessageId(null)
       return
     }
 
     const chatId = deferredActiveChatId
     let cancelled = false
-    const cached = readCachedMessages(chatId)
-
-    if (cached.length > 0) {
-      messageItemsRef.current = cached
-      setMessageItems(cached)
-    } else {
-      messageItemsRef.current = []
-      setMessageItems([])
-    }
+    setReplyTargetMessageId(null)
 
     async function loadMessages() {
       try {
+        const cached = await readCachedMessages(chatId)
+
+        if (cancelled) {
+          return
+        }
+
+        if (cached.length > 0) {
+          messageItemsRef.current = cached
+          setMessageItems(cached)
+        } else {
+          messageItemsRef.current = []
+          setMessageItems([])
+        }
+
         await syncMessagesFromServer(chatId)
       } catch (error) {
         if (!cancelled) {
@@ -1285,11 +1303,23 @@ function App() {
   }, [detailRailPreferred])
 
   useEffect(() => {
+    if (typeof window === 'undefined' || desktopWindowAlwaysOnTop === null) {
+      return
+    }
+
+    window.localStorage.setItem(
+      DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY,
+      String(desktopWindowAlwaysOnTop)
+    )
+  }, [desktopWindowAlwaysOnTop])
+
+  useEffect(() => {
     if (!isDesktopShell()) {
       setDesktopRuntime(null)
       setDesktopWindowMaximized(null)
       setDesktopWindowFocused(null)
       setDesktopWindowAlwaysOnTop(null)
+      setDesktopWindowFullscreen(null)
       setDesktopWindowGeometry(null)
       return
     }
@@ -1301,12 +1331,13 @@ function App() {
     async function loadDesktopRuntime() {
       try {
         const savedGeometry = readDesktopWindowGeometry()
+        const savedAlwaysOnTop = readDesktopAlwaysOnTopPreference()
 
         if (savedGeometry) {
           await applyDesktopWindowGeometry(savedGeometry)
         }
 
-        const [runtime, windowState, geometry, unlistenState, unlistenGeometry] = await Promise.all([
+        const [runtime, initialWindowState, geometry, unlistenState, unlistenGeometry] = await Promise.all([
           fetchDesktopRuntimeInfo(),
           fetchDesktopWindowState(),
           fetchDesktopWindowGeometry(),
@@ -1315,6 +1346,7 @@ function App() {
               setDesktopWindowMaximized(nextState.maximized)
               setDesktopWindowFocused(nextState.focused)
               setDesktopWindowAlwaysOnTop(nextState.alwaysOnTop)
+              setDesktopWindowFullscreen(nextState.fullscreen)
             }
           }),
           subscribeDesktopWindowGeometry((nextGeometry) => {
@@ -1328,11 +1360,20 @@ function App() {
           })
         ])
 
+        const windowState =
+          savedAlwaysOnTop === null || savedAlwaysOnTop === initialWindowState.alwaysOnTop
+            ? initialWindowState
+            : {
+                ...initialWindowState,
+                alwaysOnTop: await applyDesktopWindowAlwaysOnTop(savedAlwaysOnTop)
+              }
+
         if (!cancelled) {
           setDesktopRuntime(runtime)
           setDesktopWindowMaximized(windowState.maximized)
           setDesktopWindowFocused(windowState.focused)
           setDesktopWindowAlwaysOnTop(windowState.alwaysOnTop)
+          setDesktopWindowFullscreen(windowState.fullscreen)
           setDesktopWindowGeometry(geometry)
           window.localStorage.setItem(
             DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY,
@@ -1350,6 +1391,7 @@ function App() {
           setDesktopWindowMaximized(null)
           setDesktopWindowFocused(null)
           setDesktopWindowAlwaysOnTop(null)
+          setDesktopWindowFullscreen(null)
           setDesktopWindowGeometry(null)
         }
       }
@@ -1440,9 +1482,27 @@ function App() {
         return
       }
 
+      if (event.code === 'Digit0') {
+        event.preventDefault()
+        void handleResetDesktopHostWindowFrame()
+        return
+      }
+
       if (event.key.toLowerCase() === 'p') {
         event.preventDefault()
         void handleToggleDesktopAlwaysOnTop()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'u') {
+        event.preventDefault()
+        void handleToggleDesktopFullscreen()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        void handleCopyDesktopDiagnostics()
         return
       }
 
@@ -1950,6 +2010,7 @@ function App() {
       setDesktopWindowMaximized(windowState.maximized)
       setDesktopWindowFocused(windowState.focused)
       setDesktopWindowAlwaysOnTop(windowState.alwaysOnTop)
+      setDesktopWindowFullscreen(windowState.fullscreen)
       setBanner({ tone: 'success', message: 'Desktop runtime details refreshed.' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to refresh desktop runtime info.'
@@ -2037,6 +2098,102 @@ function App() {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update always-on-top state.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggleDesktopFullscreen() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const nextState = await toggleDesktopWindowFullscreen()
+      setDesktopWindowFullscreen(nextState)
+      setBanner({
+        tone: 'success',
+        message: nextState ? 'Desktop window entered fullscreen.' : 'Desktop window exited fullscreen.'
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to toggle fullscreen mode.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCopyDesktopDiagnostics() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setBanner({ tone: 'error', message: 'Clipboard access is not available in this environment.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const diagnostics = {
+        capturedAt: new Date().toISOString(),
+        desktopShell: isDesktopShell(),
+        desktopRuntime,
+        windowState: {
+          maximized: desktopWindowMaximized,
+          focused: desktopWindowFocused,
+          alwaysOnTop: desktopWindowAlwaysOnTop,
+          fullscreen: desktopWindowFullscreen
+        },
+        windowGeometry: desktopWindowGeometry,
+        nativeTitle: desktopWindowTitle,
+        layout: {
+          detailRailPreferred,
+          detailRailVisible,
+          isDesktopWide
+        },
+        activeContext: {
+          activeChatId: activeChat?.id ?? null,
+          activeChatTitle: activeChat?.title ?? null,
+          activeCallId: activeCall?.id ?? null,
+          activeCallMode: activeCall?.mode ?? null
+        }
+      }
+
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2))
+      setBanner({ tone: 'success', message: 'Desktop diagnostics copied to the clipboard.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to copy desktop diagnostics.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleResetDesktopHostWindowFrame() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const geometry = await resetDesktopWindowGeometry()
+      setDesktopWindowGeometry(geometry)
+      setDesktopWindowMaximized(false)
+      setDesktopWindowFullscreen(false)
+      window.localStorage.setItem(
+        DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY,
+        JSON.stringify(geometry)
+      )
+      setBanner({
+        tone: 'success',
+        message: `Desktop window frame reset to ${geometry.width}×${geometry.height} and recentered.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reset the desktop window frame.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -2189,7 +2346,8 @@ function App() {
     plainText: string,
     chatId: string,
     clientId: string,
-    messageKind: 'text' | 'attachment'
+    messageKind: 'text' | 'attachment',
+    replyToMessageId?: string | null
   ) {
     if (!storedDevice) {
       throw new Error('No local device identity is available.')
@@ -2219,7 +2377,7 @@ function App() {
         }
 
     return {
-      payload,
+      payload: replyToMessageId ? { ...payload, reply_to_message_id: replyToMessageId } : payload,
       deliveryMode: canUseSessionEncryption
         ? 'session'
         : canUseRecipientWrapping
@@ -2238,9 +2396,11 @@ function App() {
     const plainText = draft.trim()
     const clientId = window.crypto.randomUUID()
     const optimisticId = `optimistic-${clientId}`
+    const activeReplyToMessageId = replyTargetMessageId
     const optimisticMessage: CachedMessage = {
       id: optimisticId,
       clientId,
+      replyToMessageId: activeReplyToMessageId ?? undefined,
       text: plainText,
       sentAt: new Date().toISOString(),
       side: 'outgoing',
@@ -2249,13 +2409,15 @@ function App() {
 
     replaceActiveMessages(activeChatId, mergeMessageThread(messageItemsRef.current, optimisticMessage), true)
     setDraft('')
+    setReplyTargetMessageId(null)
 
     try {
       const { payload, deliveryMode } = await buildEncryptedMessagePayload(
         plainText,
         activeChatId,
         clientId,
-        'text'
+        'text',
+        activeReplyToMessageId
       )
 
       const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
@@ -2273,6 +2435,7 @@ function App() {
       const message = error instanceof Error ? error.message : 'Failed to send message.'
       setBanner({ tone: 'error', message })
       setDraft(plainText)
+      setReplyTargetMessageId(activeReplyToMessageId)
       replaceActiveMessages(
         activeChatId,
         messageItemsRef.current.filter((item) => item.clientId !== clientId && item.id !== optimisticId),
@@ -2301,15 +2464,26 @@ function App() {
 
     const clientId = window.crypto.randomUUID()
     const optimisticId = `optimistic-${clientId}`
+    const activeReplyToMessageId = replyTargetMessageId
+    let thumbnailDataUrl: string | null = null
+
+    try {
+      thumbnailDataUrl = await generateAttachmentThumbnailDataUrl(file)
+    } catch {
+      thumbnailDataUrl = null
+    }
+
     const optimisticAttachment = {
       uploadId: 'pending',
       fileName: file.name,
       contentType: file.type || 'application/octet-stream',
-      size: file.size
+      size: file.size,
+      thumbnailDataUrl: thumbnailDataUrl ?? undefined
     }
     const optimisticMessage: CachedMessage = {
       id: optimisticId,
       clientId,
+      replyToMessageId: activeReplyToMessageId ?? undefined,
       text: `Attachment: ${file.name}`,
       sentAt: new Date().toISOString(),
       side: 'outgoing',
@@ -2318,6 +2492,7 @@ function App() {
     }
 
     replaceActiveMessages(activeChatId, mergeMessageThread(messageItemsRef.current, optimisticMessage), true)
+    setReplyTargetMessageId(null)
 
     try {
       const encryptedAttachment = await encryptAttachmentFile(file)
@@ -2338,6 +2513,7 @@ function App() {
         fileName: file.name,
         contentType: encryptedAttachment.contentType,
         size: encryptedAttachment.size,
+        thumbnailDataUrl: thumbnailDataUrl ?? undefined,
         contentKeyBase64: encryptedAttachment.contentKeyBase64,
         ivBase64: encryptedAttachment.ivBase64
       }
@@ -2346,7 +2522,8 @@ function App() {
         JSON.stringify(descriptor),
         activeChatId,
         clientId,
-        'attachment'
+        'attachment',
+        activeReplyToMessageId
       )
       const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
 
@@ -2363,6 +2540,7 @@ function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send attachment.'
       setBanner({ tone: 'error', message })
+      setReplyTargetMessageId(activeReplyToMessageId)
       replaceActiveMessages(
         activeChatId,
         messageItemsRef.current.filter((item) => item.clientId !== clientId && item.id !== optimisticId),
@@ -2445,6 +2623,15 @@ function App() {
     }
   }
 
+  function handleReplyToMessage(message: CachedMessage) {
+    if (message.side === 'system') {
+      return
+    }
+
+    setReplyTargetMessageId(message.id)
+    draftInputRef.current?.focus()
+  }
+
   function replaceActiveMessages(chatId: string, nextMessages: CachedMessage[], syncSummary: boolean) {
     if (activeChatIdRef.current !== chatId) {
       return
@@ -2452,7 +2639,7 @@ function App() {
 
     messageItemsRef.current = nextMessages
     setMessageItems(nextMessages)
-    writeCachedMessages(chatId, nextMessages)
+    void writeCachedMessages(chatId, nextMessages)
 
     if (syncSummary) {
       setChatItems((current) => syncChatSummary(current, chatId, nextMessages))
@@ -2487,6 +2674,10 @@ function App() {
   const desktopShell = isDesktopShell()
   const activeChat =
     chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatItems[0] ?? null
+  const replyTargetMessage =
+    replyTargetMessageId
+      ? messageItems.find((message) => message.id === replyTargetMessageId) ?? null
+      : null
   const desktopWindowTitle = buildDesktopWindowTitle(activeChat?.title ?? null, activeCall?.mode ?? null)
   const appShellClassName = detailRailVisible ? 'app-shell' : 'app-shell app-shell--detail-hidden'
   const dominantRemoteEndpointId = pickDominantRemoteSpeakerEndpointId(membraneRemoteTracks)
@@ -2705,6 +2896,17 @@ function App() {
                   </span>
                 </button>
                 <button
+                  aria-label={desktopWindowFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  className="vostok-icon-button desktop-titlebar__button"
+                  disabled={loading}
+                  onClick={handleToggleDesktopFullscreen}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">
+                    {desktopWindowFullscreen ? 'U' : 'u'}
+                  </span>
+                </button>
+                <button
                   aria-label="Minimize desktop window"
                   className="vostok-icon-button desktop-titlebar__button"
                   disabled={loading}
@@ -2873,7 +3075,19 @@ function App() {
             <div className="message-thread">
               {messageItems.map((message) => (
                 <MessageBubble key={message.id} side={message.side}>
+                  {message.replyToMessageId ? (
+                    <span className="message-thread__reply-preview">
+                      Replying to {resolveReplyPreview(messageItems, message.replyToMessageId)}
+                    </span>
+                  ) : null}
                   <strong>{message.text}</strong>
+                  {message.attachment?.thumbnailDataUrl ? (
+                    <img
+                      alt={message.attachment.fileName}
+                      className="message-thread__attachment-preview"
+                      src={message.attachment.thumbnailDataUrl}
+                    />
+                  ) : null}
                   {message.attachment?.contentKeyBase64 && message.attachment.ivBase64 ? (
                     <button
                       className="secondary-action"
@@ -2889,6 +3103,16 @@ function App() {
                         .map((reaction) => `${reaction.reactionKey} ${reaction.count}${reaction.reacted ? '*' : ''}`)
                         .join(' • ')}
                     </span>
+                  ) : null}
+                  {message.side !== 'system' ? (
+                    <button
+                      className="secondary-action"
+                      disabled={loading}
+                      onClick={() => handleReplyToMessage(message)}
+                      type="button"
+                    >
+                      Reply
+                    </button>
                   ) : null}
                   <span className="message-thread__meta">
                     {formatRelativeTime(message.sentAt)}
@@ -2924,6 +3148,22 @@ function App() {
             <span className="vostok-icon-button__glyph">A</span>
           </button>
           <GlassSurface className="live-composer__field">
+            {replyTargetMessageId ? (
+              <div className="live-composer__reply">
+                <div className="live-composer__reply-copy">
+                  <strong>Replying</strong>
+                  <span>{replyTargetMessage ? replyTargetMessage.text : 'Earlier message'}</span>
+                </div>
+                <button
+                  className="vostok-icon-button live-composer__reply-clear"
+                  disabled={loading}
+                  onClick={() => setReplyTargetMessageId(null)}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">x</span>
+                </button>
+              </div>
+            ) : null}
             <textarea
               className="live-composer__input"
               disabled={loading || !activeChat}
@@ -3023,6 +3263,14 @@ function App() {
                   ? 'Window is pinned above other windows.'
                   : 'Window follows normal stacking order.'}
             </span>
+            <span>Always-on-top preference is remembered across desktop launches.</span>
+            <span>
+              {desktopWindowFullscreen === null
+                ? 'Fullscreen state is not known yet.'
+                : desktopWindowFullscreen
+                  ? 'Window is currently fullscreen.'
+                  : 'Window is currently windowed.'}
+            </span>
             <span>
               {desktopWindowGeometry
                 ? `Window frame ${desktopWindowGeometry.width}×${desktopWindowGeometry.height} at ${desktopWindowGeometry.x}, ${desktopWindowGeometry.y}`
@@ -3033,11 +3281,20 @@ function App() {
             <button className="secondary-action" disabled={loading} onClick={handleRefreshDesktopRuntime} type="button">
               Refresh Host Info
             </button>
+            <button className="secondary-action" disabled={loading} onClick={handleCopyDesktopDiagnostics} type="button">
+              Copy Diagnostics
+            </button>
             <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopAlwaysOnTop} type="button">
               {desktopWindowAlwaysOnTop ? 'Disable Always On Top' : 'Enable Always On Top'}
             </button>
+            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopFullscreen} type="button">
+              {desktopWindowFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            </button>
             <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopWindowMaximize} type="button">
               {desktopWindowMaximized ? 'Restore Window' : 'Toggle Maximize'}
+            </button>
+            <button className="secondary-action" disabled={loading} onClick={handleResetDesktopHostWindowFrame} type="button">
+              Reset Window Frame
             </button>
             <button className="secondary-action" disabled={loading} onClick={handleMinimizeDesktopHostWindow} type="button">
               Minimize Window
@@ -3087,7 +3344,19 @@ function App() {
             <div className="settings-card__row">
               <div className="settings-card__row-main">
                 <strong>Desktop host controls</strong>
-                <span>`Cmd/Ctrl+Shift+P` always on top • `Cmd/Ctrl+Shift+M` minimize • `Cmd/Ctrl+Shift+Enter` maximize/restore • `Cmd/Ctrl+Shift+W` close</span>
+                <span>`Cmd/Ctrl+Shift+P` always on top • `Cmd/Ctrl+Shift+U` fullscreen • `Cmd/Ctrl+Shift+D` diagnostics • `Cmd/Ctrl+Shift+M` minimize • `Cmd/Ctrl+Shift+Enter` maximize/restore • `Cmd/Ctrl+Shift+W` close</span>
+              </div>
+            </div>
+            <div className="settings-card__row">
+              <div className="settings-card__row-main">
+                <strong>Reset window frame</strong>
+                <span>`Cmd/Ctrl+Shift+0` restores the default centered desktop frame.</span>
+              </div>
+            </div>
+            <div className="settings-card__row">
+              <div className="settings-card__row-main">
+                <strong>Diagnostics</strong>
+                <span>The host card can copy runtime, window, and layout diagnostics to the clipboard, or use `Cmd/Ctrl+Shift+D`.</span>
               </div>
             </div>
             <div className="settings-card__row">
@@ -3149,7 +3418,7 @@ function App() {
             </span>
             <span>
               {adminOverview
-                ? `${adminOverview.federation_peers} federation peers • ${adminOverview.pending_federation_peers} pending`
+                ? `${adminOverview.federation_peers} federation peers • ${adminOverview.pending_federation_peers} pending • ${adminOverview.queued_federation_deliveries ?? 0} queued deliveries`
                 : 'Federation stats unavailable'}
             </span>
           </div>
@@ -3741,6 +4010,7 @@ async function projectMessage(
     return {
       id: message.id,
       clientId: message.client_id,
+      replyToMessageId: message.reply_to_message_id ?? undefined,
       text: parsedPayload.text,
       sentAt: message.inserted_at,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
@@ -3767,6 +4037,24 @@ async function projectMessage(
       }))
     }
   }
+}
+
+function readDesktopAlwaysOnTopPreference(): boolean | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY)
+
+  if (raw === 'true') {
+    return true
+  }
+
+  if (raw === 'false') {
+    return false
+  }
+
+  return null
 }
 
 function mergeChat(current: ChatSummary[], next: ChatSummary): ChatSummary[] {
@@ -3884,6 +4172,7 @@ function parseDecryptedPayload(plaintext: string): {
       typeof parsed.contentType === 'string' &&
       typeof parsed.size === 'number' &&
       Number.isFinite(parsed.size) &&
+      (typeof parsed.thumbnailDataUrl === 'undefined' || typeof parsed.thumbnailDataUrl === 'string') &&
       typeof parsed.contentKeyBase64 === 'string' &&
       typeof parsed.ivBase64 === 'string'
     ) {
@@ -3894,6 +4183,7 @@ function parseDecryptedPayload(plaintext: string): {
           fileName: parsed.fileName,
           contentType: parsed.contentType,
           size: parsed.size,
+          thumbnailDataUrl: parsed.thumbnailDataUrl,
           contentKeyBase64: parsed.contentKeyBase64,
           ivBase64: parsed.ivBase64
         }
@@ -3919,6 +4209,7 @@ function toAttachmentDescriptor(attachment: NonNullable<CachedMessage['attachmen
     fileName: attachment.fileName,
     contentType: attachment.contentType,
     size: attachment.size,
+    thumbnailDataUrl: attachment.thumbnailDataUrl,
     contentKeyBase64: attachment.contentKeyBase64,
     ivBase64: attachment.ivBase64
   }
@@ -3938,6 +4229,22 @@ function inferMediaKind(contentType: string): 'file' | 'image' | 'audio' | 'vide
   }
 
   return 'file'
+}
+
+function resolveReplyPreview(messages: CachedMessage[], replyToMessageId: string): string {
+  const target = messages.find((message) => message.id === replyToMessageId)
+
+  if (!target) {
+    return 'an earlier message'
+  }
+
+  const preview = target.text.trim()
+
+  if (preview.length === 0) {
+    return 'an earlier message'
+  }
+
+  return preview.length > 64 ? `${preview.slice(0, 61)}...` : preview
 }
 
 function formatRelativeTime(value: string | null): string {
