@@ -1,0 +1,21 @@
+{
+  "name": "vostok",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @vostok/web",
+    "build:web": "npm run build --workspace @vostok/web",
+    "build:desktop": "cd apps/desktop && npm run build",
+    "dev:web": "npm run dev --workspace @vostok/web",
+    "dev:desktop": "cd apps/desktop && npm run dev",
+    "lint:web": "npm run lint --workspace @vostok/web",
+    "dev:server": "cd apps/server && mix phx.server",
+    "setup:server": "cd apps/server && mix setup",
+    "test:server": "cd apps/server && mix test",
+    "format:server": "cd apps/server && mix format"
+  }
+}

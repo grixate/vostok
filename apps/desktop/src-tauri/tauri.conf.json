@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Vostok",
+  "version": "0.1.0",
+  "identifier": "chat.vostok.desktop",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Vostok",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 960,
+        "minHeight": 720,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Self-hosted secure federated chat",
+    "category": "SocialNetworking"
+  }
+}

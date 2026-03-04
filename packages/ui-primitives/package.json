@@ -1,0 +1,13 @@
+{
+  "name": "@vostok/ui-primitives",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.tsx",
+  "dependencies": {
+    "@vostok/ui-tokens": "file:../ui-tokens"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  }
+}

@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vostok_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  server:
+    build:
+      context: ./apps/server
+    environment:
+      PHX_HOST: localhost
+      PORT: 4000
+      DATABASE_URL: ecto://postgres:postgres@postgres/vostok_dev
+      SECRET_KEY_BASE: replace-me-for-production
+    depends_on:
+      - postgres
+    ports:
+      - "4000:4000"
+
+  caddy:
+    image: caddy:2.10
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  coturn:
+    image: coturn/coturn:4.6.3-r2
+    command:
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --realm=vostok.local
+      - --listening-port=3478
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=replace-me
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+
