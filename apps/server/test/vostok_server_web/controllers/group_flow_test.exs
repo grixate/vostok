@@ -10,25 +10,155 @@ defmodule VostokServerWeb.GroupFlowTest do
 
   test "a group chat can be created with existing members", %{conn: conn} do
     %{token: alice_token} = register_device(conn, "alice-group")
-    _bob = register_device(build_conn(), "bob-group")
+    %{user_id: bob_user_id} = register_device(build_conn(), "bob-group")
+    %{user_id: charlie_user_id} = register_device(build_conn(), "charlie-group")
 
     create_group_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/group", %{
         title: "Operators",
-        members: ["bob-group"]
+        members: ["bob-group", "charlie-group"]
       })
 
     assert %{
              "chat" => %{
+               "id" => chat_id,
                "type" => "group",
                "title" => "Operators",
                "participant_usernames" => participants
              }
            } = json_response(create_group_conn, 201)
 
-    assert Enum.sort(participants) == ["alice-group", "bob-group"]
+    assert Enum.sort(participants) == ["alice-group", "bob-group", "charlie-group"]
+
+    rename_group_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> patch("/api/v1/chats/#{chat_id}/group", %{
+        title: "Operators West"
+      })
+
+    assert %{
+             "chat" => %{
+               "id" => ^chat_id,
+               "title" => "Operators West",
+               "type" => "group"
+             }
+           } = json_response(rename_group_conn, 200)
+
+    list_members_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> get("/api/v1/chats/#{chat_id}/members")
+
+    assert %{
+             "members" => [
+               %{"role" => "admin", "username" => "alice-group"},
+               %{"role" => "member", "user_id" => ^bob_user_id, "username" => "bob-group"},
+               %{"role" => "member", "user_id" => ^charlie_user_id, "username" => "charlie-group"}
+             ]
+           } = json_response(list_members_conn, 200)
+
+    promote_bob_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> patch("/api/v1/chats/#{chat_id}/members/#{bob_user_id}", %{
+        role: "admin"
+      })
+
+    assert %{
+             "member" => %{
+               "role" => "admin",
+               "user_id" => ^bob_user_id,
+               "username" => "bob-group"
+             }
+           } = json_response(promote_bob_conn, 200)
+
+    remove_charlie_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/members/#{charlie_user_id}/remove", %{})
+
+    assert %{
+             "member" => %{
+               "user_id" => ^charlie_user_id,
+               "username" => "charlie-group"
+             }
+           } = json_response(remove_charlie_conn, 200)
+  end
+
+  test "group sender keys can be distributed and fetched by recipient devices", %{conn: conn} do
+    %{token: alice_token} = register_device(conn, "alice-sender")
+    %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-sender")
+    %{token: charlie_token, device_id: charlie_device_id} = register_device(build_conn(), "charlie-sender")
+
+    create_group_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/group", %{
+        title: "Sender Keys",
+        members: ["bob-sender", "charlie-sender"]
+      })
+
+    assert %{
+             "chat" => %{
+               "id" => chat_id
+             }
+           } = json_response(create_group_conn, 201)
+
+    bob_wrapped_key = Base.encode64("wrapped-for-bob")
+    charlie_wrapped_key = Base.encode64("wrapped-for-charlie")
+
+    distribute_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/sender-keys", %{
+        key_id: "sender-key-1",
+        algorithm: "x25519+sealedbox",
+        wrapped_keys: %{
+          bob_device_id => bob_wrapped_key,
+          charlie_device_id => charlie_wrapped_key
+        }
+      })
+
+    assert %{
+             "sender_keys" => sender_keys
+           } = json_response(distribute_conn, 201)
+
+    assert length(sender_keys) == 2
+
+    bob_list_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> get("/api/v1/chats/#{chat_id}/sender-keys")
+
+    assert %{
+             "sender_keys" => [
+               %{
+                 "key_id" => "sender-key-1",
+                 "recipient_device_id" => ^bob_device_id,
+                 "wrapped_sender_key" => ^bob_wrapped_key,
+                 "status" => "active"
+               }
+             ]
+           } = json_response(bob_list_conn, 200)
+
+    charlie_list_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{charlie_token}")
+      |> get("/api/v1/chats/#{chat_id}/sender-keys")
+
+    assert %{
+             "sender_keys" => [
+               %{
+                 "key_id" => "sender-key-1",
+                 "recipient_device_id" => ^charlie_device_id,
+                 "wrapped_sender_key" => ^charlie_wrapped_key,
+                 "status" => "active"
+               }
+             ]
+           } = json_response(charlie_list_conn, 200)
   end
 
   defp register_device(conn, username) do
@@ -55,9 +185,11 @@ defmodule VostokServerWeb.GroupFlowTest do
       })
 
     assert %{
-             "session" => %{"token" => token}
+             "session" => %{"token" => token},
+             "user" => %{"id" => user_id},
+             "device" => %{"id" => device_id}
            } = json_response(register_conn, 201)
 
-    %{token: token}
+    %{token: token, user_id: user_id, device_id: device_id}
   end
 end

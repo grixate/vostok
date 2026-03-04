@@ -11,6 +11,25 @@ config :vostok_server,
   ecto_repos: [VostokServer.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
 
+config :vostok_server,
+  federation_transport_adapter: VostokServer.Federation.Transport.MTLS,
+  federation_transport: [
+    scheme: "https",
+    delivery_path: "/api/v1/federation/deliveries",
+    connect_timeout_ms: 5_000,
+    request_timeout_ms: 10_000,
+    retry_backoff_seconds: 30,
+    retry_backoff_cap_seconds: 900,
+    allow_insecure_http: false,
+    require_client_cert: false,
+    mtls: [
+      certfile: nil,
+      keyfile: nil,
+      cacertfile: nil,
+      server_name_indication: nil
+    ]
+  ]
+
 config :vostok_server, Oban,
   repo: VostokServer.Repo,
   queues: [default: 10],

@@ -394,7 +394,7 @@ defmodule VostokServerWeb.OpsFlowTest do
              ]
            } = json_response(list_signals_conn, 200)
 
-    poll_signal_bridge_conn =
+    poll_endpoint_events_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
       |> post("/api/v1/calls/#{call_id}/webrtc-endpoint/poll", %{})
@@ -408,14 +408,10 @@ defmodule VostokServerWeb.OpsFlowTest do
                "exists" => true
              },
              "media_events" => media_events
-           } = json_response(poll_signal_bridge_conn, 200)
+           } = json_response(poll_endpoint_events_conn, 200)
 
-    signal_bridge_event =
-      Enum.find(media_events, &String.contains?(&1, "\"kind\":\"call_signal_bridge\""))
-
-    assert is_binary(signal_bridge_event)
-    assert String.contains?(signal_bridge_event, "\"kind\":\"call_signal_bridge\"")
-    assert String.contains?(signal_bridge_event, "\"signal_type\":\"offer\"")
+    assert is_list(media_events)
+    refute Enum.any?(media_events, &String.contains?(&1, "\"kind\":\"call_signal_bridge\""))
 
     leave_call_conn =
       build_conn()
@@ -485,7 +481,7 @@ defmodule VostokServerWeb.OpsFlowTest do
     assert Base.decode64!(second_system_ciphertext) == "Missed voice call"
   end
 
-  test "untargeted call signals fan out to joined participant endpoints", %{conn: conn} do
+  test "untargeted call signals no longer emit bridge events into endpoint queues", %{conn: conn} do
     %{device_id: alice_device_id, token: alice_token} = register_device(conn, "alice-ops")
     %{device_id: bob_device_id, token: bob_token} = register_device(conn, "bob-ops")
 
@@ -561,11 +557,11 @@ defmodule VostokServerWeb.OpsFlowTest do
                "endpoint_id" => ^bob_device_id,
                "exists" => true
              },
-             "media_events" => [bob_bridge_event]
+             "media_events" => bob_events
            } = json_response(bob_poll_conn, 200)
 
-    assert String.contains?(bob_bridge_event, "\"kind\":\"call_signal_bridge\"")
-    assert String.contains?(bob_bridge_event, "\"signal_type\":\"offer\"")
+    assert is_list(bob_events)
+    refute Enum.any?(bob_events, &String.contains?(&1, "\"kind\":\"call_signal_bridge\""))
 
     alice_poll_conn =
       build_conn()

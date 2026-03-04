@@ -8,6 +8,15 @@ export type RegisterPayload = {
   one_time_prekeys?: string[]
 }
 
+export type LinkDevicePayload = {
+  device_name: string
+  device_identity_public_key: string
+  device_encryption_public_key: string
+  signed_prekey: string
+  signed_prekey_signature: string
+  one_time_prekeys: string[]
+}
+
 export type MeResponse = {
   user: { id: string; username: string }
   device: { id: string; device_name: string }
@@ -24,12 +33,35 @@ export type ChatSummary = {
   message_count: number
 }
 
+export type GroupMember = {
+  user_id: string
+  username: string
+  role: 'admin' | 'member'
+  joined_at: string | null
+}
+
+export type GroupSenderKey = {
+  id: string
+  chat_id: string
+  owner_device_id: string
+  recipient_device_id: string
+  key_id: string
+  algorithm: string
+  status: 'active' | 'superseded'
+  wrapped_sender_key: string
+  inserted_at: string | null
+  updated_at: string | null
+}
+
 export type ChatMessage = {
   id: string
   client_id: string
   message_kind: string
   sender_device_id: string
   inserted_at: string
+  pinned_at: string | null
+  edited_at: string | null
+  deleted_at: string | null
   header: string | null
   ciphertext: string
   reply_to_message_id: string | null
@@ -46,6 +78,10 @@ export type ChatDeviceSession = {
   id: string
   chat_id: string
   status: string
+  established_at: string | null
+  superseded_at: string | null
+  establishment_state: 'pending_first_message' | 'established'
+  session_state: 'active' | 'superseded'
   handshake_hash: string
   initiator_device_id: string
   recipient_device_id: string
@@ -86,8 +122,21 @@ export type MediaUpload = {
   content_type: string | null
   declared_byte_size: number
   uploaded_byte_size: number
+  expected_part_count: number | null
+  uploaded_part_count: number
+  uploaded_part_indexes: number[]
   completed_at: string | null
   ciphertext: string | null
+}
+
+export type LinkMetadata = {
+  url: string
+  hostname: string
+  title: string
+  description: string | null
+  site_name: string | null
+  canonical_url: string | null
+  fetched_at: string
 }
 
 export type FederationPeer = {
@@ -97,6 +146,23 @@ export type FederationPeer = {
   status: string
   last_error: string | null
   last_seen_at: string | null
+  inserted_at: string | null
+  updated_at: string | null
+}
+
+export type FederationDeliveryJob = {
+  id: string
+  peer_id: string
+  direction: string
+  event_type: string
+  status: string
+  payload: Record<string, unknown>
+  remote_delivery_id: string | null
+  attempt_count: number
+  available_at: string | null
+  last_attempted_at: string | null
+  delivered_at: string | null
+  last_error: string | null
   inserted_at: string | null
   updated_at: string | null
 }
@@ -200,6 +266,17 @@ export async function registerDevice(payload: RegisterPayload): Promise<Register
   })
 }
 
+export async function linkDevice(
+  token: string,
+  payload: LinkDevicePayload
+): Promise<RegisterResponse> {
+  return apiRequest<RegisterResponse>('/devices/link', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
 export async function issueChallenge(deviceId: string): Promise<ChallengeResponse> {
   return apiRequest<ChallengeResponse>('/auth/challenge', {
     method: 'POST',
@@ -295,6 +372,54 @@ export async function createGroupChat(
   })
 }
 
+export async function renameGroupChat(
+  token: string,
+  chatId: string,
+  payload: {
+    title: string
+  }
+): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>(`/chats/${chatId}/group`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function listGroupMembers(
+  token: string,
+  chatId: string
+): Promise<{ members: GroupMember[] }> {
+  return apiRequest<{ members: GroupMember[] }>(`/chats/${chatId}/members`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function updateGroupMemberRole(
+  token: string,
+  chatId: string,
+  userId: string,
+  role: 'admin' | 'member'
+): Promise<{ member: GroupMember }> {
+  return apiRequest<{ member: GroupMember }>(`/chats/${chatId}/members/${userId}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify({ role })
+  })
+}
+
+export async function removeGroupMember(
+  token: string,
+  chatId: string,
+  userId: string
+): Promise<{ member: GroupMember }> {
+  return apiRequest<{ member: GroupMember }>(`/chats/${chatId}/members/${userId}/remove`, {
+    method: 'POST',
+    headers: authHeader(token)
+  })
+}
+
 export async function bootstrapChatSessions(
   token: string,
   chatId: string,
@@ -306,6 +431,46 @@ export async function bootstrapChatSessions(
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(payload ?? {})
+  })
+}
+
+export async function rekeyChatSessions(
+  token: string,
+  chatId: string,
+  payload: {
+    initiator_ephemeral_keys: Record<string, string>
+  }
+): Promise<{ sessions: ChatDeviceSession[] }> {
+  return apiRequest<{ sessions: ChatDeviceSession[] }>(`/chats/${chatId}/session-rekey`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function listGroupSenderKeys(
+  token: string,
+  chatId: string
+): Promise<{ sender_keys: GroupSenderKey[] }> {
+  return apiRequest<{ sender_keys: GroupSenderKey[] }>(`/chats/${chatId}/sender-keys`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function distributeGroupSenderKeys(
+  token: string,
+  chatId: string,
+  payload: {
+    key_id: string
+    algorithm?: string
+    wrapped_keys: Record<string, string>
+  }
+): Promise<{ sender_keys: GroupSenderKey[] }> {
+  return apiRequest<{ sender_keys: GroupSenderKey[] }>(`/chats/${chatId}/sender-keys`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
   })
 }
 
@@ -336,12 +501,56 @@ export async function createMessage(
     header?: string
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
+    established_session_ids?: string[]
   }
 ): Promise<{ message: ChatMessage }> {
   return apiRequest<{ message: ChatMessage }>(`/chats/${chatId}/messages`, {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(payload)
+  })
+}
+
+export async function updateMessage(
+  token: string,
+  chatId: string,
+  messageId: string,
+  payload: {
+    client_id: string
+    ciphertext: string
+    message_kind: string
+    header?: string
+    reply_to_message_id?: string
+    recipient_envelopes?: Record<string, string>
+    established_session_ids?: string[]
+  }
+): Promise<{ message: ChatMessage }> {
+  return apiRequest<{ message: ChatMessage }>(`/chats/${chatId}/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function deleteMessage(
+  token: string,
+  chatId: string,
+  messageId: string
+): Promise<{ message: ChatMessage }> {
+  return apiRequest<{ message: ChatMessage }>(`/chats/${chatId}/messages/${messageId}/delete`, {
+    method: 'POST',
+    headers: authHeader(token)
+  })
+}
+
+export async function toggleMessagePin(
+  token: string,
+  chatId: string,
+  messageId: string
+): Promise<{ message: ChatMessage }> {
+  return apiRequest<{ message: ChatMessage }>(`/chats/${chatId}/messages/${messageId}/pin`, {
+    method: 'POST',
+    headers: authHeader(token)
   })
 }
 
@@ -365,6 +574,7 @@ export async function createMediaUpload(
     content_type?: string
     declared_byte_size: number
     media_kind?: string
+    expected_part_count?: number
   }
 ): Promise<{ upload: MediaUpload }> {
   return apiRequest<{ upload: MediaUpload }>('/media/uploads', {
@@ -377,12 +587,16 @@ export async function createMediaUpload(
 export async function appendMediaUploadPart(
   token: string,
   uploadId: string,
-  chunk: string
+  payload: {
+    chunk: string
+    part_index?: number
+    part_count?: number
+  }
 ): Promise<{ upload: MediaUpload }> {
   return apiRequest<{ upload: MediaUpload }>(`/media/uploads/${uploadId}/part`, {
     method: 'PATCH',
     headers: authHeader(token),
-    body: JSON.stringify({ chunk })
+    body: JSON.stringify(payload)
   })
 }
 
@@ -401,10 +615,60 @@ export async function fetchMediaUpload(token: string, uploadId: string): Promise
   })
 }
 
+export async function fetchMediaLinkMetadata(
+  token: string,
+  url: string
+): Promise<{ metadata: LinkMetadata }> {
+  return apiRequest<{ metadata: LinkMetadata }>('/media/link-metadata', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ url })
+  })
+}
+
 export async function fetchAdminOverview(token: string): Promise<{ overview: AdminOverview }> {
   return apiRequest<{ overview: AdminOverview }>('/admin/overview', {
     method: 'GET',
     headers: authHeader(token)
+  })
+}
+
+export async function listFederationDeliveries(
+  token: string
+): Promise<{ deliveries: FederationDeliveryJob[] }> {
+  return apiRequest<{ deliveries: FederationDeliveryJob[] }>('/admin/federation/deliveries', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function createFederationDelivery(
+  token: string,
+  peerId: string,
+  payload?: {
+    event_type?: string
+    payload?: Record<string, unknown>
+  }
+): Promise<{ delivery: FederationDeliveryJob }> {
+  return apiRequest<{ delivery: FederationDeliveryJob }>(`/admin/federation/peers/${peerId}/deliveries`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload ?? {})
+  })
+}
+
+export async function attemptFederationDelivery(
+  token: string,
+  jobId: string,
+  payload?: {
+    outcome?: 'processing' | 'delivered' | 'failed'
+    last_error?: string
+  }
+): Promise<{ delivery: FederationDeliveryJob }> {
+  return apiRequest<{ delivery: FederationDeliveryJob }>(`/admin/federation/deliveries/${jobId}/attempt`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload ?? {})
   })
 }
 

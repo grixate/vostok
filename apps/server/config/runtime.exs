@@ -20,6 +20,25 @@ if System.get_env("PHX_SERVER") do
   config :vostok_server, VostokServerWeb.Endpoint, server: true
 end
 
+env_integer = fn key, default ->
+  case System.get_env(key) do
+    nil -> default
+    "" -> default
+    value -> String.to_integer(value)
+  end
+end
+
+env_boolean = fn key, default ->
+  case System.get_env(key) do
+    nil ->
+      default
+
+    value ->
+      normalized = value |> String.trim() |> String.downcase()
+      normalized in ["1", "true", "yes", "on"]
+  end
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
@@ -57,7 +76,25 @@ if config_env() == :prod do
 
   config :vostok_server,
     registration_mode: System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only"),
-    federation_port: String.to_integer(System.get_env("VOSTOK_FEDERATION_PORT", "5555"))
+    federation_port: env_integer.("VOSTOK_FEDERATION_PORT", 5555),
+    federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
+    federation_transport: [
+      scheme: System.get_env("VOSTOK_FEDERATION_SCHEME", "https"),
+      delivery_path:
+        System.get_env("VOSTOK_FEDERATION_DELIVERY_PATH", "/api/v1/federation/deliveries"),
+      connect_timeout_ms: env_integer.("VOSTOK_FEDERATION_CONNECT_TIMEOUT_MS", 5_000),
+      request_timeout_ms: env_integer.("VOSTOK_FEDERATION_REQUEST_TIMEOUT_MS", 10_000),
+      retry_backoff_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_SECONDS", 30),
+      retry_backoff_cap_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_CAP_SECONDS", 900),
+      allow_insecure_http: env_boolean.("VOSTOK_FEDERATION_ALLOW_INSECURE_HTTP", false),
+      require_client_cert: env_boolean.("VOSTOK_FEDERATION_REQUIRE_CLIENT_CERT", true),
+      mtls: [
+        certfile: System.get_env("VOSTOK_FEDERATION_MTLS_CERTFILE"),
+        keyfile: System.get_env("VOSTOK_FEDERATION_MTLS_KEYFILE"),
+        cacertfile: System.get_env("VOSTOK_FEDERATION_MTLS_CACERTFILE"),
+        server_name_indication: System.get_env("VOSTOK_FEDERATION_MTLS_SNI")
+      ]
+    ]
 
   config :vostok_server, VostokServerWeb.Endpoint,
     url: [host: host, port: 443, scheme: System.get_env("PHX_SCHEME", "https")],
@@ -105,7 +142,27 @@ if config_env() == :prod do
 end
 
 if config_env() in [:dev, :test] do
+  host = System.get_env("PHX_HOST", "localhost")
+
   config :vostok_server,
     registration_mode: System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only"),
-    federation_port: String.to_integer(System.get_env("VOSTOK_FEDERATION_PORT", "5555"))
+    federation_port: env_integer.("VOSTOK_FEDERATION_PORT", 5555),
+    federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
+    federation_transport: [
+      scheme: System.get_env("VOSTOK_FEDERATION_SCHEME", "https"),
+      delivery_path:
+        System.get_env("VOSTOK_FEDERATION_DELIVERY_PATH", "/api/v1/federation/deliveries"),
+      connect_timeout_ms: env_integer.("VOSTOK_FEDERATION_CONNECT_TIMEOUT_MS", 5_000),
+      request_timeout_ms: env_integer.("VOSTOK_FEDERATION_REQUEST_TIMEOUT_MS", 10_000),
+      retry_backoff_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_SECONDS", 30),
+      retry_backoff_cap_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_CAP_SECONDS", 900),
+      allow_insecure_http: env_boolean.("VOSTOK_FEDERATION_ALLOW_INSECURE_HTTP", false),
+      require_client_cert: env_boolean.("VOSTOK_FEDERATION_REQUIRE_CLIENT_CERT", false),
+      mtls: [
+        certfile: System.get_env("VOSTOK_FEDERATION_MTLS_CERTFILE"),
+        keyfile: System.get_env("VOSTOK_FEDERATION_MTLS_KEYFILE"),
+        cacertfile: System.get_env("VOSTOK_FEDERATION_MTLS_CACERTFILE"),
+        server_name_indication: System.get_env("VOSTOK_FEDERATION_MTLS_SNI")
+      ]
+    ]
 end

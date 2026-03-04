@@ -51,30 +51,80 @@ export async function decryptAttachmentFile(
 }
 
 export async function generateAttachmentThumbnailDataUrl(file: File): Promise<string | null> {
-  if (!file.type.startsWith('image/')) {
+  if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
     return null
   }
 
   const objectUrl = URL.createObjectURL(file)
 
   try {
-    const image = await loadImage(objectUrl)
     const canvas = document.createElement('canvas')
-    const maxEdge = 280
-    const scale = Math.min(1, maxEdge / Math.max(image.width, image.height))
-    canvas.width = Math.max(1, Math.round(image.width * scale))
-    canvas.height = Math.max(1, Math.round(image.height * scale))
-
     const context = canvas.getContext('2d')
 
     if (!context) {
       return null
     }
 
-    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    const maxEdge = 280
+
+    if (file.type.startsWith('image/')) {
+      const image = await loadImage(objectUrl)
+      const scale = Math.min(1, maxEdge / Math.max(image.width, image.height))
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    } else {
+      const video = await loadVideoFrame(objectUrl)
+      const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight))
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    }
+
     return canvas.toDataURL('image/jpeg', 0.78)
   } finally {
     URL.revokeObjectURL(objectUrl)
+  }
+}
+
+export async function generateAttachmentWaveform(file: File): Promise<number[] | null> {
+  if (!file.type.startsWith('audio/')) {
+    return null
+  }
+
+  if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') {
+    return null
+  }
+
+  let audioContext: AudioContext | null = null
+
+  try {
+    audioContext = new window.AudioContext()
+    const audioBuffer = await audioContext.decodeAudioData(await file.arrayBuffer())
+    const channel = audioBuffer.getChannelData(0)
+    const samples = 24
+    const blockSize = Math.max(1, Math.floor(channel.length / samples))
+    const waveform: number[] = []
+
+    for (let index = 0; index < samples; index += 1) {
+      const start = index * blockSize
+      const end = Math.min(channel.length, start + blockSize)
+      let peak = 0
+
+      for (let cursor = start; cursor < end; cursor += 1) {
+        peak = Math.max(peak, Math.abs(channel[cursor] ?? 0))
+      }
+
+      waveform.push(Math.max(0.08, Math.min(1, peak)))
+    }
+
+    return waveform
+  } catch {
+    return null
+  } finally {
+    if (audioContext) {
+      await audioContext.close()
+    }
   }
 }
 
@@ -104,5 +154,17 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
     image.onload = () => resolve(image)
     image.onerror = () => reject(new Error('Failed to render an attachment thumbnail.'))
     image.src = src
+  })
+}
+
+async function loadVideoFrame(src: string): Promise<HTMLVideoElement> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video')
+    video.muted = true
+    video.playsInline = true
+    video.preload = 'metadata'
+    video.onloadeddata = () => resolve(video)
+    video.onerror = () => reject(new Error('Failed to render a video attachment thumbnail.'))
+    video.src = src
   })
 }

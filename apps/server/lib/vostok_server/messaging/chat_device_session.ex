@@ -11,6 +11,8 @@ defmodule VostokServer.Messaging.ChatDeviceSession do
 
   schema "chat_device_sessions" do
     field :status, :string
+    field :established_at, :utc_datetime_usec
+    field :superseded_at, :utc_datetime_usec
     field :initiator_identity_public_key, :binary
     field :initiator_encryption_public_key, :binary
     field :initiator_ephemeral_public_key, :binary
@@ -38,6 +40,8 @@ defmodule VostokServer.Messaging.ChatDeviceSession do
       :recipient_device_id,
       :recipient_one_time_prekey_record_id,
       :status,
+      :established_at,
+      :superseded_at,
       :initiator_identity_public_key,
       :initiator_encryption_public_key,
       :initiator_ephemeral_public_key,

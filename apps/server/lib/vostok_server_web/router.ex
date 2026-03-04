@@ -19,6 +19,7 @@ defmodule VostokServerWeb.Router do
 
     get "/health", HealthController, :show
     get "/bootstrap", BootstrapController, :show
+    post "/federation/deliveries", FederationController, :ingest_delivery
     post "/register", RegistrationController, :create
     post "/auth/challenge", AuthController, :challenge
     post "/auth/verify", AuthController, :verify
@@ -27,21 +28,33 @@ defmodule VostokServerWeb.Router do
   scope "/api/v1", VostokServerWeb.Api.V1, as: :api_v1 do
     pipe_through :api_authenticated
 
+    post "/devices/link", DeviceController, :link
     post "/devices/prekeys", PrekeyController, :publish
     get "/users/:username/devices/prekeys", PrekeyController, :show
     get "/me", ChatController, :me
     get "/chats", ChatController, :index
     post "/chats/direct", ChatController, :create_direct
     post "/chats/group", ChatController, :create_group
+    patch "/chats/:chat_id/group", ChatController, :update_group
+    get "/chats/:chat_id/members", ChatController, :group_members
+    patch "/chats/:chat_id/members/:user_id", ChatController, :update_group_member
+    post "/chats/:chat_id/members/:user_id/remove", ChatController, :remove_group_member
+    get "/chats/:chat_id/sender-keys", ChatController, :list_group_sender_keys
+    post "/chats/:chat_id/sender-keys", ChatController, :distribute_group_sender_keys
     post "/chats/:chat_id/session-bootstrap", ChatController, :session_bootstrap
+    post "/chats/:chat_id/session-rekey", ChatController, :session_rekey
     get "/chats/:chat_id/recipient-devices", ChatController, :recipient_devices
     get "/chats/:chat_id/messages", ChatController, :messages
     post "/chats/:chat_id/messages", ChatController, :create_message
+    patch "/chats/:chat_id/messages/:message_id", ChatController, :update_message
+    post "/chats/:chat_id/messages/:message_id/delete", ChatController, :delete_message
+    post "/chats/:chat_id/messages/:message_id/pin", ChatController, :toggle_pin
     post "/chats/:chat_id/messages/:message_id/reactions", ChatController, :toggle_reaction
     post "/media/uploads", MediaController, :create_upload
     patch "/media/uploads/:id/part", MediaController, :upload_part
     post "/media/uploads/:id/complete", MediaController, :complete_upload
     get "/media/:id", MediaController, :show
+    post "/media/link-metadata", MediaController, :link_metadata
     get "/admin/overview", AdminController, :overview
     get "/admin/federation/peers", AdminController, :federation_peers
     post "/admin/federation/peers", AdminController, :create_federation_peer

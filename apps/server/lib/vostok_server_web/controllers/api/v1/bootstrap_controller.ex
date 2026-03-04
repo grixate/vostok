@@ -11,7 +11,7 @@ defmodule VostokServerWeb.Api.V1.BootstrapController do
       },
       features: %{
         auth: "challenge_verify_live",
-        identity: "registration_live",
+        identity: "registration_and_device_link_live",
         prekeys: "publish_and_fetch_live",
         messaging: "direct_chat_http_live",
         media: "chunked_upload_live",

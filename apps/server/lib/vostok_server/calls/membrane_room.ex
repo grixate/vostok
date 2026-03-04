@@ -2,11 +2,9 @@ defmodule VostokServer.Calls.MembraneRoom do
   @moduledoc """
   Room process that boots a real `Membrane.RTC.Engine` instance per active call.
 
-  The current implementation still keeps participant bookkeeping in-process, but
-  the room now boots real `Membrane.RTC.Engine.Endpoint.WebRTC` endpoints for
-  each device. The local queue remains in place for custom bridge events that
-  are not valid Membrane media events, so the existing call-signal fallback path
-  stays usable while the native WebRTC media path comes online.
+  The room keeps participant bookkeeping in-process and boots real
+  `Membrane.RTC.Engine.Endpoint.WebRTC` endpoints for each joined device.
+  Media event polling now mirrors only protocol-native Membrane events.
   """
 
   use GenServer
@@ -188,7 +186,7 @@ defmodule VostokServer.Calls.MembraneRoom do
             state
 
           {:error, :invalid_media_event} ->
-            push_outbound_media_event(state, endpoint_id, event)
+            state
         end
       else
         state

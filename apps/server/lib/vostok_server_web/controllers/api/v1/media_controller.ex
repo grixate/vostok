@@ -45,6 +45,16 @@ defmodule VostokServerWeb.Api.V1.MediaController do
     end
   end
 
+  def link_metadata(conn, params) do
+    case Media.fetch_link_metadata(params) do
+      {:ok, metadata} ->
+        json(conn, %{metadata: metadata})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   defp render_error(conn, :not_found, message) do
     conn
     |> put_status(:not_found)

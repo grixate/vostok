@@ -16,40 +16,56 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - device prekey rotation for the current browser
 - authenticated direct-chat creation
 - authenticated group-chat creation
+- group-title rename for active group chats
+- group-member admin controls (promote, demote, remove) for active group chats
+- group Sender Key rotation and inbound Sender Key visibility in active group chats
+- detail-rail media gallery for recent attachments in the active chat
 - authenticated attachment uploads and encrypted file download
+- server-fetched link metadata previews for message URLs
+- browser-side voice-note recording through the encrypted attachment path
+- lightweight waveform rendering for recorded voice notes
+- voice-note playback controls (play/pause, seek, speed, volume)
+- browser-side round-video recording through the encrypted attachment path
+- inline round-video playback inside message threads
 - quick reaction toggles for recent messages
 - reply composer state with inline reply previews for current-thread messages
+- message edit/delete controls for outgoing messages
+- single pinned-message controls with a pinned-message banner in the active thread
 - persisted direct-chat session bootstrap with explicit initiator ephemeral keys, handshake assertions, and local session-key caching
+- new or re-handshaken direct-chat sessions now derive their local root key through an HKDF-based X3DH-style transcript
+- new or re-handshaken direct-chat sessions now seed distinct send and receive chains by initiator/recipient role
 - recipient-wrapped message encryption for devices with published encryption keys
 - per-message derived session-key encryption with local ratchet state and skipped-message handling when a full chat session map is available
-- legacy browser-local AES-GCM fallback for older local-only messages
+- session-encrypted headers now carry an explicit per-device ratchet version so future crypto migrations have a safe compatibility boundary
+- re-handshaken direct-chat sessions now mix the previous cached root into a new local ratchet epoch instead of blindly resetting chain state
+- session-encrypted headers now also carry a per-device local ratchet public key so peer key changes can drive a local DH-ratchet step between full re-handshakes
+- session-encrypted sends now report the `established_session_ids` they actually used, and the Stage 3 panel shows which cached sessions are still pending their first encrypted message
+- routine chat sync now only generates fresh initiator ephemeral bootstrap keys for recipients that do not already have an established session
+- the Stage 3 panel now includes an explicit `Rekey Active Sessions` action, which rotates selected device-pair sessions onto fresh pending-first-message session records
+- superseded session records are excluded from the outbound send path but still retained in local metadata so older encrypted messages remain decryptable
+- new outbound user messages now require session transport; the old recipient-wrapping and legacy local modes are decode-compatibility paths only
+- session synchronization now prunes consumed local one-time prekeys for device-pair sessions where this device acted as the one-time-prekey recipient
 - IndexedDB-backed local message cache for the selected chat
+- client-side safety-number display for published remote identity keys in the active chat
 - Phoenix Channel subscription for live updates in the active chat
 - image attachments now include inline encrypted thumbnail previews for faster message rendering
 - realtime call-state subscription for the active chat
 - realtime participant updates for the active call room
 - realtime call-signal updates for offer/answer/ICE scaffolding
 - admin overview, federation-peer lifecycle controls, and TURN bootstrap surfaces in the detail rail
+- recent federation delivery queue rows in the Stage 6 admin surface
+- queue and manually advance federation deliveries from the Stage 6 admin surface
 - lightweight call-session start/end plus Membrane room join/leave controls
 - per-device Membrane endpoint provisioning, control ping, and event polling in the Stage 7 panel
 - automatic polling of the per-device Membrane queue while the endpoint exists
-- polled `call_signal_bridge` events now merge into the visible signal log and can drive browser WebRTC negotiation as a fallback path
 - native endpoint-emitted media events (such as the initial `connected` event) now appear in the same polled queue
-- joining the Membrane room now discovers the auto-provisioned per-device endpoint immediately, so fallback polling starts without a second step
-- leaving the Membrane room now refreshes endpoint state immediately so fallback polling stops without waiting for a full call refresh
-- manual signaling now defaults to "Broadcast to joined peers" and can be switched to a specific joined device when needed
+- joining/leaving the Membrane room now refreshes endpoint state immediately
 - persisted call lifecycle entries now render as chat timeline system bubbles
-- signaling inspector and manual offer/answer/ICE dispatch for the active call
-- browser-side `RTCPeerConnection` lab for real SDP offer/answer generation and ICE capture
-- real `getUserMedia` microphone/camera attachment to the browser WebRTC lab before renegotiation
-- automatic Membrane endpoint provisioning during browser WebRTC initialization so the call panel tracks both sides of the bridge
-- browser WebRTC initialization now sends a native Membrane `connect` media event to the provisioned endpoint
+- native Membrane WebRTC initialization now provisions endpoints and sends protocol-native connect events
 - the Stage 7 "Ping" action now sends a protocol-valid `updateEndpointMetadata` event instead of custom placeholder JSON
 - the web client now includes `@jellyfish-dev/membrane-webrtc-js` and feeds native endpoint events from the polled Membrane queue back into a real `WebRTCEndpoint` instance
-- local microphone/camera tracks are mirrored into the Membrane client once the native endpoint is connected
-- the Stage 7 "Create Offer" action is now explicitly for the fallback browser-only lab; native Membrane negotiation is the primary path
+- local microphone/camera tracks now attach directly into the native Membrane client pipeline
 - the Stage 7 panel now shows native remote Membrane endpoint IDs and track IDs as the client discovers them
-- manual fallback offer/answer/ICE form controls are disabled while the native Membrane client is connected
 - native remote tracks now render as explicit `Ready` vs `Negotiating` rows in the Stage 7 panel instead of only aggregate counts
 - ready native remote tracks now render as live audio/video previews in the Stage 7 panel instead of metadata-only rows
 - native remote tracks now surface Membrane voice-activity state so speaking tracks are called out in the Stage 7 panel

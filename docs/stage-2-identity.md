@@ -17,6 +17,11 @@ This document tracks the current Stage 2 slice.
 - `POST /api/v1/devices/prekeys`
   - verifies and rotates the current device's signed prekey
   - replaces or appends one-time prekeys
+- `POST /api/v1/devices/link`
+  - links a new device to the authenticated user
+  - verifies signed-prekey signature material for the linked device
+  - requires initial one-time prekeys for Stage 3 session bootstrap
+  - issues a session token for the linked device immediately
 - `GET /api/v1/users/:username/devices/prekeys`
   - returns discoverable device prekey bundles for a user
   - currently exposes the next available one-time prekey without consuming it

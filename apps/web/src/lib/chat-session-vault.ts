@@ -7,9 +7,15 @@ const SESSION_HANDSHAKE_PREFIX = 'vostok.session-handshake.'
 const SESSION_RATCHET_PREFIX = 'vostok.session-ratchet.'
 const SESSION_SKIPPED_KEY_PREFIX = 'vostok.session-skipped.'
 const SESSION_EPHEMERAL_KEY_PREFIX = 'vostok.session-ephemeral.'
+const SESSION_LOCAL_RATCHET_KEY_PREFIX = 'vostok.session-local-ratchet.'
+const SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX = 'vostok.session-remote-ratchet.'
 const PENDING_SESSION_EPHEMERAL_KEY_PREFIX = 'vostok.session-ephemeral-pending.'
 const CONTENT_IV_BYTES = 12
 const MAX_SKIPPED_MESSAGE_KEYS = 64
+const X3DH_DOMAIN_PREFIX = new Uint8Array(32).fill(0xff)
+const LEGACY_RATCHET_VERSION = 'v1'
+const TRANSITION_RATCHET_VERSION = 'v2'
+const CURRENT_RATCHET_VERSION = 'v3'
 
 type SessionHeader = {
   algorithm: string
@@ -17,6 +23,9 @@ type SessionHeader = {
   session_map: Record<string, string>
   handshake_map: Record<string, string> | null
   counter_map: Record<string, number> | null
+  version_map: Record<string, string> | null
+  epoch_map: Record<string, number> | null
+  ratchet_public_map: Record<string, string> | null
 }
 
 export type LocalSessionDeviceMaterial = {
@@ -34,10 +43,48 @@ export type LocalSessionDeviceMaterial = {
   }>
 }
 
+export function pruneConsumedOneTimePrekeys(
+  currentDeviceId: string,
+  sessions: ChatDeviceSession[],
+  oneTimePrekeys: Array<{ publicKeyBase64: string; privateKeyPkcs8Base64: string }> = []
+): {
+  nextOneTimePrekeys: Array<{ publicKeyBase64: string; privateKeyPkcs8Base64: string }>
+  consumedPublicKeys: string[]
+} {
+  if (oneTimePrekeys.length === 0) {
+    return { nextOneTimePrekeys: [], consumedPublicKeys: [] }
+  }
+
+  const consumedPublicKeys = sessions
+    .filter(
+      (session) =>
+        session.recipient_device_id === currentDeviceId &&
+        session.session_state !== 'superseded' &&
+        typeof session.recipient_one_time_prekey === 'string' &&
+        session.recipient_one_time_prekey !== ''
+    )
+    .map((session) => session.recipient_one_time_prekey as string)
+
+  if (consumedPublicKeys.length === 0) {
+    return { nextOneTimePrekeys: oneTimePrekeys, consumedPublicKeys: [] }
+  }
+
+  const consumedSet = new Set(consumedPublicKeys)
+  const nextOneTimePrekeys = oneTimePrekeys.filter(
+    (prekey) => !consumedSet.has(prekey.publicKeyBase64)
+  )
+
+  return {
+    nextOneTimePrekeys,
+    consumedPublicKeys: [...consumedSet]
+  }
+}
+
 type EncryptedEnvelope = {
   ciphertext: string
   header: string
   recipient_envelopes: Record<string, string>
+  established_session_ids: string[]
 }
 
 type StoredSessionEphemeralKey = {
@@ -46,6 +93,10 @@ type StoredSessionEphemeralKey = {
 }
 
 type SessionRatchetState = {
+  version: string
+  epoch: number
+  role: 'initiator' | 'recipient' | 'unknown'
+  pendingLocalRotation: boolean
   send: number
   receive: number
   sendChainKeyBase64: string
@@ -94,27 +145,56 @@ export async function synchronizeChatSessions(
     }
 
     rememberInitiatorEphemeralKey(currentDevice.deviceId, session)
+    const previousHandshakeHash = readStoredSessionHandshakeHash(session.id)
+    const existingKeyBytes = readStoredSessionKeyBytes(session.id)
+    const existingRatchetState = readStoredSessionRatchetState(session.id)
+    const shouldReuseExistingKey =
+      !!existingKeyBytes && previousHandshakeHash === session.handshake_hash
+    let keyBytes: Uint8Array | null = shouldReuseExistingKey ? existingKeyBytes : null
+    let nextEpoch = existingRatchetState?.epoch ?? 0
 
-    const keyBytes = await deriveSessionKeyBytes(currentDevice, session)
+    if (!shouldReuseExistingKey) {
+      const nextTranscriptRootKeyBytes = await deriveSessionKeyBytes(currentDevice, session)
+
+      if (!nextTranscriptRootKeyBytes) {
+        continue
+      }
+
+      if (existingKeyBytes && previousHandshakeHash && previousHandshakeHash !== session.handshake_hash) {
+        keyBytes = await deriveDhRatchetRootKey(
+          existingKeyBytes,
+          nextTranscriptRootKeyBytes,
+          previousHandshakeHash,
+          session.handshake_hash,
+          session.id
+        )
+        nextEpoch = (existingRatchetState?.epoch ?? 0) + 1
+      } else {
+        keyBytes = nextTranscriptRootKeyBytes
+        nextEpoch = 0
+      }
+    }
 
     if (!keyBytes) {
       continue
     }
 
-    const previousHandshakeHash = readStoredSessionHandshakeHash(session.id)
-
-    window.localStorage.setItem(`${SESSION_KEY_PREFIX}${session.id}`, bytesToBase64(keyBytes))
+    writeStoredSessionKeyBytes(session.id, keyBytes)
     window.localStorage.setItem(`${SESSION_HANDSHAKE_PREFIX}${session.id}`, session.handshake_hash)
 
-    if (previousHandshakeHash !== session.handshake_hash) {
+    if (previousHandshakeHash !== session.handshake_hash || !existingKeyBytes) {
       const ratchetState = await buildInitialRatchetState(
         keyBytes,
         session.id,
-        session.handshake_hash
+        session.handshake_hash,
+        resolveSessionRole(currentDevice.deviceId, session),
+        CURRENT_RATCHET_VERSION,
+        nextEpoch
       )
 
       writeStoredSessionRatchetState(session.id, ratchetState)
       writeStoredSkippedMessageKeys(session.id, {})
+      await ensureStoredLocalRatchetKey(session.id)
     }
 
     synchronized.push(session.id)
@@ -143,6 +223,9 @@ export async function encryptMessageWithSessions(
   const encoded = new TextEncoder().encode(plaintext)
   const encryptedPairs: Array<readonly [string, string]> = []
   const counterMap: Record<string, number> = {}
+  const versionMap: Record<string, string> = {}
+  const epochMap: Record<string, number> = {}
+  const ratchetPublicMap: Record<string, string> = {}
   const nextRatchetStates: Array<readonly [string, SessionRatchetState]> = []
 
   for (const [deviceId, sessionId] of Object.entries(sessionMap)) {
@@ -158,7 +241,15 @@ export async function encryptMessageWithSessions(
       throw new Error('A direct-chat session key is missing locally.')
     }
 
-    const ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
+    let ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
+    const outboundState = await prepareOutboundRatchetState(
+      sessionId,
+      rootKeyBytes,
+      handshakeHash,
+      ratchetState
+    )
+
+    ratchetState = outboundState.ratchetState
     const counter = ratchetState.send
     const ratchetStep = await deriveRatchetStep(
       base64ToBytes(ratchetState.sendChainKeyBase64),
@@ -175,6 +266,9 @@ export async function encryptMessageWithSessions(
 
     encryptedPairs.push([deviceId, bytesToBase64(ciphertext)] as const)
     counterMap[deviceId] = counter
+    versionMap[deviceId] = ratchetState.version
+    epochMap[deviceId] = ratchetState.epoch
+    ratchetPublicMap[deviceId] = outboundState.localPublicKeyBase64
     nextRatchetStates.push([
       sessionId,
       {
@@ -198,9 +292,13 @@ export async function encryptMessageWithSessions(
       content_iv: bytesToBase64(iv),
       session_map: sessionMap,
       handshake_map: handshakeMap,
-      counter_map: counterMap
+      counter_map: counterMap,
+      version_map: versionMap,
+      epoch_map: epochMap,
+      ratchet_public_map: ratchetPublicMap
     }),
-    recipient_envelopes: recipientEnvelopes
+    recipient_envelopes: recipientEnvelopes,
+    established_session_ids: Object.values(sessionMap)
   }
 }
 
@@ -220,7 +318,7 @@ export async function decryptMessageWithSessions(
     throw new Error('No direct-chat session is available for this device.')
   }
 
-  const rootKeyBytes = readStoredSessionKeyBytes(sessionId)
+  let rootKeyBytes = readStoredSessionKeyBytes(sessionId)
 
   if (!rootKeyBytes) {
     throw new Error('The direct-chat session key is not cached locally.')
@@ -238,9 +336,31 @@ export async function decryptMessageWithSessions(
   }
 
   const counter = header.counter_map?.[currentDeviceId]
+  const ratchetVersion = normalizeRatchetVersion(header.version_map?.[currentDeviceId])
+  const ratchetEpoch = normalizeCounter(header.epoch_map?.[currentDeviceId])
+  const inboundRatchetPublicKeyBase64 = header.ratchet_public_map?.[currentDeviceId]
+
+  if (inboundRatchetPublicKeyBase64) {
+    await applyInboundRemoteRatchetStepIfNeeded(
+      sessionId,
+      rootKeyBytes,
+      cachedHandshakeHash,
+      inboundRatchetPublicKeyBase64
+    )
+
+    rootKeyBytes = readStoredSessionKeyBytes(sessionId) ?? rootKeyBytes
+  }
+
   const key =
     typeof counter === 'number'
-      ? await resolveInboundMessageKey(sessionId, rootKeyBytes, cachedHandshakeHash, counter)
+      ? await resolveInboundMessageKey(
+          sessionId,
+          rootKeyBytes,
+          cachedHandshakeHash,
+          counter,
+          ratchetVersion,
+          ratchetEpoch
+        )
       : await importAesKey(rootKeyBytes, ['decrypt'])
 
   const plaintext = await window.crypto.subtle.decrypt(
@@ -261,7 +381,10 @@ function buildSendSessionMap(
   sessions: ChatDeviceSession[]
 ): Record<string, string> {
   const mapped = sessions
-    .filter((session) => session.initiator_device_id === currentDeviceId)
+    .filter(
+      (session) =>
+        session.initiator_device_id === currentDeviceId && session.session_state !== 'superseded'
+    )
     .map((session) => [session.recipient_device_id, session.id] as const)
 
   return Object.fromEntries(mapped)
@@ -272,10 +395,28 @@ function buildSendHandshakeMap(
   sessions: ChatDeviceSession[]
 ): Record<string, string> {
   const mapped = sessions
-    .filter((session) => session.initiator_device_id === currentDeviceId)
+    .filter(
+      (session) =>
+        session.initiator_device_id === currentDeviceId && session.session_state !== 'superseded'
+    )
     .map((session) => [session.recipient_device_id, session.handshake_hash] as const)
 
   return Object.fromEntries(mapped)
+}
+
+function resolveSessionRole(
+  currentDeviceId: string,
+  session: ChatDeviceSession
+): 'initiator' | 'recipient' | 'unknown' {
+  if (currentDeviceId === session.initiator_device_id) {
+    return 'initiator'
+  }
+
+  if (currentDeviceId === session.recipient_device_id) {
+    return 'recipient'
+  }
+
+  return 'unknown'
 }
 
 async function verifyChatDeviceSession(session: ChatDeviceSession): Promise<boolean> {
@@ -329,8 +470,6 @@ async function deriveSessionKeyBytes(
   }
 
   const encryptionPrivateKey = await importPrivateKey(currentDevice.encryptionPrivateKeyPkcs8Base64)
-  const transcriptParts = [base64ToBytes(session.initiator_ephemeral_public_key)]
-
   let materialParts: Uint8Array[]
 
   if (currentDevice.deviceId === session.initiator_device_id) {
@@ -398,10 +537,23 @@ async function deriveSessionKeyBytes(
     return null
   }
 
-  materialParts.push(...transcriptParts, new TextEncoder().encode(session.id))
+  const salt = await digestBytes(
+    base64ToBytes(session.handshake_hash),
+    new TextEncoder().encode(session.chat_id),
+    new TextEncoder().encode(session.id),
+    new TextEncoder().encode('vostok:x3dh:salt:v2')
+  )
 
-  const digest = await window.crypto.subtle.digest('SHA-256', toArrayBuffer(concatBytes(...materialParts)))
-  return new Uint8Array(digest)
+  return deriveHkdfSha256Key(
+    concatBytes(X3DH_DOMAIN_PREFIX, ...materialParts),
+    salt,
+    concatBytes(
+      new TextEncoder().encode('vostok:x3dh:root:v2'),
+      new TextEncoder().encode(session.chat_id),
+      new TextEncoder().encode(session.id)
+    ),
+    32
+  )
 }
 
 function rememberInitiatorEphemeralKey(currentDeviceId: string, session: ChatDeviceSession) {
@@ -521,10 +673,15 @@ function readStoredSessionKeyBytes(sessionId: string): Uint8Array | null {
   return base64ToBytes(serialized)
 }
 
+function writeStoredSessionKeyBytes(sessionId: string, keyBytes: Uint8Array) {
+  window.localStorage.setItem(`${SESSION_KEY_PREFIX}${sessionId}`, bytesToBase64(keyBytes))
+}
+
 async function readOrBuildSessionRatchetState(
   sessionId: string,
   rootKeyBytes: Uint8Array,
-  handshakeHash: string
+  handshakeHash: string,
+  versionHint = CURRENT_RATCHET_VERSION
 ): Promise<SessionRatchetState> {
   const existing = readStoredSessionRatchetState(sessionId)
 
@@ -532,7 +689,13 @@ async function readOrBuildSessionRatchetState(
     return existing
   }
 
-  const initial = await buildInitialRatchetState(rootKeyBytes, sessionId, handshakeHash)
+  const initial = await buildInitialRatchetState(
+    rootKeyBytes,
+    sessionId,
+    handshakeHash,
+    'unknown',
+    normalizeRatchetVersion(versionHint)
+  )
   writeStoredSessionRatchetState(sessionId, initial)
   return initial
 }
@@ -567,6 +730,48 @@ function writeStoredSessionEphemeralKey(sessionId: string, keyPair: StoredSessio
   window.localStorage.setItem(`${SESSION_EPHEMERAL_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
 }
 
+function readStoredLocalRatchetKey(sessionId: string): StoredSessionEphemeralKey | null {
+  const serialized = window.localStorage.getItem(`${SESSION_LOCAL_RATCHET_KEY_PREFIX}${sessionId}`)
+
+  if (!serialized) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(serialized) as Partial<StoredSessionEphemeralKey>
+
+    if (
+      typeof parsed.publicKeyBase64 !== 'string' ||
+      typeof parsed.privateKeyPkcs8Base64 !== 'string'
+    ) {
+      return null
+    }
+
+    return {
+      publicKeyBase64: parsed.publicKeyBase64,
+      privateKeyPkcs8Base64: parsed.privateKeyPkcs8Base64
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeStoredLocalRatchetKey(sessionId: string, keyPair: StoredSessionEphemeralKey) {
+  window.localStorage.setItem(`${SESSION_LOCAL_RATCHET_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
+}
+
+async function ensureStoredLocalRatchetKey(sessionId: string): Promise<StoredSessionEphemeralKey> {
+  const existing = readStoredLocalRatchetKey(sessionId)
+
+  if (existing) {
+    return existing
+  }
+
+  const keyPair = await generateEphemeralKeyPair()
+  writeStoredLocalRatchetKey(sessionId, keyPair)
+  return keyPair
+}
+
 function claimPendingSessionEphemeralKey(publicKeyBase64: string): string | null {
   const storageKey = `${PENDING_SESSION_EPHEMERAL_KEY_PREFIX}${publicKeyBase64}`
   const privateKeyPkcs8Base64 = window.localStorage.getItem(storageKey)
@@ -577,6 +782,15 @@ function claimPendingSessionEphemeralKey(publicKeyBase64: string): string | null
 
   window.localStorage.removeItem(storageKey)
   return privateKeyPkcs8Base64
+}
+
+function readStoredRemoteRatchetPublicKey(sessionId: string): string | null {
+  const stored = window.localStorage.getItem(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${sessionId}`)
+  return normalizeNonEmptyString(stored)
+}
+
+function writeStoredRemoteRatchetPublicKey(sessionId: string, publicKeyBase64: string) {
+  window.localStorage.setItem(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${sessionId}`, publicKeyBase64)
 }
 
 function readStoredSessionRatchetState(sessionId: string): SessionRatchetState | null {
@@ -590,6 +804,10 @@ function readStoredSessionRatchetState(sessionId: string): SessionRatchetState |
     const parsed = JSON.parse(serialized) as Partial<SessionRatchetState>
     const send = normalizeCounter(parsed.send)
     const receive = normalizeCounter(parsed.receive)
+    const version = normalizeRatchetVersion(parsed.version)
+    const epoch = normalizeCounter(parsed.epoch)
+    const role = normalizeSessionRole(parsed.role)
+    const pendingLocalRotation = parsed.pendingLocalRotation === true
     const sendChainKeyBase64 = normalizeNonEmptyString(parsed.sendChainKeyBase64)
     const receiveChainKeyBase64 = normalizeNonEmptyString(parsed.receiveChainKeyBase64)
 
@@ -598,6 +816,10 @@ function readStoredSessionRatchetState(sessionId: string): SessionRatchetState |
     }
 
     return {
+      version,
+      epoch,
+      role,
+      pendingLocalRotation,
       send,
       receive,
       sendChainKeyBase64,
@@ -652,7 +874,11 @@ async function importPrivateKey(privateKeyPkcs8Base64: string): Promise<CryptoKe
 async function buildInitialRatchetState(
   rootKeyBytes: Uint8Array,
   sessionId: string,
-  handshakeHash: string
+  handshakeHash: string,
+  role: 'initiator' | 'recipient' | 'unknown' = 'unknown',
+  version = CURRENT_RATCHET_VERSION,
+  epoch = 0,
+  pendingLocalRotation = false
 ): Promise<SessionRatchetState> {
   const initialChainKeyBytes = await digestBytes(
     rootKeyBytes,
@@ -661,14 +887,158 @@ async function buildInitialRatchetState(
     new TextEncoder().encode('vostok:chain:root')
   )
 
-  const chainKeyBase64 = bytesToBase64(initialChainKeyBytes)
+  if (role === 'unknown') {
+    const chainKeyBase64 = bytesToBase64(initialChainKeyBytes)
+
+    return {
+      version,
+      epoch,
+      role,
+      pendingLocalRotation,
+      send: 0,
+      receive: 0,
+      sendChainKeyBase64: chainKeyBase64,
+      receiveChainKeyBase64: chainKeyBase64
+    }
+  }
+
+  const initiatorToRecipientChainKeyBytes = await digestBytes(
+    initialChainKeyBytes,
+    new TextEncoder().encode('vostok:chain:i2r')
+  )
+  const recipientToInitiatorChainKeyBytes = await digestBytes(
+    initialChainKeyBytes,
+    new TextEncoder().encode('vostok:chain:r2i')
+  )
 
   return {
+    version,
+    epoch,
+    role,
+    pendingLocalRotation,
     send: 0,
     receive: 0,
-    sendChainKeyBase64: chainKeyBase64,
-    receiveChainKeyBase64: chainKeyBase64
+    sendChainKeyBase64: bytesToBase64(
+      role === 'initiator' ? initiatorToRecipientChainKeyBytes : recipientToInitiatorChainKeyBytes
+    ),
+    receiveChainKeyBase64: bytesToBase64(
+      role === 'initiator' ? recipientToInitiatorChainKeyBytes : initiatorToRecipientChainKeyBytes
+    )
   }
+}
+
+async function prepareOutboundRatchetState(
+  sessionId: string,
+  rootKeyBytes: Uint8Array,
+  handshakeHash: string,
+  ratchetState: SessionRatchetState
+): Promise<{
+  rootKeyBytes: Uint8Array
+  ratchetState: SessionRatchetState
+  localPublicKeyBase64: string
+}> {
+  let localRatchetKey = await ensureStoredLocalRatchetKey(sessionId)
+  let activeRootKeyBytes = rootKeyBytes
+  let activeRatchetState = ratchetState
+
+  if (ratchetState.pendingLocalRotation) {
+    const remoteRatchetPublicKeyBase64 = readStoredRemoteRatchetPublicKey(sessionId)
+
+    if (remoteRatchetPublicKeyBase64) {
+      localRatchetKey = await generateEphemeralKeyPair()
+      writeStoredLocalRatchetKey(sessionId, localRatchetKey)
+
+      const nextRootKeyBytes = await deriveMessageDhRatchetRootKey(
+        activeRootKeyBytes,
+        await importPrivateKey(localRatchetKey.privateKeyPkcs8Base64),
+        remoteRatchetPublicKeyBase64,
+        handshakeHash,
+        sessionId,
+        'send',
+        ratchetState.epoch + 1
+      )
+
+      activeRootKeyBytes = nextRootKeyBytes
+      writeStoredSessionKeyBytes(sessionId, nextRootKeyBytes)
+      writeStoredSkippedMessageKeys(sessionId, {})
+      activeRatchetState = await buildInitialRatchetState(
+        nextRootKeyBytes,
+        sessionId,
+        handshakeHash,
+        ratchetState.role,
+        CURRENT_RATCHET_VERSION,
+        ratchetState.epoch + 1,
+        false
+      )
+      writeStoredSessionRatchetState(sessionId, activeRatchetState)
+    }
+  }
+
+  return {
+    rootKeyBytes: activeRootKeyBytes,
+    ratchetState: activeRatchetState,
+    localPublicKeyBase64: localRatchetKey.publicKeyBase64
+  }
+}
+
+async function applyInboundRemoteRatchetStepIfNeeded(
+  sessionId: string,
+  rootKeyBytes: Uint8Array,
+  handshakeHash: string,
+  remoteRatchetPublicKeyBase64: string
+): Promise<void> {
+  const normalizedRemoteRatchetPublicKeyBase64 = normalizeNonEmptyString(remoteRatchetPublicKeyBase64)
+
+  if (!normalizedRemoteRatchetPublicKeyBase64) {
+    return
+  }
+
+  const ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
+  const currentRemoteRatchetPublicKeyBase64 = readStoredRemoteRatchetPublicKey(sessionId)
+
+  if (!currentRemoteRatchetPublicKeyBase64) {
+    writeStoredRemoteRatchetPublicKey(sessionId, normalizedRemoteRatchetPublicKeyBase64)
+
+    if (!ratchetState.pendingLocalRotation) {
+      writeStoredSessionRatchetState(sessionId, {
+        ...ratchetState,
+        pendingLocalRotation: true
+      })
+    }
+
+    return
+  }
+
+  if (currentRemoteRatchetPublicKeyBase64 === normalizedRemoteRatchetPublicKeyBase64) {
+    return
+  }
+
+  const localRatchetKey = await ensureStoredLocalRatchetKey(sessionId)
+  const nextRootKeyBytes = await deriveMessageDhRatchetRootKey(
+    rootKeyBytes,
+    await importPrivateKey(localRatchetKey.privateKeyPkcs8Base64),
+    normalizedRemoteRatchetPublicKeyBase64,
+    handshakeHash,
+    sessionId,
+    'receive',
+    ratchetState.epoch + 1
+  )
+
+  writeStoredSessionKeyBytes(sessionId, nextRootKeyBytes)
+  writeStoredSkippedMessageKeys(sessionId, {})
+  writeStoredRemoteRatchetPublicKey(sessionId, normalizedRemoteRatchetPublicKeyBase64)
+  writeStoredSessionRatchetState(
+    sessionId,
+    await buildInitialRatchetState(
+      nextRootKeyBytes,
+      sessionId,
+      handshakeHash,
+      ratchetState.role,
+      CURRENT_RATCHET_VERSION,
+      ratchetState.epoch + 1,
+      true
+    )
+  )
 }
 
 async function deriveRatchetStep(
@@ -704,7 +1074,9 @@ async function resolveInboundMessageKey(
   sessionId: string,
   rootKeyBytes: Uint8Array,
   handshakeHash: string,
-  counter: number
+  counter: number,
+  versionHint = CURRENT_RATCHET_VERSION,
+  epochHint = 0
 ): Promise<CryptoKey> {
   const skippedKeyLabel = String(counter)
   const skippedKeys = readStoredSkippedMessageKeys(sessionId)
@@ -716,7 +1088,20 @@ async function resolveInboundMessageKey(
     return importAesKey(base64ToBytes(skippedMessageKeyBase64), ['decrypt'])
   }
 
-  let ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
+  let ratchetState = await readOrBuildSessionRatchetState(
+    sessionId,
+    rootKeyBytes,
+    handshakeHash,
+    versionHint
+  )
+
+  if (ratchetState.version !== normalizeRatchetVersion(versionHint)) {
+    throw new Error('The cached direct-chat ratchet version does not match this message.')
+  }
+
+  if (ratchetState.epoch !== normalizeCounter(epochHint)) {
+    throw new Error('The cached direct-chat ratchet epoch does not match this message.')
+  }
 
   if (counter < ratchetState.receive) {
     throw new Error('The skipped message key is no longer available for this session.')
@@ -791,6 +1176,93 @@ async function importAesKey(rawKey: Uint8Array, usages: KeyUsage[]): Promise<Cry
 async function digestBytes(...parts: Uint8Array[]): Promise<Uint8Array> {
   const digest = await window.crypto.subtle.digest('SHA-256', toArrayBuffer(concatBytes(...parts)))
   return new Uint8Array(digest)
+}
+
+async function deriveHkdfSha256Key(
+  inputKeyMaterial: Uint8Array,
+  salt: Uint8Array,
+  info: Uint8Array,
+  length: number
+): Promise<Uint8Array> {
+  const baseKey = await window.crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(inputKeyMaterial),
+    'HKDF',
+    false,
+    ['deriveBits']
+  )
+  const derivedBits = await window.crypto.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: toArrayBuffer(salt),
+      info: toArrayBuffer(info)
+    },
+    baseKey,
+    length * 8
+  )
+
+  return new Uint8Array(derivedBits)
+}
+
+async function deriveDhRatchetRootKey(
+  previousRootKeyBytes: Uint8Array,
+  nextTranscriptRootKeyBytes: Uint8Array,
+  previousHandshakeHash: string,
+  nextHandshakeHash: string,
+  sessionId: string
+): Promise<Uint8Array> {
+  const salt = await digestBytes(
+    base64ToBytes(previousHandshakeHash),
+    base64ToBytes(nextHandshakeHash),
+    new TextEncoder().encode(sessionId),
+    new TextEncoder().encode('vostok:dh-ratchet:salt:v1')
+  )
+
+  return deriveHkdfSha256Key(
+    concatBytes(X3DH_DOMAIN_PREFIX, previousRootKeyBytes, nextTranscriptRootKeyBytes),
+    salt,
+    concatBytes(
+      new TextEncoder().encode('vostok:dh-ratchet:root:v1'),
+      new TextEncoder().encode(sessionId)
+    ),
+    32
+  )
+}
+
+async function deriveMessageDhRatchetRootKey(
+  previousRootKeyBytes: Uint8Array,
+  localRatchetPrivateKey: CryptoKey,
+  remoteRatchetPublicKeyBase64: string,
+  handshakeHash: string,
+  sessionId: string,
+  direction: 'send' | 'receive',
+  nextEpoch: number
+): Promise<Uint8Array> {
+  const sharedSecret = await deriveSharedSecret(
+    localRatchetPrivateKey,
+    await importPublicKey(remoteRatchetPublicKeyBase64)
+  )
+  const salt = await digestBytes(
+    previousRootKeyBytes,
+    base64ToBytes(handshakeHash),
+    new TextEncoder().encode(sessionId),
+    new TextEncoder().encode(direction),
+    encodeCounter(nextEpoch),
+    new TextEncoder().encode('vostok:message-dh-ratchet:salt:v1')
+  )
+
+  return deriveHkdfSha256Key(
+    concatBytes(X3DH_DOMAIN_PREFIX, previousRootKeyBytes, sharedSecret),
+    salt,
+    concatBytes(
+      new TextEncoder().encode('vostok:message-dh-ratchet:root:v1'),
+      new TextEncoder().encode(sessionId),
+      new TextEncoder().encode(direction),
+      encodeCounter(nextEpoch)
+    ),
+    32
+  )
 }
 
 async function generateEphemeralKeyPair(): Promise<StoredSessionEphemeralKey> {
@@ -890,13 +1362,43 @@ function parseSessionHeader(headerBase64: string | null): SessionHeader | null {
             )
           )
         : null
+    const epochMap =
+      parsed.epoch_map && typeof parsed.epoch_map === 'object'
+        ? Object.fromEntries(
+            Object.entries(parsed.epoch_map).filter(
+              (entry): entry is [string, number] =>
+                typeof entry[0] === 'string' && Number.isInteger(entry[1]) && entry[1] >= 0
+            )
+          )
+        : null
+    const ratchetPublicMap =
+      parsed.ratchet_public_map && typeof parsed.ratchet_public_map === 'object'
+        ? Object.fromEntries(
+            Object.entries(parsed.ratchet_public_map).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[0] === 'string' && normalizeNonEmptyString(entry[1]) === entry[1]
+            )
+          )
+        : null
 
     return {
       algorithm: parsed.algorithm,
       content_iv: parsed.content_iv,
       session_map: sessionMap,
       handshake_map: handshakeMap,
-      counter_map: counterMap
+      counter_map: counterMap,
+      epoch_map: epochMap,
+      ratchet_public_map: ratchetPublicMap,
+      version_map:
+        parsed.version_map && typeof parsed.version_map === 'object'
+          ? Object.fromEntries(
+              Object.entries(parsed.version_map).filter(
+                (entry): entry is [string, string] =>
+                  typeof entry[0] === 'string' &&
+                  normalizeRatchetVersion(entry[1]) === entry[1]
+              )
+            )
+          : null
     }
   } catch {
     return null
@@ -909,6 +1411,16 @@ function encodeSessionHeader(header: SessionHeader): string {
 
 function normalizeCounter(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0
+}
+
+function normalizeRatchetVersion(value: unknown): string {
+  return value === CURRENT_RATCHET_VERSION || value === TRANSITION_RATCHET_VERSION
+    ? value
+    : LEGACY_RATCHET_VERSION
+}
+
+function normalizeSessionRole(value: unknown): 'initiator' | 'recipient' | 'unknown' {
+  return value === 'initiator' || value === 'recipient' ? value : 'unknown'
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {

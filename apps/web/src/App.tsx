@@ -20,21 +20,30 @@ import {
 } from '@vostok/ui-chat'
 import {
   appendMediaUploadPart,
+  attemptFederationDelivery,
   createCallSession,
+  createFederationDelivery,
   createFederationPeer,
   recordFederationPeerHeartbeat,
   bootstrapChatSessions,
   completeMediaUpload,
   createDirectChat,
+  distributeGroupSenderKeys,
   createGroupChat,
+  fetchMediaLinkMetadata,
   createMediaUpload,
   createMessage,
+  deleteMessage,
   endCallSession,
   fetchCallWebRtcEndpointState,
   fetchCallState,
   toggleMessageReaction,
+  updateMessage,
   fetchAdminOverview,
   fetchActiveCall,
+  listFederationDeliveries,
+  listGroupMembers,
+  listGroupSenderKeys,
   fetchMediaUpload,
   fetchTurnCredentials,
   fetchUserPrekeys,
@@ -50,8 +59,12 @@ import {
   publishDevicePrekeys,
   provisionCallWebRtcEndpoint,
   pushCallWebRtcMediaEvent,
+  rekeyChatSessions,
+  renameGroupChat,
   registerDevice,
-  sendCallSignal,
+  removeGroupMember,
+  toggleMessagePin,
+  updateGroupMemberRole,
   updateFederationPeerStatus,
   verifyChallenge,
   type AdminOverview,
@@ -63,7 +76,11 @@ import {
   type ChatDeviceSession,
   type ChatMessage,
   type ChatSummary,
+  type FederationDeliveryJob,
   type FederationPeer,
+  type GroupSenderKey,
+  type GroupMember,
+  type LinkMetadata,
   type RecipientDevice,
   type PrekeyDeviceBundle,
   type TurnCredentials
@@ -78,33 +95,19 @@ import {
 import {
   encryptMessageWithSessions,
   prepareSessionBootstrap,
+  pruneConsumedOneTimePrekeys,
   synchronizeChatSessions,
   type LocalSessionDeviceMaterial
 } from './lib/chat-session-vault'
 import { readCachedMessages, writeCachedMessages, type CachedMessage } from './lib/message-cache'
-import {
-  decryptMessageText,
-  encryptLegacyMessageText,
-  encryptMessageEnvelope
-} from './lib/message-vault'
+import { decryptMessageText } from './lib/message-vault'
 import { subscribeToCallStream, subscribeToChatStream } from './lib/realtime'
 import {
   decryptAttachmentFile,
   encryptAttachmentFile,
-  generateAttachmentThumbnailDataUrl
+  generateAttachmentThumbnailDataUrl,
+  generateAttachmentWaveform
 } from './lib/attachment-vault'
-import {
-  attachLocalMediaTracks,
-  applyRemoteAnswer,
-  applyRemoteIceCandidate,
-  applyRemoteOfferAndCreateAnswer,
-  closeWebRtcLab,
-  createOfferPayload,
-  createWebRtcLab,
-  detachLocalMediaTracks,
-  readDescriptionPayload,
-  readRemoteDescriptionPayload
-} from './lib/webrtc-lab'
 import {
   attachLocalTracksToMembrane,
   cleanupMembraneClient,
@@ -136,7 +139,7 @@ import {
   toggleDesktopWindowMaximize,
   type DesktopRuntimeInfo
 } from './lib/desktop-shell'
-import { base64ToBytes } from './lib/base64'
+import { base64ToBytes, bytesToBase64 } from './lib/base64'
 
 type AuthView = 'welcome' | 'register' | 'login' | 'link' | 'chat'
 
@@ -161,6 +164,12 @@ type Banner = {
   message: string
 }
 
+type SafetyNumberEntry = {
+  deviceId: string
+  label: string
+  fingerprint: string
+}
+
 type AttachmentDescriptor = {
   kind: 'attachment'
   uploadId: string
@@ -168,6 +177,7 @@ type AttachmentDescriptor = {
   contentType: string
   size: number
   thumbnailDataUrl?: string
+  waveform?: number[]
   contentKeyBase64: string
   ivBase64: string
 }
@@ -177,7 +187,6 @@ const DETAIL_RAIL_STORAGE_KEY = 'vostok.layout.detail_rail_visible'
 const DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY = 'vostok.desktop.always_on_top'
 const DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY = 'vostok.desktop.window_geometry'
 const DESKTOP_DETAIL_RAIL_BREAKPOINT = 1200
-const CALL_SIGNAL_BROADCAST = '__broadcast__'
 
 function readStoredDevice(): StoredDevice | null {
   const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -279,14 +288,23 @@ function App() {
   const [desktopWindowGeometry, setDesktopWindowGeometry] = useState<DesktopWindowGeometry | null>(null)
   const [messageItems, setMessageItems] = useState<CachedMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [replyTargetMessageId, setReplyTargetMessageId] = useState<string | null>(null)
+  const [voiceNoteRecording, setVoiceNoteRecording] = useState(false)
+  const [roundVideoRecording, setRoundVideoRecording] = useState(false)
   const [newChatUsername, setNewChatUsername] = useState('')
   const [newGroupTitle, setNewGroupTitle] = useState('')
   const [newGroupMembers, setNewGroupMembers] = useState('')
+  const [groupRenameTitle, setGroupRenameTitle] = useState('')
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
+  const [groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
+  const [linkMetadataByUrl, setLinkMetadataByUrl] = useState<Record<string, LinkMetadata>>({})
+  const [safetyNumbers, setSafetyNumbers] = useState<SafetyNumberEntry[]>([])
   const [remotePrekeyBundles, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
   const [chatSessions, setChatSessions] = useState<ChatDeviceSession[]>([])
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null)
   const [federationPeers, setFederationPeers] = useState<FederationPeer[]>([])
+  const [federationDeliveries, setFederationDeliveries] = useState<FederationDeliveryJob[]>([])
   const [federationDomain, setFederationDomain] = useState('')
   const [federationDisplayName, setFederationDisplayName] = useState('')
   const [turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
@@ -296,24 +314,9 @@ function App() {
   const [callWebRtcEndpoint, setCallWebRtcEndpoint] = useState<CallWebRtcEndpointState | null>(null)
   const [callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
   const [callSignals, setCallSignals] = useState<CallSignal[]>([])
-  const [callSignalType, setCallSignalType] = useState<CallSignal['signal_type']>('offer')
-  const [callSignalTargetDeviceId, setCallSignalTargetDeviceId] = useState<string>(CALL_SIGNAL_BROADCAST)
-  const [callSignalPayload, setCallSignalPayload] = useState('{"type":"offer","sdp":"stub-offer"}')
-  const [webRtcReady, setWebRtcReady] = useState(false)
-  const [webRtcConnectionState, setWebRtcConnectionState] =
-    useState<RTCPeerConnectionState>('new')
-  const [webRtcSignalingState, setWebRtcSignalingState] =
-    useState<RTCSignalingState>('stable')
-  const [webRtcLocalDescription, setWebRtcLocalDescription] = useState<string | null>(null)
-  const [webRtcRemoteDescription, setWebRtcRemoteDescription] = useState<string | null>(null)
-  const [webRtcIceOutboundCount, setWebRtcIceOutboundCount] = useState(0)
-  const [webRtcIceInboundCount, setWebRtcIceInboundCount] = useState(0)
   const [localMediaMode, setLocalMediaMode] = useState<'none' | 'audio' | 'audio_video'>('none')
   const [localAudioTrackCount, setLocalAudioTrackCount] = useState(0)
   const [localVideoTrackCount, setLocalVideoTrackCount] = useState(0)
-  const [remoteAudioTrackCount, setRemoteAudioTrackCount] = useState(0)
-  const [remoteVideoTrackCount, setRemoteVideoTrackCount] = useState(0)
-  const [localMediaRevision, setLocalMediaRevision] = useState(0)
   const [membraneClientReady, setMembraneClientReady] = useState(false)
   const [membraneClientConnected, setMembraneClientConnected] = useState(false)
   const [membraneRemoteEndpointCount, setMembraneRemoteEndpointCount] = useState(0)
@@ -330,10 +333,20 @@ function App() {
     []
   )
   const [membraneClientEndpointId, setMembraneClientEndpointId] = useState<string | null>(null)
+  const [attachmentPlaybackUrls, setAttachmentPlaybackUrls] = useState<Record<string, string>>({})
 
   const deferredActiveChatId = useDeferredValue(activeChatId)
   const activeChatIdRef = useRef<string | null>(deferredActiveChatId)
   const messageItemsRef = useRef<CachedMessage[]>([])
+  const voiceNoteRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceNoteStreamRef = useRef<MediaStream | null>(null)
+  const voiceNoteChunksRef = useRef<Blob[]>([])
+  const roundVideoRecorderRef = useRef<MediaRecorder | null>(null)
+  const roundVideoStreamRef = useRef<MediaStream | null>(null)
+  const roundVideoChunksRef = useRef<Blob[]>([])
+  const linkMetadataInFlightRef = useRef(new Set<string>())
+  const attachmentPlaybackUrlsRef = useRef<Record<string, string>>({})
+  const attachmentPlaybackInFlightRef = useRef<Map<string, Promise<string>>>(new Map())
   const callSignalsRef = useRef<CallSignal[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const chatButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -341,11 +354,9 @@ function App() {
   const directChatInputRef = useRef<HTMLInputElement | null>(null)
   const groupTitleInputRef = useRef<HTMLInputElement | null>(null)
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null)
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const membraneClientRef = useRef<MembraneClient | null>(null)
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
-  const webRtcCallIdRef = useRef<string | null>(null)
   const localMediaStreamRef = useRef<MediaStream | null>(null)
 
   function resetMembraneClient() {
@@ -369,65 +380,18 @@ function App() {
   }
 
   function resetWebRtcLab() {
-    detachLocalMediaTracks(peerConnectionRef.current, localMediaStreamRef.current)
-    closeWebRtcLab(peerConnectionRef.current)
     resetMembraneClient()
+
+    if (localMediaStreamRef.current) {
+      for (const track of localMediaStreamRef.current.getTracks()) {
+        track.stop()
+      }
+    }
+
     localMediaStreamRef.current = null
-    peerConnectionRef.current = null
-    webRtcCallIdRef.current = null
-    setWebRtcReady(false)
-    setWebRtcConnectionState('new')
-    setWebRtcSignalingState('stable')
-    setWebRtcLocalDescription(null)
-    setWebRtcRemoteDescription(null)
-    setWebRtcIceOutboundCount(0)
-    setWebRtcIceInboundCount(0)
     setLocalMediaMode('none')
     setLocalAudioTrackCount(0)
     setLocalVideoTrackCount(0)
-    setRemoteAudioTrackCount(0)
-    setRemoteVideoTrackCount(0)
-  }
-
-  function ensureWebRtcLab(): RTCPeerConnection {
-    const activeCallId = activeCall?.id ?? null
-
-    if (!activeCallId) {
-      throw new Error('No active call is available for browser WebRTC bootstrap.')
-    }
-
-    if (peerConnectionRef.current && webRtcCallIdRef.current === activeCallId) {
-      return peerConnectionRef.current
-    }
-
-    if (peerConnectionRef.current) {
-      resetWebRtcLab()
-    }
-
-    const peer = createWebRtcLab(turnCredentials, {
-      onIceCandidate(payload) {
-        setWebRtcIceOutboundCount((current) => current + 1)
-        void emitCallSignalPayload('ice', payload)
-      },
-      onConnectionStateChange(connectionState) {
-        setWebRtcConnectionState(connectionState)
-      },
-      onSignalingStateChange(signalingState) {
-        setWebRtcSignalingState(signalingState)
-      },
-      onRemoteTrackCountsChange(payload) {
-        setRemoteAudioTrackCount(payload.audio)
-        setRemoteVideoTrackCount(payload.video)
-      }
-    })
-
-    peerConnectionRef.current = peer
-    webRtcCallIdRef.current = activeCallId
-    setWebRtcReady(true)
-    setWebRtcConnectionState(peer.connectionState)
-    setWebRtcSignalingState(peer.signalingState)
-
-    return peer
   }
 
   function ensureMembraneClient(): MembraneClient {
@@ -453,9 +417,7 @@ function App() {
           .then((response) => {
             setCallWebRtcEndpoint(response.endpoint)
           })
-          .catch(() => {
-            // The Phoenix call-signal channel remains the explicit fallback path.
-          })
+          .catch(() => undefined)
       },
       onConnected(payload) {
         setMembraneClientConnected(true)
@@ -522,9 +484,22 @@ function App() {
     const recipientDevices =
       knownRecipientDevices ??
       (await listRecipientDevices(storedDevice.sessionToken, chatId)).recipient_devices
-    const initiatorEphemeralKeys = await prepareSessionBootstrap(
-      recipientDevices.map((device) => device.device_id)
-    )
+    const bootstrapTargetDeviceIds = recipientDevices
+      .filter((device) => {
+        const existingSession = chatSessions.find(
+          (session) =>
+            session.initiator_device_id === storedDevice.deviceId &&
+            session.recipient_device_id === device.device_id &&
+            session.session_state !== 'superseded'
+        )
+
+        return !existingSession || existingSession.establishment_state !== 'established'
+      })
+      .map((device) => device.device_id)
+    const initiatorEphemeralKeys =
+      bootstrapTargetDeviceIds.length > 0
+        ? await prepareSessionBootstrap(bootstrapTargetDeviceIds)
+        : {}
     const response = await bootstrapChatSessions(storedDevice.sessionToken, chatId, {
       initiator_ephemeral_keys: initiatorEphemeralKeys
     })
@@ -533,6 +508,24 @@ function App() {
       response.sessions
     )
     const activeSessions = response.sessions.filter((session) => synchronizedIds.includes(session.id))
+    const consumedOneTimePrekeys = pruneConsumedOneTimePrekeys(
+      storedDevice.deviceId,
+      response.sessions,
+      storedDevice.oneTimePrekeys ?? []
+    )
+
+    if (consumedOneTimePrekeys.consumedPublicKeys.length > 0) {
+      const nextStoredDevice: StoredDevice = {
+        ...storedDevice,
+        oneTimePrekeys: consumedOneTimePrekeys.nextOneTimePrekeys
+      }
+
+      persistStoredDevice(nextStoredDevice)
+
+      if (activeChatIdRef.current === chatId) {
+        setStoredDevice(nextStoredDevice)
+      }
+    }
 
     if (activeChatIdRef.current === chatId) {
       setChatSessions(activeSessions)
@@ -540,7 +533,79 @@ function App() {
 
     return activeSessions
   }
-  const syncMessagesFromServer = useEffectEvent(async (chatId: string) => {
+
+  async function handleRekeyActiveChatSessions() {
+    if (!storedDevice || !activeChatId) {
+      setBanner({ tone: 'error', message: 'Select a chat before rekeying direct-chat sessions.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const recipientDevices = (await listRecipientDevices(storedDevice.sessionToken, activeChatId))
+        .recipient_devices
+      const initiatorEphemeralKeys = await prepareSessionBootstrap(
+        recipientDevices.map((device) => device.device_id)
+      )
+      const response = await rekeyChatSessions(storedDevice.sessionToken, activeChatId, {
+        initiator_ephemeral_keys: initiatorEphemeralKeys
+      })
+      const synchronizedIds = await synchronizeChatSessions(
+        toLocalSessionDeviceMaterial(storedDevice),
+        response.sessions
+      )
+      const updatedSessions = response.sessions.filter((session) => synchronizedIds.includes(session.id))
+      const consumedOneTimePrekeys = pruneConsumedOneTimePrekeys(
+        storedDevice.deviceId,
+        response.sessions,
+        storedDevice.oneTimePrekeys ?? []
+      )
+      const mergedSessions = [
+        ...chatSessions.filter(
+          (existing) =>
+            !updatedSessions.some(
+              (next) =>
+                next.chat_id === existing.chat_id &&
+                next.initiator_device_id === existing.initiator_device_id &&
+                next.recipient_device_id === existing.recipient_device_id
+            )
+        ),
+        ...updatedSessions
+      ]
+
+      if (consumedOneTimePrekeys.consumedPublicKeys.length > 0) {
+        const nextStoredDevice: StoredDevice = {
+          ...storedDevice,
+          oneTimePrekeys: consumedOneTimePrekeys.nextOneTimePrekeys
+        }
+
+        persistStoredDevice(nextStoredDevice)
+
+        if (activeChatIdRef.current === activeChatId) {
+          setStoredDevice(nextStoredDevice)
+        }
+      }
+
+      if (activeChatIdRef.current === activeChatId) {
+        setChatSessions(mergedSessions)
+      }
+
+      setBanner({
+        tone: 'success',
+        message: `Rekeyed ${updatedSessions.length} direct-chat session ${
+          updatedSessions.length === 1 ? 'record' : 'records'
+        }.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rekey chat sessions.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function syncMessagesFromServerNow(chatId: string) {
     if (!storedDevice || activeChatIdRef.current !== chatId) {
       return
     }
@@ -563,12 +628,11 @@ function App() {
     }
 
     replaceActiveMessages(chatId, projected, true)
+  }
+  const syncMessagesFromServer = useEffectEvent(async (chatId: string) => {
+    await syncMessagesFromServerNow(chatId)
   })
-  const handleRealtimeMessage = useEffectEvent((messageId: string, chatId: string) => {
-    if (messageItemsRef.current.some((message) => message.id === messageId)) {
-      return
-    }
-
+  const handleRealtimeMessage = useEffectEvent((_messageId: string, chatId: string) => {
     void syncMessagesFromServer(chatId)
   })
   const handleRealtimeSubscriptionError = useEffectEvent(() => {
@@ -610,7 +674,6 @@ function App() {
       const nextSignals = mergeCallSignals(callSignalsRef.current, payload.signal)
       callSignalsRef.current = nextSignals
       setCallSignals(nextSignals)
-      void processCallSignalForWebRtc(payload.signal)
     }
   )
   const handleRealtimeCallSubscriptionError = useEffectEvent(() => {
@@ -620,45 +683,6 @@ function App() {
     })
   })
 
-  async function processCallSignalForWebRtc(signal: CallSignal) {
-    if (!storedDevice || !activeCall || signal.call_id !== activeCall.id) {
-      return
-    }
-
-    if (signal.from_device_id === storedDevice.deviceId) {
-      return
-    }
-
-    if (membraneClientConnected) {
-      return
-    }
-
-    try {
-      const peer = ensureWebRtcLab()
-
-      if (signal.signal_type === 'offer') {
-        const answerPayload = await applyRemoteOfferAndCreateAnswer(peer, signal.payload)
-        setWebRtcRemoteDescription(readRemoteDescriptionPayload(peer))
-        setWebRtcLocalDescription(readDescriptionPayload(peer))
-        await emitCallSignalPayload('answer', answerPayload)
-        return
-      }
-
-      if (signal.signal_type === 'answer') {
-        await applyRemoteAnswer(peer, signal.payload)
-        setWebRtcRemoteDescription(readRemoteDescriptionPayload(peer))
-        return
-      }
-
-      if (signal.signal_type === 'ice') {
-        await applyRemoteIceCandidate(peer, signal.payload)
-        setWebRtcIceInboundCount((current) => current + 1)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to process inbound call signal.'
-      setBanner({ tone: 'error', message })
-    }
-  }
   const handleMembraneQueueBatch = useEffectEvent((events: string[]) => {
     if (events.length === 0) {
       return
@@ -673,38 +697,10 @@ function App() {
         try {
           receiveMembraneMediaEvent(membraneClientRef.current, eventPayload)
         } catch {
-          // The fallback bridge path stays available even if a native event is malformed.
+          // Ignore malformed native events and keep the queue processing alive.
         }
       }
     }
-
-    const bridgeSignals = events
-      .map((eventPayload) => parseMembraneBridgeSignal(eventPayload))
-      .filter((signal): signal is CallSignal => signal !== null)
-
-    if (bridgeSignals.length === 0) {
-      return
-    }
-
-    let nextSignals = callSignalsRef.current
-
-    for (const signal of bridgeSignals) {
-      const seen = nextSignals.some((candidate) => candidate.id === signal.id)
-      nextSignals = mergeCallSignals(nextSignals, signal)
-
-      if (
-        !seen &&
-        storedDevice &&
-        activeCall &&
-        signal.call_id === activeCall.id &&
-        signal.from_device_id !== storedDevice.deviceId
-      ) {
-        void processCallSignalForWebRtc(signal)
-      }
-    }
-
-    callSignalsRef.current = nextSignals
-    setCallSignals(nextSignals)
   })
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
@@ -838,6 +834,7 @@ function App() {
     setStoredDevice(null)
     setChatSessions([])
     setRemotePrekeyBundles([])
+    setSafetyNumbers([])
     setAdminOverview(null)
     setFederationPeers([])
     setTurnCredentials(null)
@@ -872,24 +869,42 @@ function App() {
   }, [callSignals])
 
   useEffect(() => {
-    if (!storedDevice) {
-      setCallSignalTargetDeviceId(CALL_SIGNAL_BROADCAST)
-      return
-    }
+    attachmentPlaybackUrlsRef.current = attachmentPlaybackUrls
+  }, [attachmentPlaybackUrls])
 
-    const selectedIsValid =
-      callSignalTargetDeviceId === CALL_SIGNAL_BROADCAST ||
-      callParticipants.some(
-        (participant) =>
-          participant.status === 'joined' &&
-          participant.device_id !== storedDevice.deviceId &&
-          participant.device_id === callSignalTargetDeviceId
-      )
+  useEffect(
+    () => () => {
+      voiceNoteRecorderRef.current = null
+      voiceNoteChunksRef.current = []
 
-    if (!selectedIsValid) {
-      setCallSignalTargetDeviceId(CALL_SIGNAL_BROADCAST)
-    }
-  }, [callParticipants, callSignalTargetDeviceId, storedDevice])
+      if (voiceNoteStreamRef.current) {
+        for (const track of voiceNoteStreamRef.current.getTracks()) {
+          track.stop()
+        }
+      }
+
+      voiceNoteStreamRef.current = null
+
+      roundVideoRecorderRef.current = null
+      roundVideoChunksRef.current = []
+
+      if (roundVideoStreamRef.current) {
+        for (const track of roundVideoStreamRef.current.getTracks()) {
+          track.stop()
+        }
+      }
+
+      roundVideoStreamRef.current = null
+
+      for (const playbackUrl of Object.values(attachmentPlaybackUrlsRef.current)) {
+        URL.revokeObjectURL(playbackUrl)
+      }
+
+      attachmentPlaybackUrlsRef.current = {}
+      attachmentPlaybackInFlightRef.current.clear()
+    },
+    []
+  )
 
   useEffect(() => {
     if (view !== 'chat' || !storedDevice) {
@@ -941,12 +956,14 @@ function App() {
   useEffect(() => {
     if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
       setChatSessions([])
+      setEditingMessageId(null)
       setReplyTargetMessageId(null)
       return
     }
 
     const chatId = deferredActiveChatId
     let cancelled = false
+    setEditingMessageId(null)
     setReplyTargetMessageId(null)
 
     async function loadMessages() {
@@ -980,6 +997,58 @@ function App() {
       cancelled = true
     }
   }, [deferredActiveChatId, storedDevice, view])
+
+  useEffect(() => {
+    linkMetadataInFlightRef.current.clear()
+    setLinkMetadataByUrl({})
+
+    for (const playbackUrl of Object.values(attachmentPlaybackUrlsRef.current)) {
+      URL.revokeObjectURL(playbackUrl)
+    }
+
+    attachmentPlaybackInFlightRef.current.clear()
+    attachmentPlaybackUrlsRef.current = {}
+    setAttachmentPlaybackUrls({})
+  }, [deferredActiveChatId])
+
+  useEffect(() => {
+    if (!storedDevice || view !== 'chat') {
+      return
+    }
+
+    const uniqueUrls = Array.from(
+      new Set(
+        messageItems
+          .map((message) => extractFirstHttpUrl(message.text))
+          .filter((url): url is string => Boolean(url))
+      )
+    )
+
+    if (uniqueUrls.length === 0) {
+      return
+    }
+
+    const sessionToken = storedDevice.sessionToken
+
+    for (const url of uniqueUrls) {
+      if (linkMetadataByUrl[url] || linkMetadataInFlightRef.current.has(url)) {
+        continue
+      }
+
+      linkMetadataInFlightRef.current.add(url)
+
+      void fetchMediaLinkMetadata(sessionToken, url)
+        .then((response) => {
+          setLinkMetadataByUrl((current) =>
+            current[url] ? current : { ...current, [url]: response.metadata }
+          )
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          linkMetadataInFlightRef.current.delete(url)
+        })
+    }
+  }, [linkMetadataByUrl, messageItems, storedDevice, view])
 
   useEffect(() => {
     if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
@@ -1038,9 +1107,45 @@ function App() {
   }, [chatItems, deferredActiveChatId, storedDevice, view])
 
   useEffect(() => {
+    if (!storedDevice || remotePrekeyBundles.length === 0) {
+      setSafetyNumbers([])
+      return
+    }
+
+    const localIdentityPublicKeyBase64 = storedDevice.publicKeyBase64
+    let cancelled = false
+
+    async function loadSafetyNumbers() {
+      const nextEntries = (
+        await Promise.all(
+          remotePrekeyBundles.map(async (bundle) => ({
+            deviceId: bundle.device_id,
+            label: `${bundle.device_name} • ${bundle.user_id.slice(0, 8)}`,
+            fingerprint: await deriveSafetyNumber(
+              localIdentityPublicKeyBase64,
+              bundle.identity_public_key
+            )
+          }))
+        )
+      ).filter((entry) => entry.fingerprint !== '')
+
+      if (!cancelled) {
+        setSafetyNumbers(nextEntries)
+      }
+    }
+
+    void loadSafetyNumbers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [remotePrekeyBundles, storedDevice])
+
+  useEffect(() => {
     if (!storedDevice || view !== 'chat') {
       setAdminOverview(null)
       setFederationPeers([])
+      setFederationDeliveries([])
       setTurnCredentials(null)
       return
     }
@@ -1050,9 +1155,10 @@ function App() {
 
     async function loadOpsSurface() {
       try {
-        const [overviewResponse, peersResponse, turnResponse] = await Promise.all([
+        const [overviewResponse, peersResponse, deliveriesResponse, turnResponse] = await Promise.all([
           fetchAdminOverview(sessionToken),
           listFederationPeers(sessionToken),
+          listFederationDeliveries(sessionToken),
           fetchTurnCredentials(sessionToken, { ttl_seconds: 600 })
         ])
 
@@ -1062,11 +1168,13 @@ function App() {
 
         setAdminOverview(overviewResponse.overview)
         setFederationPeers(peersResponse.peers)
+        setFederationDeliveries(deliveriesResponse.deliveries)
         setTurnCredentials(turnResponse.turn)
       } catch {
         if (!cancelled) {
           setAdminOverview(null)
           setFederationPeers([])
+          setFederationDeliveries([])
           setTurnCredentials(null)
         }
       }
@@ -1196,7 +1304,7 @@ function App() {
           handleMembraneQueueBatch(response.media_events)
         }
       } catch {
-        // The Phoenix call-signal channel remains the primary transport today.
+        // Ignore transient poll errors and continue interval polling.
       } finally {
         inFlight = false
       }
@@ -1254,7 +1362,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeCall, localMediaRevision, membraneClientConnected, storedDevice, view])
+  }, [activeCall, localAudioTrackCount, localVideoTrackCount, membraneClientConnected, storedDevice, view])
 
   useEffect(() => {
     if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
@@ -1625,6 +1733,126 @@ function App() {
     }
   }
 
+  async function handleRenameActiveGroupChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!storedDevice || !activeChat || activeChat.type !== 'group' || groupRenameTitle.trim() === '') {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await renameGroupChat(storedDevice.sessionToken, activeChat.id, {
+        title: groupRenameTitle.trim()
+      })
+
+      setChatItems((current) => mergeChat(current, response.chat))
+      setGroupRenameTitle(response.chat.title)
+      setBanner({ tone: 'success', message: `Group updated: ${response.chat.title}` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rename the group.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleUpdateActiveGroupMemberRole(member: GroupMember, role: 'admin' | 'member') {
+    if (!storedDevice || !activeChat || activeChat.type !== 'group' || member.role === role) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await updateGroupMemberRole(storedDevice.sessionToken, activeChat.id, member.user_id, role)
+      setGroupMembers((current) =>
+        current.map((entry) => (entry.user_id === response.member.user_id ? response.member : entry))
+      )
+      setBanner({
+        tone: 'success',
+        message: `${response.member.username} is now ${response.member.role}.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update the group member.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRemoveActiveGroupMember(member: GroupMember) {
+    if (!storedDevice || !activeChat || activeChat.type !== 'group') {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await removeGroupMember(storedDevice.sessionToken, activeChat.id, member.user_id)
+      setGroupMembers((current) => current.filter((entry) => entry.user_id !== response.member.user_id))
+      setChatItems((current) =>
+        current.map((chat) =>
+          chat.id === activeChat.id
+            ? {
+                ...chat,
+                participant_usernames: chat.participant_usernames.filter(
+                  (username) => username !== response.member.username
+                )
+              }
+            : chat
+        )
+      )
+      setBanner({ tone: 'success', message: `${response.member.username} was removed from the group.` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove the group member.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRotateGroupSenderKey() {
+    if (!storedDevice || !activeChat || activeChat.type !== 'group') {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const recipientDevices = (
+        await listRecipientDevices(storedDevice.sessionToken, activeChat.id)
+      ).recipient_devices.filter((device) => device.device_id !== storedDevice.deviceId)
+
+      if (recipientDevices.length === 0) {
+        throw new Error('No recipient devices are currently available for sender key distribution.')
+      }
+
+      const senderKeyMaterial = window.crypto.getRandomValues(new Uint8Array(32))
+      const keyId = `sender-${Date.now()}-${window.crypto.randomUUID()}`
+      const wrappedKeys = Object.fromEntries(
+        recipientDevices.map((device) => [device.device_id, bytesToBase64(senderKeyMaterial)])
+      )
+      const response = await distributeGroupSenderKeys(storedDevice.sessionToken, activeChat.id, {
+        key_id: keyId,
+        algorithm: 'x25519+sealedbox',
+        wrapped_keys: wrappedKeys
+      })
+
+      setGroupSenderKeys(response.sender_keys)
+      setBanner({
+        tone: 'success',
+        message: `Distributed Sender Key ${keyId} to ${response.sender_keys.length} recipient device${response.sender_keys.length === 1 ? '' : 's'}.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rotate the group Sender Key.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleCreateFederationPeer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -1649,6 +1877,59 @@ function App() {
       setAdminOverview(overviewResponse.overview)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create federation peer.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleQueueFederationDelivery(peerId: string) {
+    if (!storedDevice) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await createFederationDelivery(storedDevice.sessionToken, peerId, {
+        event_type: 'message_relay',
+        payload: { source: 'operator_ui' }
+      })
+
+      setFederationDeliveries((current) => [response.delivery, ...current.filter((job) => job.id !== response.delivery.id)])
+
+      const overviewResponse = await fetchAdminOverview(storedDevice.sessionToken)
+      setAdminOverview(overviewResponse.overview)
+      setBanner({ tone: 'success', message: 'Federation delivery queued.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to queue the federation delivery.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleAttemptFederationDelivery(jobId: string) {
+    if (!storedDevice) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await attemptFederationDelivery(storedDevice.sessionToken, jobId, {
+        outcome: 'delivered'
+      })
+
+      setFederationDeliveries((current) =>
+        current.map((job) => (job.id === response.delivery.id ? response.delivery : job))
+      )
+
+      const overviewResponse = await fetchAdminOverview(storedDevice.sessionToken)
+      setAdminOverview(overviewResponse.overview)
+      setBanner({ tone: 'success', message: `Delivery ${response.delivery.status}.` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to advance the delivery job.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -1853,30 +2134,6 @@ function App() {
         [...response.media_events.reverse(), ...current].slice(0, 8)
       )
 
-      const bridgeSignals = response.media_events
-        .map((eventPayload) => parseMembraneBridgeSignal(eventPayload))
-        .filter((signal): signal is CallSignal => signal !== null)
-
-      if (bridgeSignals.length > 0) {
-        let nextSignals = callSignalsRef.current
-
-        for (const signal of bridgeSignals) {
-          const seen = nextSignals.some((candidate) => candidate.id === signal.id)
-          nextSignals = mergeCallSignals(nextSignals, signal)
-
-          if (
-            !seen &&
-            signal.call_id === activeCall.id &&
-            signal.from_device_id !== storedDevice.deviceId
-          ) {
-            void processCallSignalForWebRtc(signal)
-          }
-        }
-
-        callSignalsRef.current = nextSignals
-        setCallSignals(nextSignals)
-      }
-
       const nativeEventCount = response.media_events.reduce((count, eventPayload) => {
         return readMembraneNativeEventType(eventPayload) === null ? count : count + 1
       }, 0)
@@ -1931,30 +2188,6 @@ function App() {
     }
   }
 
-  async function emitCallSignalPayload(
-    signalType: CallSignal['signal_type'],
-    payload: string
-  ): Promise<CallSignal | null> {
-    if (!storedDevice || !activeCall) {
-      return null
-    }
-
-    const sessionToken = storedDevice.sessionToken
-    const targetDeviceId =
-      callSignalTargetDeviceId === CALL_SIGNAL_BROADCAST ? undefined : callSignalTargetDeviceId
-
-    const response = await sendCallSignal(sessionToken, activeCall.id, {
-      signal_type: signalType,
-      payload,
-      target_device_id: targetDeviceId
-    })
-
-    const nextSignals = mergeCallSignals(callSignalsRef.current, response.signal)
-    callSignalsRef.current = nextSignals
-    setCallSignals(nextSignals)
-    return response.signal
-  }
-
   async function handleInitializeWebRtc() {
     if (!activeCall || !storedDevice) {
       return
@@ -1963,9 +2196,6 @@ function App() {
     setLoading(true)
 
     try {
-      const peer = ensureWebRtcLab()
-      setWebRtcLocalDescription(readDescriptionPayload(peer))
-      setWebRtcRemoteDescription(readRemoteDescriptionPayload(peer))
       const sessionToken = storedDevice.sessionToken
       const endpointResponse = await provisionCallWebRtcEndpoint(sessionToken, activeCall.id)
       const client = ensureMembraneClient()
@@ -1983,10 +2213,10 @@ function App() {
       setBanner({
         tone: 'success',
         message:
-          'Browser WebRTC lab initialized, the Membrane client is ready, and a native connect event was sent.'
+          'Native Membrane WebRTC client initialized and connected to the provisioned endpoint.'
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to initialize WebRTC.'
+      const message = error instanceof Error ? error.message : 'Failed to initialize native WebRTC.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -2200,36 +2430,6 @@ function App() {
     }
   }
 
-  async function handleCreateWebRtcOffer() {
-    if (!activeCall) {
-      return
-    }
-
-    if (membraneClientConnected) {
-      setBanner({
-        tone: 'info',
-        message:
-          'The native Membrane client now drives negotiation. Create Offer is only needed when you are debugging the fallback browser-only path.'
-      })
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const peer = ensureWebRtcLab()
-      const offerPayload = await createOfferPayload(peer)
-      setWebRtcLocalDescription(readDescriptionPayload(peer))
-      await emitCallSignalPayload('offer', offerPayload)
-      setBanner({ tone: 'success', message: 'Offer created from a real RTCPeerConnection and sent.' })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create an SDP offer.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function handleAttachLocalMedia(mode: 'audio' | 'audio_video') {
     if (!activeCall) {
       return
@@ -2238,9 +2438,7 @@ function App() {
     setLoading(true)
 
     try {
-      const peer = ensureWebRtcLab()
-      const result = await attachLocalMediaTracks(
-        peer,
+      const stream = await window.navigator.mediaDevices.getUserMedia(
         mode === 'audio'
           ? { audio: true, video: false }
           : {
@@ -2249,29 +2447,38 @@ function App() {
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
               }
-            },
-        localMediaStreamRef.current
+            }
       )
 
-      localMediaStreamRef.current = result.stream
-      if (membraneClientRef.current && membraneClientConnected) {
-        await removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
-        membraneLocalTrackIdsRef.current = []
+      if (localMediaStreamRef.current) {
+        for (const track of localMediaStreamRef.current.getTracks()) {
+          track.stop()
+        }
       }
+
+      localMediaStreamRef.current = stream
+
+      if (membraneClientRef.current && membraneClientConnected) {
+        await removeLocalTracksFromMembrane(
+          membraneClientRef.current,
+          membraneLocalTrackIdsRef.current
+        )
+        membraneLocalTrackIdsRef.current = []
+        membraneLocalTrackIdsRef.current = await attachLocalTracksToMembrane(
+          membraneClientRef.current,
+          stream
+        )
+      }
+
       setLocalMediaMode(mode)
-      setLocalMediaRevision((current) => current + 1)
-      setLocalAudioTrackCount(result.audioTrackCount)
-      setLocalVideoTrackCount(result.videoTrackCount)
+      setLocalAudioTrackCount(stream.getAudioTracks().length)
+      setLocalVideoTrackCount(stream.getVideoTracks().length)
       setBanner({
         tone: 'success',
         message:
           mode === 'audio'
-            ? membraneClientRef.current
-              ? 'Microphone attached to both the browser lab and the Membrane client. Create a fresh offer if you are still using the fallback lab path.'
-              : 'Microphone attached to the browser WebRTC lab. Create a fresh offer to renegotiate.'
-            : membraneClientRef.current
-              ? 'Camera and microphone attached to both the browser lab and the Membrane client. Create a fresh offer if you are still using the fallback lab path.'
-              : 'Camera and microphone attached to the browser WebRTC lab. Create a fresh offer to renegotiate.'
+            ? 'Microphone attached to the native Membrane pipeline.'
+            : 'Camera and microphone attached to the native Membrane pipeline.'
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to attach local media.'
@@ -2284,62 +2491,21 @@ function App() {
   async function handleReleaseLocalMedia() {
     await removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
     membraneLocalTrackIdsRef.current = []
-    detachLocalMediaTracks(peerConnectionRef.current, localMediaStreamRef.current)
+
+    if (localMediaStreamRef.current) {
+      for (const track of localMediaStreamRef.current.getTracks()) {
+        track.stop()
+      }
+    }
+
     localMediaStreamRef.current = null
     setLocalMediaMode('none')
-    setLocalMediaRevision((current) => current + 1)
     setLocalAudioTrackCount(0)
     setLocalVideoTrackCount(0)
     setBanner({
       tone: 'success',
-      message: 'Local microphone/camera tracks were removed from the browser WebRTC lab and the Membrane client.'
+      message: 'Local microphone/camera tracks were removed from the native Membrane pipeline.'
     })
-  }
-
-  async function handleSendCallSignal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!storedDevice || !activeCall || callSignalPayload.trim() === '') {
-      return
-    }
-
-    if (membraneClientConnected) {
-      setBanner({
-        tone: 'info',
-        message:
-          'Manual offer/answer/ICE signaling is disabled while the native Membrane client is active.'
-      })
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      await emitCallSignalPayload(callSignalType, callSignalPayload.trim())
-
-      if (callSignalType === 'offer') {
-        setCallSignalType('answer')
-        setCallSignalPayload('{"type":"answer","sdp":"stub-answer"}')
-      } else if (callSignalType === 'answer') {
-        setCallSignalType('ice')
-        setCallSignalPayload('{"candidate":"candidate:stub","sdpMid":"0","sdpMLineIndex":0}')
-      } else {
-        setCallSignalPayload('')
-      }
-
-      setBanner({
-        tone: 'success',
-        message:
-          callSignalTargetDeviceId === CALL_SIGNAL_BROADCAST
-            ? `${callSignalType} signal sent to joined peer endpoints.`
-            : `${callSignalType} signal sent to ${callSignalTargetDeviceId}.`
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to send the call signal.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
-    }
   }
 
   async function buildEncryptedMessagePayload(
@@ -2357,32 +2523,22 @@ function App() {
     const recipientDevices = recipientDeviceResponse.recipient_devices
     const sessions = await syncChatSessionsFromServer(chatId, recipientDevices)
     const canUseSessionEncryption = canUseChatSessions(storedDevice, sessions, recipientDevices)
-    const canUseRecipientWrapping = shouldUseRecipientWrapping(storedDevice, recipientDevices)
-    const payload = canUseRecipientWrapping
-      ? canUseSessionEncryption
-        ? {
-            client_id: clientId,
-            message_kind: messageKind,
-            ...(await encryptMessageWithSessions(plainText, storedDevice.deviceId, sessions))
-          }
-        : {
-            client_id: clientId,
-            message_kind: messageKind,
-            ...(await encryptMessageEnvelope(plainText, recipientDevices))
-          }
-      : {
-          client_id: clientId,
-          ciphertext: await encryptLegacyMessageText(plainText),
-          message_kind: messageKind
-        }
+
+    if (!canUseSessionEncryption) {
+      throw new Error(
+        'Session transport is required for this chat. Rotate prekeys or rekey active sessions and try again.'
+      )
+    }
+
+    const payload = {
+      client_id: clientId,
+      message_kind: messageKind,
+      ...(await encryptMessageWithSessions(plainText, storedDevice.deviceId, sessions))
+    }
 
     return {
       payload: replyToMessageId ? { ...payload, reply_to_message_id: replyToMessageId } : payload,
-      deliveryMode: canUseSessionEncryption
-        ? 'session'
-        : canUseRecipientWrapping
-          ? 'recipient'
-          : 'legacy'
+      deliveryMode: 'session'
     } as const
   }
 
@@ -2394,9 +2550,47 @@ function App() {
     setLoading(true)
 
     const plainText = draft.trim()
+    const activeReplyToMessageId = replyTargetMessageId
+    const activeEditingMessageId = editingMessageId
+
+    if (activeEditingMessageId && editingTargetMessage) {
+      setDraft('')
+      setEditingMessageId(null)
+      setReplyTargetMessageId(null)
+
+      try {
+        const { payload } = await buildEncryptedMessagePayload(
+          plainText,
+          activeChatId,
+          editingTargetMessage.clientId ?? `edit-${activeEditingMessageId}`,
+          editingTargetMessage.attachment ? 'attachment' : 'text',
+          activeReplyToMessageId
+        )
+
+        const response = await updateMessage(
+          storedDevice.sessionToken,
+          activeChatId,
+          activeEditingMessageId,
+          payload
+        )
+
+        await ingestMessageIntoActiveThread(response.message, activeChatId)
+        setBanner({ tone: 'success', message: 'Message edited.' })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to edit message.'
+        setBanner({ tone: 'error', message })
+        setDraft(plainText)
+        setEditingMessageId(activeEditingMessageId)
+        setReplyTargetMessageId(activeReplyToMessageId)
+      } finally {
+        setLoading(false)
+      }
+
+      return
+    }
+
     const clientId = window.crypto.randomUUID()
     const optimisticId = `optimistic-${clientId}`
-    const activeReplyToMessageId = replyTargetMessageId
     const optimisticMessage: CachedMessage = {
       id: optimisticId,
       clientId,
@@ -2412,7 +2606,7 @@ function App() {
     setReplyTargetMessageId(null)
 
     try {
-      const { payload, deliveryMode } = await buildEncryptedMessagePayload(
+      const { payload } = await buildEncryptedMessagePayload(
         plainText,
         activeChatId,
         clientId,
@@ -2425,11 +2619,7 @@ function App() {
       await ingestMessageIntoActiveThread(response.message, activeChatId)
       setBanner({
         tone: 'success',
-        message: deliveryMode === 'session'
-          ? 'Session-bootstrapped encrypted envelope delivered to the server.'
-          : deliveryMode === 'recipient'
-            ? 'Recipient-wrapped encrypted envelope delivered to the server.'
-            : 'Legacy local encrypted envelope delivered to the server.'
+        message: 'Session-bootstrapped encrypted envelope delivered to the server.'
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send message.'
@@ -2451,11 +2641,102 @@ function App() {
     await sendDraftMessage()
   }
 
-  async function handleAttachmentPick(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
+  function cleanupVoiceNoteCapture() {
+    voiceNoteRecorderRef.current = null
+    voiceNoteChunksRef.current = []
 
-    if (!file || !storedDevice || !activeChatId) {
+    if (voiceNoteStreamRef.current) {
+      for (const track of voiceNoteStreamRef.current.getTracks()) {
+        track.stop()
+      }
+    }
+
+    voiceNoteStreamRef.current = null
+    setVoiceNoteRecording(false)
+  }
+
+  function cleanupRoundVideoCapture() {
+    roundVideoRecorderRef.current = null
+    roundVideoChunksRef.current = []
+
+    if (roundVideoStreamRef.current) {
+      for (const track of roundVideoStreamRef.current.getTracks()) {
+        track.stop()
+      }
+    }
+
+    roundVideoStreamRef.current = null
+    setRoundVideoRecording(false)
+  }
+
+  async function uploadEncryptedAttachmentMultipart(
+    sessionToken: string,
+    fileName: string,
+    mediaKind: 'file' | 'image' | 'audio' | 'video',
+    encryptedAttachment: {
+      contentType: string
+      size: number
+      ciphertextBase64: string
+    }
+  ): Promise<string> {
+    const ciphertextBytes = base64ToBytes(encryptedAttachment.ciphertextBase64)
+    const chunkByteSize = 192 * 1024
+    const partCount = Math.max(1, Math.ceil(ciphertextBytes.byteLength / chunkByteSize))
+    const createUploadResponse = await createMediaUpload(sessionToken, {
+      filename: fileName,
+      content_type: encryptedAttachment.contentType,
+      declared_byte_size: encryptedAttachment.size,
+      media_kind: mediaKind,
+      expected_part_count: partCount
+    })
+    const uploadId = createUploadResponse.upload.id
+    let uploadedPartIndexes = new Set<number>(createUploadResponse.upload.uploaded_part_indexes ?? [])
+
+    const uploadPartByIndex = async (partIndex: number) => {
+      const start = partIndex * chunkByteSize
+      const end = Math.min(start + chunkByteSize, ciphertextBytes.byteLength)
+      const chunk = ciphertextBytes.subarray(start, end)
+      const response = await appendMediaUploadPart(sessionToken, uploadId, {
+        chunk: bytesToBase64(chunk),
+        part_index: partIndex,
+        part_count: partCount
+      })
+      uploadedPartIndexes = new Set(response.upload.uploaded_part_indexes ?? [])
+    }
+
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (let partIndex = 0; partIndex < partCount; partIndex += 1) {
+        if (uploadedPartIndexes.has(partIndex)) {
+          continue
+        }
+
+        try {
+          await uploadPartByIndex(partIndex)
+        } catch (error) {
+          if (pass >= 2) {
+            throw error
+          }
+
+          const snapshot = await fetchMediaUpload(sessionToken, uploadId)
+          uploadedPartIndexes = new Set(snapshot.upload.uploaded_part_indexes ?? [])
+        }
+      }
+
+      if (uploadedPartIndexes.size >= partCount) {
+        break
+      }
+    }
+
+    if (uploadedPartIndexes.size < partCount) {
+      throw new Error('Attachment upload is missing one or more encrypted chunks.')
+    }
+
+    await completeMediaUpload(sessionToken, uploadId)
+    return uploadId
+  }
+
+  async function sendAttachmentFile(file: File) {
+    if (!storedDevice || !activeChatId) {
       return
     }
 
@@ -2466,6 +2747,7 @@ function App() {
     const optimisticId = `optimistic-${clientId}`
     const activeReplyToMessageId = replyTargetMessageId
     let thumbnailDataUrl: string | null = null
+    let waveform: number[] | null = null
 
     try {
       thumbnailDataUrl = await generateAttachmentThumbnailDataUrl(file)
@@ -2473,12 +2755,19 @@ function App() {
       thumbnailDataUrl = null
     }
 
+    try {
+      waveform = await generateAttachmentWaveform(file)
+    } catch {
+      waveform = null
+    }
+
     const optimisticAttachment = {
       uploadId: 'pending',
       fileName: file.name,
       contentType: file.type || 'application/octet-stream',
       size: file.size,
-      thumbnailDataUrl: thumbnailDataUrl ?? undefined
+      thumbnailDataUrl: thumbnailDataUrl ?? undefined,
+      waveform: waveform ?? undefined
     }
     const optimisticMessage: CachedMessage = {
       id: optimisticId,
@@ -2496,16 +2785,12 @@ function App() {
 
     try {
       const encryptedAttachment = await encryptAttachmentFile(file)
-      const createUploadResponse = await createMediaUpload(storedDevice.sessionToken, {
-        filename: file.name,
-        content_type: encryptedAttachment.contentType,
-        declared_byte_size: encryptedAttachment.size,
-        media_kind: inferMediaKind(file.type)
-      })
-      const uploadId = createUploadResponse.upload.id
-
-      await appendMediaUploadPart(storedDevice.sessionToken, uploadId, encryptedAttachment.ciphertextBase64)
-      await completeMediaUpload(storedDevice.sessionToken, uploadId)
+      const uploadId = await uploadEncryptedAttachmentMultipart(
+        storedDevice.sessionToken,
+        file.name,
+        inferMediaKind(file.type),
+        encryptedAttachment
+      )
 
       const descriptor: AttachmentDescriptor = {
         kind: 'attachment',
@@ -2514,11 +2799,12 @@ function App() {
         contentType: encryptedAttachment.contentType,
         size: encryptedAttachment.size,
         thumbnailDataUrl: thumbnailDataUrl ?? undefined,
+        waveform: waveform ?? undefined,
         contentKeyBase64: encryptedAttachment.contentKeyBase64,
         ivBase64: encryptedAttachment.ivBase64
       }
 
-      const { payload, deliveryMode } = await buildEncryptedMessagePayload(
+      const { payload } = await buildEncryptedMessagePayload(
         JSON.stringify(descriptor),
         activeChatId,
         clientId,
@@ -2530,12 +2816,7 @@ function App() {
       await ingestMessageIntoActiveThread(response.message, activeChatId)
       setBanner({
         tone: 'success',
-        message:
-          deliveryMode === 'session'
-            ? 'Encrypted attachment uploaded and delivered with session transport.'
-            : deliveryMode === 'recipient'
-              ? 'Encrypted attachment uploaded and delivered with recipient wrapping.'
-              : 'Encrypted attachment uploaded and delivered with legacy local transport.'
+        message: 'Encrypted attachment uploaded and delivered with session transport.'
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send attachment.'
@@ -2548,6 +2829,198 @@ function App() {
       )
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleAttachmentPick(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file || !storedDevice || !activeChatId) {
+      return
+    }
+
+    await sendAttachmentFile(file)
+  }
+
+  async function handleVoiceNoteToggle() {
+    if (voiceNoteRecording) {
+      const recorder = voiceNoteRecorderRef.current
+
+      if (!recorder) {
+        cleanupVoiceNoteCapture()
+        return
+      }
+
+      setBanner({ tone: 'info', message: 'Finishing voice note…' })
+      recorder.stop()
+      return
+    }
+
+    if (!activeChatId) {
+      setBanner({ tone: 'error', message: 'Create or select a chat first.' })
+      return
+    }
+
+    try {
+      const stream = await window.navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      voiceNoteStreamRef.current = stream
+      voiceNoteRecorderRef.current = recorder
+      voiceNoteChunksRef.current = []
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          voiceNoteChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(voiceNoteChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        cleanupVoiceNoteCapture()
+
+        if (blob.size === 0) {
+          setBanner({ tone: 'error', message: 'Voice note recording was empty.' })
+          return
+        }
+
+        const extension = (recorder.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'
+        const file = new File([blob], `voice-note-${Date.now()}.${extension}`, {
+          type: recorder.mimeType || 'audio/webm'
+        })
+
+        void sendAttachmentFile(file)
+      }
+
+      recorder.start()
+      setVoiceNoteRecording(true)
+      setBanner({ tone: 'info', message: 'Recording voice note… tap again to stop.' })
+    } catch (error) {
+      cleanupVoiceNoteCapture()
+      const message = error instanceof Error ? error.message : 'Failed to start voice note recording.'
+      setBanner({ tone: 'error', message })
+    }
+  }
+
+  async function handleRoundVideoToggle() {
+    if (roundVideoRecording) {
+      const recorder = roundVideoRecorderRef.current
+
+      if (!recorder) {
+        cleanupRoundVideoCapture()
+        return
+      }
+
+      setBanner({ tone: 'info', message: 'Finishing round video…' })
+      recorder.stop()
+      return
+    }
+
+    if (!activeChatId) {
+      setBanner({ tone: 'error', message: 'Create or select a chat first.' })
+      return
+    }
+
+    try {
+      const stream = await window.navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          facingMode: 'user',
+          width: { ideal: 480 },
+          height: { ideal: 480 }
+        }
+      })
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+      roundVideoStreamRef.current = stream
+      roundVideoRecorderRef.current = recorder
+      roundVideoChunksRef.current = []
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          roundVideoChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(roundVideoChunksRef.current, { type: recorder.mimeType || 'video/webm' })
+        cleanupRoundVideoCapture()
+
+        if (blob.size === 0) {
+          setBanner({ tone: 'error', message: 'Round video recording was empty.' })
+          return
+        }
+
+        const file = new File([blob], `round-video-${Date.now()}.webm`, {
+          type: recorder.mimeType || 'video/webm'
+        })
+
+        void sendAttachmentFile(file)
+      }
+
+      recorder.start()
+      setRoundVideoRecording(true)
+      setBanner({ tone: 'info', message: 'Recording round video… tap again to stop.' })
+    } catch (error) {
+      cleanupRoundVideoCapture()
+      const message = error instanceof Error ? error.message : 'Failed to start round video recording.'
+      setBanner({ tone: 'error', message })
+    }
+  }
+
+  async function ensureAttachmentPlaybackUrl(attachment: AttachmentDescriptor): Promise<string> {
+    const existingUrl = attachmentPlaybackUrlsRef.current[attachment.uploadId]
+
+    if (existingUrl) {
+      return existingUrl
+    }
+
+    const inFlight = attachmentPlaybackInFlightRef.current.get(attachment.uploadId)
+
+    if (inFlight) {
+      return inFlight
+    }
+
+    if (!storedDevice) {
+      throw new Error('No local device identity is available.')
+    }
+
+    const promise = (async () => {
+      const response = await fetchMediaUpload(storedDevice.sessionToken, attachment.uploadId)
+
+      if (!response.upload.ciphertext) {
+        throw new Error('The encrypted attachment payload is missing on the server.')
+      }
+
+      const blob = await decryptAttachmentFile(
+        response.upload.ciphertext,
+        attachment.contentKeyBase64,
+        attachment.ivBase64,
+        attachment.contentType
+      )
+      const playbackUrl = URL.createObjectURL(blob)
+
+      setAttachmentPlaybackUrls((current) => {
+        const previous = current[attachment.uploadId]
+
+        if (previous && previous !== playbackUrl) {
+          URL.revokeObjectURL(previous)
+        }
+
+        return {
+          ...current,
+          [attachment.uploadId]: playbackUrl
+        }
+      })
+
+      return playbackUrl
+    })()
+
+    attachmentPlaybackInFlightRef.current.set(attachment.uploadId, promise)
+
+    try {
+      return await promise
+    } finally {
+      attachmentPlaybackInFlightRef.current.delete(attachment.uploadId)
     }
   }
 
@@ -2596,7 +3069,7 @@ function App() {
 
     const targetMessage = [...messageItemsRef.current]
       .reverse()
-      .find((message) => !message.id.startsWith('optimistic-'))
+      .find((message) => !message.id.startsWith('optimistic-') && !message.deletedAt)
 
     if (!targetMessage) {
       setBanner({ tone: 'info', message: 'Send a message before adding reactions.' })
@@ -2624,12 +3097,83 @@ function App() {
   }
 
   function handleReplyToMessage(message: CachedMessage) {
-    if (message.side === 'system') {
+    if (message.side === 'system' || message.deletedAt) {
       return
     }
 
+    setEditingMessageId(null)
     setReplyTargetMessageId(message.id)
     draftInputRef.current?.focus()
+  }
+
+  function handleStartEditingMessage(message: CachedMessage) {
+    if (message.side !== 'outgoing' || message.attachment || message.deletedAt) {
+      return
+    }
+
+    setEditingMessageId(message.id)
+    setReplyTargetMessageId(message.replyToMessageId ?? null)
+    setDraft(message.text)
+    draftInputRef.current?.focus()
+  }
+
+  async function handleDeleteExistingMessage(message: CachedMessage) {
+    if (!storedDevice || !activeChatId || message.side !== 'outgoing' || message.deletedAt) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await deleteMessage(storedDevice.sessionToken, activeChatId, message.id)
+      await ingestMessageIntoActiveThread(response.message, activeChatId)
+
+      if (editingMessageId === message.id) {
+        setEditingMessageId(null)
+        setDraft('')
+      }
+
+      if (replyTargetMessageId === message.id) {
+        setReplyTargetMessageId(null)
+      }
+
+      setBanner({ tone: 'success', message: 'Message deleted for this chat.' })
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Failed to delete the message.'
+      setBanner({ tone: 'error', message: messageText })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggleMessagePin(message: CachedMessage) {
+    if (
+      !storedDevice ||
+      !activeChatId ||
+      message.side === 'system' ||
+      message.deletedAt ||
+      message.id.startsWith('optimistic-')
+    ) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await toggleMessagePin(storedDevice.sessionToken, activeChatId, message.id)
+      await syncMessagesFromServerNow(activeChatId)
+      setBanner({
+        tone: 'success',
+        message: response.message.pinned_at
+          ? 'Pinned message updated for this chat.'
+          : 'Pinned message cleared.'
+      })
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Failed to update the pinned message.'
+      setBanner({ tone: 'error', message: messageText })
+    } finally {
+      setLoading(false)
+    }
   }
 
   function replaceActiveMessages(chatId: string, nextMessages: CachedMessage[], syncSummary: boolean) {
@@ -2674,10 +3218,17 @@ function App() {
   const desktopShell = isDesktopShell()
   const activeChat =
     chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatItems[0] ?? null
+  const editingTargetMessage =
+    editingMessageId
+      ? messageItems.find((message) => message.id === editingMessageId) ?? null
+      : null
   const replyTargetMessage =
     replyTargetMessageId
       ? messageItems.find((message) => message.id === replyTargetMessageId) ?? null
       : null
+  const pinnedMessage = pickPinnedMessage(messageItems)
+  const chatMediaItems = messageItems.filter((message) => message.attachment)
+  const activeGroupChatId = activeChat?.type === 'group' ? activeChat.id : null
   const desktopWindowTitle = buildDesktopWindowTitle(activeChat?.title ?? null, activeCall?.mode ?? null)
   const appShellClassName = detailRailVisible ? 'app-shell' : 'app-shell app-shell--detail-hidden'
   const dominantRemoteEndpointId = pickDominantRemoteSpeakerEndpointId(membraneRemoteTracks)
@@ -2685,6 +3236,85 @@ function App() {
   const dominantRemoteEndpoint = dominantRemoteEndpointId
     ? membraneRemoteEndpoints.find((endpoint) => endpoint.id === dominantRemoteEndpointId) ?? null
     : null
+  const remoteAudioTrackCount = membraneRemoteTracks.filter(
+    (track) => track.ready && track.kind === 'audio'
+  ).length
+  const remoteVideoTrackCount = membraneRemoteTracks.filter(
+    (track) => track.ready && track.kind === 'video'
+  ).length
+
+  useEffect(() => {
+    if (activeChat?.type === 'group') {
+      setGroupRenameTitle(activeChat.title)
+      return
+    }
+
+    setGroupRenameTitle('')
+  }, [activeChat?.id, activeChat?.title, activeChat?.type])
+
+  useEffect(() => {
+    if (!storedDevice || view !== 'chat' || !activeGroupChatId) {
+      setGroupMembers([])
+      return
+    }
+
+    const { sessionToken } = storedDevice
+    const groupChatId = activeGroupChatId
+    let cancelled = false
+
+    async function loadGroupMembers() {
+      try {
+        const response = await listGroupMembers(sessionToken, groupChatId)
+
+        if (!cancelled) {
+          setGroupMembers(response.members)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load group members.'
+          setBanner({ tone: 'error', message })
+          setGroupMembers([])
+        }
+      }
+    }
+
+    void loadGroupMembers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeGroupChatId, storedDevice, view])
+
+  useEffect(() => {
+    if (!storedDevice || view !== 'chat' || !activeGroupChatId) {
+      setGroupSenderKeys([])
+      return
+    }
+
+    const { sessionToken } = storedDevice
+    const groupChatId = activeGroupChatId
+    let cancelled = false
+
+    async function loadGroupSenderKeys() {
+      try {
+        const response = await listGroupSenderKeys(sessionToken, groupChatId)
+
+        if (!cancelled) {
+          setGroupSenderKeys(response.sender_keys)
+        }
+      } catch {
+        if (!cancelled) {
+          setGroupSenderKeys([])
+        }
+      }
+    }
+
+    void loadGroupSenderKeys()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeGroupChatId, storedDevice, view])
 
   useEffect(() => {
     if (!desktopShell) {
@@ -3060,6 +3690,13 @@ function App() {
         />
 
         <section className="conversation-stage">
+          {pinnedMessage && !pinnedMessage.deletedAt ? (
+            <GlassSurface className="pinned-message-banner">
+              <span className="sidebar__eyebrow">Pinned message</span>
+              <strong>{resolvePinnedPreview(pinnedMessage)}</strong>
+              <span>{formatRelativeTime(pinnedMessage.pinnedAt ?? pinnedMessage.sentAt)}</span>
+            </GlassSurface>
+          ) : null}
           {messageItems.length === 0 ? (
             <MessageBubble className="conversation-stage__hero" side="system">
               <strong className="hero-card__title">No messages here yet...</strong>
@@ -3073,7 +3710,18 @@ function App() {
             </MessageBubble>
           ) : (
             <div className="message-thread">
-              {messageItems.map((message) => (
+              {messageItems.map((message) => {
+                const linkUrl = extractFirstHttpUrl(message.text)
+                const linkPreview = resolveLinkPreview(
+                  message.text,
+                  linkUrl ? linkMetadataByUrl[linkUrl] : null
+                )
+                const attachmentDescriptor =
+                  message.attachment?.contentKeyBase64 && message.attachment.ivBase64
+                    ? toAttachmentDescriptor(message.attachment)
+                    : null
+
+                return (
                 <MessageBubble key={message.id} side={message.side}>
                   {message.replyToMessageId ? (
                     <span className="message-thread__reply-preview">
@@ -3081,20 +3729,60 @@ function App() {
                     </span>
                   ) : null}
                   <strong>{message.text}</strong>
+                  {linkPreview ? (
+                    <a
+                      className="message-thread__link-preview"
+                      href={linkPreview.href}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <span className="message-thread__link-domain">{linkPreview.hostname}</span>
+                      <strong>{linkPreview.title}</strong>
+                      <span>{linkPreview.description || linkPreview.href}</span>
+                    </a>
+                  ) : null}
                   {message.attachment?.thumbnailDataUrl ? (
                     <img
                       alt={message.attachment.fileName}
-                      className="message-thread__attachment-preview"
+                      className={
+                        isRoundVideoAttachment(message.attachment)
+                          ? 'message-thread__attachment-preview message-thread__attachment-preview--round'
+                          : 'message-thread__attachment-preview'
+                      }
                       src={message.attachment.thumbnailDataUrl}
                     />
                   ) : null}
-                  {message.attachment?.contentKeyBase64 && message.attachment.ivBase64 ? (
+                  {message.attachment?.waveform && message.attachment.waveform.length > 0 && message.attachment &&
+                  isVoiceNoteAttachment(message.attachment) ? (
+                    <span className="message-thread__waveform" aria-label="Voice note waveform">
+                      {message.attachment.waveform.map((level, index) => (
+                        <span
+                          className="message-thread__waveform-bar"
+                          key={`${message.id}-waveform-${index}`}
+                          style={{ height: `${Math.max(18, Math.round(level * 100))}%` }}
+                        />
+                      ))}
+                    </span>
+                  ) : null}
+                  {attachmentDescriptor && message.attachment && isVoiceNoteAttachment(message.attachment) ? (
+                    <VoiceNotePlayer
+                      attachment={attachmentDescriptor}
+                      onResolveMediaUrl={ensureAttachmentPlaybackUrl}
+                    />
+                  ) : null}
+                  {attachmentDescriptor && message.attachment && isRoundVideoAttachment(message.attachment) ? (
+                    <RoundVideoPlayer
+                      attachment={attachmentDescriptor}
+                      onResolveMediaUrl={ensureAttachmentPlaybackUrl}
+                    />
+                  ) : null}
+                  {attachmentDescriptor ? (
                     <button
                       className="secondary-action"
-                      onClick={() => handleDownloadAttachment(toAttachmentDescriptor(message.attachment!))}
+                      onClick={() => handleDownloadAttachment(attachmentDescriptor)}
                       type="button"
                     >
-                      Download {message.attachment.fileName}
+                      Download {attachmentDescriptor.fileName}
                     </button>
                   ) : null}
                   {message.reactions && message.reactions.length > 0 ? (
@@ -3105,28 +3793,66 @@ function App() {
                     </span>
                   ) : null}
                   {message.side !== 'system' ? (
-                    <button
-                      className="secondary-action"
-                      disabled={loading}
-                      onClick={() => handleReplyToMessage(message)}
-                      type="button"
-                    >
-                      Reply
-                    </button>
+                    <div className="message-thread__actions">
+                      {!message.deletedAt ? (
+                        <button
+                          className="secondary-action"
+                          disabled={loading}
+                          onClick={() => handleReplyToMessage(message)}
+                          type="button"
+                        >
+                          Reply
+                        </button>
+                      ) : null}
+                      {message.side === 'outgoing' && !message.attachment && !message.deletedAt ? (
+                        <button
+                          className="secondary-action"
+                          disabled={loading}
+                          onClick={() => handleStartEditingMessage(message)}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {message.side === 'outgoing' && !message.deletedAt ? (
+                        <button
+                          className="secondary-action"
+                          disabled={loading}
+                          onClick={() => handleDeleteExistingMessage(message)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                      {!message.id.startsWith('optimistic-') && !message.deletedAt ? (
+                        <button
+                          className="secondary-action"
+                          disabled={loading}
+                          onClick={() => handleToggleMessagePin(message)}
+                          type="button"
+                        >
+                          {message.pinnedAt ? 'Unpin' : 'Pin'}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                   <span className="message-thread__meta">
                     {formatRelativeTime(message.sentAt)}
+                    {message.pinnedAt ? ' • pinned' : ''}
+                    {message.editedAt ? ' • edited' : ''}
+                    {message.deletedAt ? ' • deleted' : ''}
                     {message.decryptable ? ' • decryptable on this device' : ' • opaque on this device'}
                   </span>
                 </MessageBubble>
-              ))}
+                )
+              })}
             </div>
           )}
 
           <div className="floating-stack">
             <ReactionBar reactions={['ACK', 'OK', 'PLAN', 'SHIP']} onSelect={handleQuickReaction} />
             <ContextMenu
-              actions={['Reply (next)', 'Forward (next)', 'Pin (next)', 'Delete for me', 'Delete for all']}
+              actions={['Reply', 'Forward (next)', 'Pin active message', 'Delete for me', 'Delete for all']}
             />
           </div>
         </section>
@@ -3147,11 +3873,29 @@ function App() {
           >
             <span className="vostok-icon-button__glyph">A</span>
           </button>
+          <button
+            className="vostok-icon-button"
+            type="button"
+            aria-label={voiceNoteRecording ? 'Stop voice note recording' : 'Record voice note'}
+            disabled={loading || !activeChat}
+            onClick={() => void handleVoiceNoteToggle()}
+          >
+            <span className="vostok-icon-button__glyph">{voiceNoteRecording ? 'S' : 'M'}</span>
+          </button>
+          <button
+            className="vostok-icon-button"
+            type="button"
+            aria-label={roundVideoRecording ? 'Stop round video recording' : 'Record round video'}
+            disabled={loading || !activeChat}
+            onClick={() => void handleRoundVideoToggle()}
+          >
+            <span className="vostok-icon-button__glyph">{roundVideoRecording ? 'S' : 'V'}</span>
+          </button>
           <GlassSurface className="live-composer__field">
             {replyTargetMessageId ? (
               <div className="live-composer__reply">
                 <div className="live-composer__reply-copy">
-                  <strong>Replying</strong>
+                  <strong>{editingMessageId ? 'Editing reply' : 'Replying'}</strong>
                   <span>{replyTargetMessage ? replyTargetMessage.text : 'Earlier message'}</span>
                 </div>
                 <button
@@ -3164,11 +3908,36 @@ function App() {
                 </button>
               </div>
             ) : null}
+            {editingMessageId && !replyTargetMessageId ? (
+              <div className="live-composer__reply">
+                <div className="live-composer__reply-copy">
+                  <strong>Editing message</strong>
+                  <span>{editingTargetMessage ? editingTargetMessage.text : 'Outgoing message'}</span>
+                </div>
+                <button
+                  className="vostok-icon-button live-composer__reply-clear"
+                  disabled={loading}
+                  onClick={() => {
+                    setEditingMessageId(null)
+                    setDraft('')
+                  }}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">x</span>
+                </button>
+              </div>
+            ) : null}
             <textarea
               className="live-composer__input"
               disabled={loading || !activeChat}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={activeChat ? 'Write an encrypted envelope…' : 'Create a chat first'}
+              placeholder={
+                activeChat
+                  ? editingMessageId
+                    ? 'Edit the encrypted envelope…'
+                    : 'Write an encrypted envelope…'
+                  : 'Create a chat first'
+              }
               ref={draftInputRef}
               rows={1}
               value={draft}
@@ -3179,7 +3948,7 @@ function App() {
             disabled={loading || !activeChat || draft.trim() === ''}
             type="submit"
           >
-            Send
+            {editingMessageId ? 'Save' : 'Send'}
           </button>
         </form>
       </main>
@@ -3190,6 +3959,160 @@ function App() {
           phone="+7 999 555 01 10"
           handle={`@${profileUsername ?? storedDevice?.username ?? 'dinosaur'}`}
         />
+        <GlassSurface className="settings-card">
+          <div className="settings-card__header">
+            <span className="sidebar__eyebrow">Media</span>
+            <h3>Chat gallery</h3>
+          </div>
+          {chatMediaItems.length > 0 ? (
+            <div className="chat-media-gallery">
+              {chatMediaItems.slice(-6).reverse().map((message) => (
+                <button
+                  key={message.id}
+                  className="chat-media-gallery__item"
+                  disabled={!message.attachment}
+                  onClick={() => {
+                    if (message.attachment) {
+                      void handleDownloadAttachment(toAttachmentDescriptor(message.attachment))
+                    }
+                  }}
+                  type="button"
+                >
+                  {message.attachment?.thumbnailDataUrl ? (
+                    <img
+                      alt={message.attachment.fileName}
+                      className={
+                        message.attachment && isRoundVideoAttachment(message.attachment)
+                          ? 'chat-media-gallery__image chat-media-gallery__image--round'
+                          : 'chat-media-gallery__image'
+                      }
+                      src={message.attachment.thumbnailDataUrl}
+                    />
+                  ) : (
+                    <span className="chat-media-gallery__fallback">{message.attachment?.fileName}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="settings-card__muted">No attachments in the current chat yet.</span>
+          )}
+        </GlassSurface>
+        {activeChat?.type === 'group' ? (
+          <GlassSurface className="settings-card">
+            <div className="settings-card__header">
+              <span className="sidebar__eyebrow">Group</span>
+              <h3>Admin controls</h3>
+            </div>
+            <form className="new-chat-form" onSubmit={handleRenameActiveGroupChat}>
+              <label className="auth-field">
+                <span>Group title</span>
+                <input
+                  disabled={loading}
+                  onChange={(event) => setGroupRenameTitle(event.target.value)}
+                  placeholder="Operators"
+                  value={groupRenameTitle}
+                />
+              </label>
+              <button
+                className="secondary-action"
+                disabled={loading || groupRenameTitle.trim() === '' || groupRenameTitle === activeChat.title}
+                type="submit"
+              >
+                Save Group Title
+              </button>
+            </form>
+            <div className="device-summary-card">
+              <strong>Members</strong>
+              {groupMembers.length > 0 ? (
+                groupMembers.map((member) => (
+                  <span key={member.user_id}>
+                    {member.username} • {member.role}
+                    {member.username === profileUsername ? ' • you' : ''}
+                  </span>
+                ))
+              ) : (
+                <span>Loading members…</span>
+              )}
+            </div>
+            <div className="settings-card__actions">
+              {groupMembers.map((member) => {
+                const isSelf = member.username === profileUsername
+
+                return (
+                  <div key={member.user_id} className="settings-card__row">
+                    <div className="settings-card__row-main">
+                      <strong>{member.username}</strong>
+                      <span>
+                        {member.role}
+                        {isSelf ? ' • you' : ''}
+                      </span>
+                    </div>
+                    {!isSelf ? (
+                      <div className="settings-card__row-actions">
+                        <button
+                          className="secondary-action"
+                          disabled={loading || member.role === 'admin'}
+                          onClick={() => void handleUpdateActiveGroupMemberRole(member, 'admin')}
+                          type="button"
+                        >
+                          Promote
+                        </button>
+                        <button
+                          className="secondary-action"
+                          disabled={loading || member.role === 'member'}
+                          onClick={() => void handleUpdateActiveGroupMemberRole(member, 'member')}
+                          type="button"
+                        >
+                          Demote
+                        </button>
+                        <button
+                          className="danger-action"
+                          disabled={loading}
+                          onClick={() => void handleRemoveActiveGroupMember(member)}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="settings-card__muted">Self-management stays manual for now.</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="settings-card__actions">
+              <button
+                className="secondary-action"
+                disabled={loading || !activeGroupChatId}
+                onClick={() => void handleRotateGroupSenderKey()}
+                type="button"
+              >
+                Rotate Sender Key
+              </button>
+            </div>
+            <div className="settings-card__list">
+              {groupSenderKeys.length === 0 ? (
+                <span className="settings-card__muted">
+                  No inbound Sender Keys are currently queued for this device.
+                </span>
+              ) : (
+                groupSenderKeys.slice(0, 4).map((senderKey) => (
+                  <div className="settings-card__row" key={senderKey.id}>
+                    <div className="settings-card__row-main">
+                      <strong>{senderKey.key_id}</strong>
+                      <span>
+                        {senderKey.algorithm} • {senderKey.status}
+                      </span>
+                      <span>{formatRelativeTime(senderKey.updated_at ?? senderKey.inserted_at)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </GlassSurface>
+        ) : null}
         <GlassSurface className="settings-card">
           <div className="settings-card__header">
             <span className="sidebar__eyebrow">Settings</span>
@@ -3390,7 +4313,7 @@ function App() {
             <span>
               {activeChat?.is_self_chat
                 ? 'Self-chat can use recipient-wrapped envelopes when this device has an encryption key.'
-                : 'Cross-user transport now advances a simple local ratchet from per-device session roots with explicit initiator ephemeral bootstrap; the full Signal-grade ratchet is still next.'}
+                : 'Cross-user transport now advances a local per-device ratchet from HKDF-derived session roots, explicit initiator ephemeral bootstrap, ratchet version tags, epoch transitions on re-handshake, and local DH steps when peer ratchet keys change; the full Signal-grade ratchet is still next.'}
             </span>
             <span>
               {activeChat
@@ -3399,9 +4322,35 @@ function App() {
             </span>
             <span>
               {activeChat
-                ? `${chatSessions.length} cached direct-chat session ${chatSessions.length === 1 ? 'record' : 'records'} ready for this chat`
+                ? `${chatSessions.length} cached direct-chat session ${chatSessions.length === 1 ? 'record' : 'records'} ready for this chat • ${chatSessions.filter((session) => session.session_state === 'active' && session.establishment_state === 'established').length} established • ${chatSessions.filter((session) => session.session_state === 'active' && session.establishment_state === 'pending_first_message').length} pending first message • ${chatSessions.filter((session) => session.session_state === 'superseded').length} superseded`
                 : 'Select a chat to bootstrap direct-chat sessions'}
             </span>
+          </div>
+          <div className="device-summary-card__actions">
+            <button
+              className="secondary-action"
+              disabled={loading || !activeChat}
+              onClick={handleRekeyActiveChatSessions}
+              type="button"
+            >
+              Rekey Active Sessions
+            </button>
+          </div>
+          <div className="settings-card__list">
+            {safetyNumbers.length === 0 ? (
+              <span className="settings-card__muted">
+                No remote safety numbers available for the current chat.
+              </span>
+            ) : (
+              safetyNumbers.map((entry) => (
+                <div className="settings-card__row" key={entry.deviceId}>
+                  <div className="settings-card__row-main">
+                    <strong>{entry.label}</strong>
+                    <span>{entry.fingerprint}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </GlassSurface>
         <GlassSurface className="settings-card">
@@ -3480,6 +4429,46 @@ function App() {
                     >
                       Ping
                     </button>
+                    <button
+                      className="mini-action"
+                      disabled={loading}
+                      onClick={() => void handleQueueFederationDelivery(peer.id)}
+                      type="button"
+                    >
+                      Queue Relay
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="settings-card__list">
+            {federationDeliveries.length === 0 ? (
+              <span className="settings-card__muted">No federation deliveries queued yet.</span>
+            ) : (
+              federationDeliveries.slice(0, 3).map((delivery) => (
+                <div className="settings-card__row" key={delivery.id}>
+                  <div className="settings-card__row-main">
+                    <strong>{delivery.event_type}</strong>
+                    <span>
+                      {delivery.status} • {delivery.attempt_count} attempt
+                      {delivery.attempt_count === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="settings-card__row-actions">
+                    <span className="settings-card__muted">
+                      {formatRelativeTime(delivery.updated_at ?? delivery.inserted_at)}
+                    </span>
+                    {delivery.status !== 'delivered' ? (
+                      <button
+                        className="mini-action"
+                        disabled={loading}
+                        onClick={() => void handleAttemptFederationDelivery(delivery.id)}
+                        type="button"
+                      >
+                        Mark Delivered
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -3518,18 +4507,16 @@ function App() {
                 : 'Endpoint state appears after a call becomes active'}
             </span>
             <span>
-              {webRtcReady
-                ? membraneClientConnected
-                  ? `Fallback browser lab ready (${webRtcConnectionState} • ${webRtcSignalingState})`
-                  : `WebRTC ${webRtcConnectionState} • ${webRtcSignalingState}`
-                : 'Browser WebRTC lab not initialized yet'}
-            </span>
-            <span>
               {membraneClientReady
                 ? membraneClientConnected
-                  ? `Membrane client connected as ${membraneClientEndpointId ?? 'pending'} • ${membraneRemoteEndpointCount} remote endpoint${membraneRemoteEndpointCount === 1 ? '' : 's'} • ${membraneRemoteTrackCount} remote track${membraneRemoteTrackCount === 1 ? '' : 's'}`
-                  : 'Membrane client initialized and waiting for native endpoint events'
+                  ? 'Native Membrane WebRTC client connected.'
+                  : 'Membrane client initialized and waiting for endpoint negotiation.'
                 : 'Membrane browser client not initialized yet'}
+            </span>
+            <span>
+              {membraneClientConnected
+                ? `Membrane client connected as ${membraneClientEndpointId ?? 'pending'} • ${membraneRemoteEndpointCount} remote endpoint${membraneRemoteEndpointCount === 1 ? '' : 's'} • ${membraneRemoteTrackCount} remote track${membraneRemoteTrackCount === 1 ? '' : 's'}`
+                : 'Connect the Membrane client after provisioning the endpoint.'}
             </span>
             <span>
               {membraneClientConnected
@@ -3573,7 +4560,7 @@ function App() {
               onClick={handleInitializeWebRtc}
               type="button"
             >
-              Initialize WebRTC + Membrane
+              Initialize Native WebRTC
             </button>
             <button
               className="secondary-action"
@@ -3606,14 +4593,6 @@ function App() {
               type="button"
             >
               Start Video Call
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleCreateWebRtcOffer}
-              type="button"
-            >
-              Create Fallback Offer
             </button>
             <button
               className="secondary-action"
@@ -3664,66 +4643,6 @@ function App() {
               End Active Call
             </button>
           </div>
-          <form className="new-chat-form" onSubmit={handleSendCallSignal}>
-            <label className="auth-field">
-              <span>Signal type</span>
-              <select
-                disabled={loading || !activeCall || membraneClientConnected}
-                onChange={(event) => setCallSignalType(event.target.value as CallSignal['signal_type'])}
-                value={callSignalType}
-              >
-                <option value="offer">offer</option>
-                <option value="answer">answer</option>
-                <option value="ice">ice</option>
-                <option value="renegotiate">renegotiate</option>
-                <option value="heartbeat">heartbeat</option>
-              </select>
-            </label>
-            <label className="auth-field">
-              <span>Signal target</span>
-              <select
-                disabled={loading || !activeCall || membraneClientConnected}
-                onChange={(event) => setCallSignalTargetDeviceId(event.target.value)}
-                value={callSignalTargetDeviceId}
-              >
-                <option value={CALL_SIGNAL_BROADCAST}>Broadcast to joined peers</option>
-                {callParticipants
-                  .filter(
-                    (participant) =>
-                      participant.status === 'joined' &&
-                      participant.device_id !== storedDevice?.deviceId
-                  )
-                  .map((participant) => (
-                    <option key={participant.device_id} value={participant.device_id}>
-                      {participant.device_id}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="auth-field">
-              <span>
-                {membraneClientConnected
-                  ? 'Fallback signal payload (disabled while native Membrane is active)'
-                  : 'Signal payload'}
-              </span>
-              <textarea
-                disabled={loading || !activeCall || membraneClientConnected}
-                onChange={(event) => setCallSignalPayload(event.target.value)}
-                placeholder='{"type":"offer","sdp":"stub-offer"}'
-                rows={3}
-                value={callSignalPayload}
-              />
-            </label>
-            <button
-              className="secondary-action"
-              disabled={
-                loading || !activeCall || membraneClientConnected || callSignalPayload.trim() === ''
-              }
-              type="submit"
-            >
-              Send Signal
-            </button>
-          </form>
           <div className="settings-card__list">
             {callParticipants.length > 0 ? (
               callParticipants.map((participant) => (
@@ -3863,43 +4782,6 @@ function App() {
               <span className="settings-card__muted">No outbound Membrane endpoint events polled yet.</span>
             )}
           </div>
-          <div className="settings-card__list">
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>WebRTC lab</strong>
-                <span>
-                  {webRtcReady ? `${webRtcConnectionState} • ${webRtcSignalingState}` : 'Not initialized'}
-                </span>
-                <span>
-                  {webRtcIceOutboundCount} outbound ICE • {webRtcIceInboundCount} inbound ICE
-                </span>
-                <span>
-                  {localMediaMode === 'none'
-                    ? 'No local tracks'
-                    : `${localAudioTrackCount} local audio • ${localVideoTrackCount} local video`}
-                </span>
-                <span>
-                  {`${remoteAudioTrackCount} remote audio • ${remoteVideoTrackCount} remote video`}
-                </span>
-              </div>
-            </div>
-            {webRtcLocalDescription ? (
-              <div className="settings-card__row">
-                <div className="settings-card__row-main">
-                  <strong>Local SDP</strong>
-                  <span>{truncateSignalPayload(webRtcLocalDescription)}</span>
-                </div>
-              </div>
-            ) : null}
-            {webRtcRemoteDescription ? (
-              <div className="settings-card__row">
-                <div className="settings-card__row-main">
-                  <strong>Remote SDP</strong>
-                  <span>{truncateSignalPayload(webRtcRemoteDescription)}</span>
-                </div>
-              </div>
-            ) : null}
-          </div>
         </GlassSurface>
         <CallSurface
           mode={activeCall ? 'active' : 'minimized'}
@@ -3976,6 +4858,220 @@ function RemoteMembraneTrackPreview({
   )
 }
 
+function VoiceNotePlayer({
+  attachment,
+  onResolveMediaUrl
+}: {
+  attachment: AttachmentDescriptor
+  onResolveMediaUrl: (attachment: AttachmentDescriptor) => Promise<string>
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [positionSeconds, setPositionSeconds] = useState(0)
+  const [durationSeconds, setDurationSeconds] = useState(0)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [volume, setVolume] = useState(1)
+
+  useEffect(() => {
+    const audio = audioRef.current
+
+    if (!audio) {
+      return
+    }
+
+    const syncPosition = () => setPositionSeconds(audio.currentTime || 0)
+    const syncDuration = () => setDurationSeconds(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const syncPlaybackState = () => setPlaying(!audio.paused)
+
+    audio.addEventListener('timeupdate', syncPosition)
+    audio.addEventListener('loadedmetadata', syncDuration)
+    audio.addEventListener('durationchange', syncDuration)
+    audio.addEventListener('play', syncPlaybackState)
+    audio.addEventListener('pause', syncPlaybackState)
+    audio.addEventListener('ended', syncPlaybackState)
+
+    audio.volume = volume
+    audio.playbackRate = playbackRate
+
+    return () => {
+      audio.removeEventListener('timeupdate', syncPosition)
+      audio.removeEventListener('loadedmetadata', syncDuration)
+      audio.removeEventListener('durationchange', syncDuration)
+      audio.removeEventListener('play', syncPlaybackState)
+      audio.removeEventListener('pause', syncPlaybackState)
+      audio.removeEventListener('ended', syncPlaybackState)
+    }
+  }, [playbackRate, volume])
+
+  useEffect(() => {
+    setMediaUrl(null)
+    setError(null)
+    setPlaying(false)
+    setPositionSeconds(0)
+    setDurationSeconds(0)
+  }, [attachment.uploadId])
+
+  async function handleLoad() {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const resolved = await onResolveMediaUrl(attachment)
+      setMediaUrl(resolved)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load the voice note.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleTogglePlayback() {
+    const audio = audioRef.current
+
+    if (!audio) {
+      return
+    }
+
+    if (audio.paused) {
+      void audio.play().catch(() => undefined)
+      return
+    }
+
+    audio.pause()
+  }
+
+  function handleSeek(nextSeconds: number) {
+    const audio = audioRef.current
+
+    if (!audio) {
+      return
+    }
+
+    audio.currentTime = Math.max(0, Math.min(nextSeconds, durationSeconds || 0))
+    setPositionSeconds(audio.currentTime)
+  }
+
+  if (!mediaUrl) {
+    return (
+      <div className="voice-note-player">
+        <button className="secondary-action" disabled={loading} onClick={() => void handleLoad()} type="button">
+          {loading ? 'Loading voice note…' : 'Play Voice Note'}
+        </button>
+        {error ? <span className="settings-card__muted">{error}</span> : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className="voice-note-player">
+      <audio preload="metadata" ref={audioRef} src={mediaUrl} />
+      <div className="voice-note-player__controls">
+        <button className="mini-action" onClick={handleTogglePlayback} type="button">
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <button
+          className="mini-action"
+          onClick={() => handleSeek(Math.max(0, positionSeconds - 10))}
+          type="button"
+        >
+          -10s
+        </button>
+        <button
+          className="mini-action"
+          onClick={() => handleSeek(Math.min(durationSeconds || 0, positionSeconds + 10))}
+          type="button"
+        >
+          +10s
+        </button>
+        <label className="voice-note-player__field">
+          <span>{formatMediaClock(positionSeconds)} / {formatMediaClock(durationSeconds)}</span>
+          <input
+            max={Math.max(durationSeconds, 0.1)}
+            min={0}
+            onChange={(event) => handleSeek(Number(event.target.value))}
+            step={0.1}
+            type="range"
+            value={Math.min(positionSeconds, durationSeconds || 0)}
+          />
+        </label>
+      </div>
+      <div className="voice-note-player__controls">
+        <label className="voice-note-player__field">
+          <span>Speed</span>
+          <select
+            onChange={(event) => setPlaybackRate(Number(event.target.value))}
+            value={playbackRate}
+          >
+            <option value={0.75}>0.75x</option>
+            <option value={1}>1.0x</option>
+            <option value={1.25}>1.25x</option>
+            <option value={1.5}>1.5x</option>
+            <option value={2}>2.0x</option>
+          </select>
+        </label>
+        <label className="voice-note-player__field">
+          <span>Volume</span>
+          <input
+            max={1}
+            min={0}
+            onChange={(event) => setVolume(Number(event.target.value))}
+            step={0.05}
+            type="range"
+            value={volume}
+          />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+function RoundVideoPlayer({
+  attachment,
+  onResolveMediaUrl
+}: {
+  attachment: AttachmentDescriptor
+  onResolveMediaUrl: (attachment: AttachmentDescriptor) => Promise<string>
+}) {
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setMediaUrl(null)
+    setError(null)
+  }, [attachment.uploadId])
+
+  async function handleLoad() {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const resolved = await onResolveMediaUrl(attachment)
+      setMediaUrl(resolved)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load round video.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="round-video-player">
+      {!mediaUrl ? (
+        <button className="secondary-action" disabled={loading} onClick={() => void handleLoad()} type="button">
+          {loading ? 'Loading round video…' : 'Play Round Video'}
+        </button>
+      ) : (
+        <video className="round-video-player__video" controls playsInline preload="metadata" src={mediaUrl} />
+      )}
+      {error ? <span className="settings-card__muted">{error}</span> : null}
+    </div>
+  )
+}
+
 export default App
 
 async function projectMessage(
@@ -3989,7 +5085,28 @@ async function projectMessage(
       clientId: message.client_id,
       text: decodeSystemMessageText(message.ciphertext),
       sentAt: message.inserted_at,
+      pinnedAt: message.pinned_at ?? undefined,
       side: 'system',
+      decryptable: true,
+      reactions: message.reactions.map((reaction) => ({
+        reactionKey: reaction.reaction_key,
+        count: reaction.count,
+        reacted: reaction.reacted
+      }))
+    }
+  }
+
+  if (message.deleted_at) {
+    return {
+      id: message.id,
+      clientId: message.client_id,
+      replyToMessageId: message.reply_to_message_id ?? undefined,
+      text: 'Message deleted',
+      sentAt: message.inserted_at,
+      pinnedAt: message.pinned_at ?? undefined,
+      editedAt: message.edited_at ?? undefined,
+      deletedAt: message.deleted_at,
+      side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
       decryptable: true,
       reactions: message.reactions.map((reaction) => ({
         reactionKey: reaction.reaction_key,
@@ -4013,6 +5130,9 @@ async function projectMessage(
       replyToMessageId: message.reply_to_message_id ?? undefined,
       text: parsedPayload.text,
       sentAt: message.inserted_at,
+      pinnedAt: message.pinned_at ?? undefined,
+      editedAt: message.edited_at ?? undefined,
+      deletedAt: message.deleted_at ?? undefined,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
       decryptable: true,
       attachment: parsedPayload.attachment,
@@ -4026,8 +5146,12 @@ async function projectMessage(
     return {
       id: message.id,
       clientId: message.client_id,
+      replyToMessageId: message.reply_to_message_id ?? undefined,
       text: '[Encrypted envelope available but not decryptable on this device]',
       sentAt: message.inserted_at,
+      pinnedAt: message.pinned_at ?? undefined,
+      editedAt: message.edited_at ?? undefined,
+      deletedAt: message.deleted_at ?? undefined,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
       decryptable: false,
       reactions: message.reactions.map((reaction) => ({
@@ -4093,26 +5217,15 @@ function canUseChatSessions(
 
   const outboundRecipientIds = new Set(
     sessions
-      .filter((session) => session.initiator_device_id === storedDevice.deviceId)
+      .filter(
+        (session) =>
+          session.initiator_device_id === storedDevice.deviceId &&
+          session.session_state !== 'superseded'
+      )
       .map((session) => session.recipient_device_id)
   )
 
   return recipientDevices.every((device) => outboundRecipientIds.has(device.device_id))
-}
-
-function shouldUseRecipientWrapping(
-  storedDevice: StoredDevice,
-  recipientDevices: RecipientDevice[]
-): boolean {
-  if (!storedDevice.encryptionPrivateKeyPkcs8Base64 || !storedDevice.encryptionPublicKeyBase64) {
-    return false
-  }
-
-  if (recipientDevices.length === 0) {
-    return false
-  }
-
-  return recipientDevices.some((device) => device.device_id === storedDevice.deviceId)
 }
 
 function mergeMessageThread(current: CachedMessage[], next: CachedMessage): CachedMessage[] {
@@ -4173,17 +5286,25 @@ function parseDecryptedPayload(plaintext: string): {
       typeof parsed.size === 'number' &&
       Number.isFinite(parsed.size) &&
       (typeof parsed.thumbnailDataUrl === 'undefined' || typeof parsed.thumbnailDataUrl === 'string') &&
+      (typeof parsed.waveform === 'undefined' ||
+        (Array.isArray(parsed.waveform) && parsed.waveform.every((value) => typeof value === 'number'))) &&
       typeof parsed.contentKeyBase64 === 'string' &&
       typeof parsed.ivBase64 === 'string'
     ) {
       return {
-        text: `Attachment: ${parsed.fileName}`,
+        text:
+          parsed.contentType.startsWith('audio/') && parsed.fileName.startsWith('voice-note-')
+            ? `Voice note: ${parsed.fileName}`
+            : parsed.contentType.startsWith('video/') && parsed.fileName.startsWith('round-video-')
+              ? `Round video: ${parsed.fileName}`
+            : `Attachment: ${parsed.fileName}`,
         attachment: {
           uploadId: parsed.uploadId,
           fileName: parsed.fileName,
           contentType: parsed.contentType,
           size: parsed.size,
           thumbnailDataUrl: parsed.thumbnailDataUrl,
+          waveform: parsed.waveform as number[] | undefined,
           contentKeyBase64: parsed.contentKeyBase64,
           ivBase64: parsed.ivBase64
         }
@@ -4210,9 +5331,22 @@ function toAttachmentDescriptor(attachment: NonNullable<CachedMessage['attachmen
     contentType: attachment.contentType,
     size: attachment.size,
     thumbnailDataUrl: attachment.thumbnailDataUrl,
+    waveform: attachment.waveform,
     contentKeyBase64: attachment.contentKeyBase64,
     ivBase64: attachment.ivBase64
   }
+}
+
+function isVoiceNoteAttachment(
+  attachment: Pick<NonNullable<CachedMessage['attachment']>, 'fileName' | 'contentType'>
+): boolean {
+  return attachment.contentType.startsWith('audio/') && attachment.fileName.startsWith('voice-note-')
+}
+
+function isRoundVideoAttachment(
+  attachment: Pick<NonNullable<CachedMessage['attachment']>, 'fileName' | 'contentType'>
+): boolean {
+  return attachment.contentType.startsWith('video/') && attachment.fileName.startsWith('round-video-')
 }
 
 function inferMediaKind(contentType: string): 'file' | 'image' | 'audio' | 'video' {
@@ -4247,6 +5381,111 @@ function resolveReplyPreview(messages: CachedMessage[], replyToMessageId: string
   return preview.length > 64 ? `${preview.slice(0, 61)}...` : preview
 }
 
+function pickPinnedMessage(messages: CachedMessage[]): CachedMessage | null {
+  const pinnedMessages = messages.filter((message) => message.pinnedAt && !message.deletedAt)
+
+  if (pinnedMessages.length === 0) {
+    return null
+  }
+
+  return [...pinnedMessages].sort((left, right) => {
+    const leftTime = Date.parse(left.pinnedAt ?? left.sentAt)
+    const rightTime = Date.parse(right.pinnedAt ?? right.sentAt)
+
+    if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) {
+      return (right.pinnedAt ?? right.sentAt).localeCompare(left.pinnedAt ?? left.sentAt)
+    }
+
+    return rightTime - leftTime
+  })[0]
+}
+
+function resolvePinnedPreview(message: CachedMessage): string {
+  const preview = message.text.trim()
+
+  if (preview.length === 0) {
+    return 'Encrypted message'
+  }
+
+  return preview.length > 96 ? `${preview.slice(0, 93)}...` : preview
+}
+
+function extractFirstHttpUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s]+/i)
+
+  if (!match) {
+    return null
+  }
+
+  try {
+    return new URL(match[0]).href
+  } catch {
+    return null
+  }
+}
+
+function resolveLinkPreview(
+  text: string,
+  metadata: LinkMetadata | null
+): { href: string; hostname: string; title: string; description: string | null } | null {
+  const href = extractFirstHttpUrl(text)
+
+  if (!href) {
+    return null
+  }
+
+  try {
+    const url = new URL(href)
+    const hostname = url.hostname.replace(/^www\./i, '')
+    const fallbackPath = url.pathname === '/' ? '' : url.pathname
+    const fallbackTitle = `${hostname}${fallbackPath}`.slice(0, 96) || href
+    const title = metadata?.title?.trim() || fallbackTitle
+    const description = metadata?.description?.trim() || metadata?.canonical_url?.trim() || null
+
+    return {
+      href,
+      hostname: metadata?.hostname || hostname,
+      title,
+      description
+    }
+  } catch {
+    return null
+  }
+}
+
+async function deriveSafetyNumber(
+  localIdentityPublicKeyBase64: string,
+  remoteIdentityPublicKeyBase64: string
+): Promise<string> {
+  if (!window.crypto?.subtle) {
+    return ''
+  }
+
+  try {
+    const left = base64ToBytes(localIdentityPublicKeyBase64)
+    const right = base64ToBytes(remoteIdentityPublicKeyBase64)
+    const combined = new Uint8Array(left.length + right.length)
+    const ordered = [left, right].sort((a, b) => {
+      const leftKey = Array.from(a).join(',')
+      const rightKey = Array.from(b).join(',')
+      return leftKey.localeCompare(rightKey)
+    })
+
+    combined.set(ordered[0], 0)
+    combined.set(ordered[1], ordered[0].length)
+
+    const digest = new Uint8Array(await window.crypto.subtle.digest('SHA-256', combined))
+    const digits = Array.from(digest)
+      .map((value) => (value % 100).toString().padStart(2, '0'))
+      .join('')
+      .slice(0, 30)
+
+    return digits.match(/.{1,5}/g)?.join(' ') ?? digits
+  } catch {
+    return ''
+  }
+}
+
 function formatRelativeTime(value: string | null): string {
   if (!value) {
     return 'Now'
@@ -4264,69 +5503,27 @@ function formatRelativeTime(value: string | null): string {
   })
 }
 
+function formatMediaClock(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return '0:00'
+  }
+
+  const totalSeconds = Math.floor(value)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
 function mergeCallSignals(current: CallSignal[], nextSignal: CallSignal): CallSignal[] {
   return [...current.filter((signal) => signal.id !== nextSignal.id), nextSignal]
     .sort((left, right) => left.inserted_at.localeCompare(right.inserted_at))
     .slice(-12)
 }
 
-function parseMembraneBridgeSignal(eventPayload: string): CallSignal | null {
-  try {
-    const parsed = JSON.parse(eventPayload) as {
-      kind?: unknown
-      signal?: Record<string, unknown>
-    }
-
-    if (parsed.kind !== 'call_signal_bridge' || !parsed.signal || typeof parsed.signal !== 'object') {
-      return null
-    }
-
-    const signal = parsed.signal
-
-    if (
-      typeof signal.id !== 'string' ||
-      typeof signal.call_id !== 'string' ||
-      typeof signal.from_device_id !== 'string' ||
-      typeof signal.signal_type !== 'string' ||
-      typeof signal.payload !== 'string' ||
-      typeof signal.inserted_at !== 'string'
-    ) {
-      return null
-    }
-
-    if (
-      signal.signal_type !== 'offer' &&
-      signal.signal_type !== 'answer' &&
-      signal.signal_type !== 'ice' &&
-      signal.signal_type !== 'renegotiate' &&
-      signal.signal_type !== 'heartbeat'
-    ) {
-      return null
-    }
-
-    return {
-      id: signal.id,
-      call_id: signal.call_id,
-      from_device_id: signal.from_device_id,
-      target_device_id: typeof signal.target_device_id === 'string' ? signal.target_device_id : null,
-      signal_type: signal.signal_type,
-      payload: signal.payload,
-      inserted_at: signal.inserted_at
-    }
-  } catch {
-    return null
-  }
-}
-
 function readMembraneNativeEventType(eventPayload: string): string | null {
   try {
     const parsed = JSON.parse(eventPayload) as {
-      kind?: unknown
       type?: unknown
-    }
-
-    if (parsed.kind === 'call_signal_bridge') {
-      return null
     }
 
     return typeof parsed.type === 'string' ? parsed.type : null

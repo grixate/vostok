@@ -222,7 +222,6 @@ defmodule VostokServer.Calls do
          {:ok, signal} <- insert_signal(signal_attrs) do
       presented_signal = present_signal(signal)
       maybe_ensure_room(call)
-      bridge_signal_to_webrtc_endpoint(call, signal)
       broadcast_signal(call.chat_id, presented_signal)
 
       {:ok,
@@ -571,32 +570,6 @@ defmodule VostokServer.Calls do
     |> Kernel.>(0)
   end
 
-  defp bridge_signal_to_webrtc_endpoint(%CallSession{} = call, %CallSignal{} = signal) do
-    signal
-    |> signal_bridge_targets(call)
-    |> Enum.each(fn endpoint_id ->
-      ensure_bridge_endpoint(call, endpoint_id, %{source: "signal_bridge"})
-      MembraneRoom.forward_media_event(call.id, endpoint_id, encode_signal_bridge_event(signal))
-    end)
-  end
-
-  defp signal_bridge_targets(
-         %CallSignal{
-           from_device_id: from_device_id,
-           target_device_id: target_device_id
-         },
-         %CallSession{} = call
-       ) do
-    case target_device_id do
-      nil ->
-        joined_targets = list_joined_participant_device_ids(call.id, from_device_id)
-        if joined_targets == [], do: [from_device_id], else: joined_targets
-
-      endpoint_id ->
-        [endpoint_id]
-    end
-  end
-
   defp ensure_bridge_endpoint(%CallSession{} = call, endpoint_id, metadata)
        when is_binary(endpoint_id) and is_map(metadata) do
     merged_metadata =
@@ -609,24 +582,6 @@ defmodule VostokServer.Calls do
       )
 
     MembraneRoom.ensure_webrtc_endpoint(call.id, endpoint_id, merged_metadata)
-  end
-
-  defp list_joined_participant_device_ids(call_id, excluded_device_id) do
-    from(participant in CallParticipant,
-      where:
-        participant.call_id == ^call_id and participant.status == "joined" and
-          participant.device_id != ^excluded_device_id,
-      order_by: [asc: participant.inserted_at],
-      select: participant.device_id
-    )
-    |> Repo.all()
-  end
-
-  defp encode_signal_bridge_event(%CallSignal{} = signal) do
-    Jason.encode!(%{
-      kind: "call_signal_bridge",
-      signal: present_signal(signal)
-    })
   end
 
   defp list_presented_participants(call_id) do

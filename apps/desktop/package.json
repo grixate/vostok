@@ -4,8 +4,14 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build && npm run manifest",
-    "manifest": "node ../../ops/generate-desktop-release-manifest.mjs"
+    "build": "npm run build:unsigned",
+    "build:unsigned": "tauri build && npm run manifest",
+    "manifest": "node ../../ops/generate-desktop-release-manifest.mjs",
+    "sign": "node ../../ops/sign-desktop-bundles.mjs",
+    "package:release": "node ../../ops/package-desktop-release.mjs",
+    "release": "npm run build:unsigned && npm run sign && npm run package:release",
+    "promote:stable": "node ../../ops/promote-desktop-release.mjs --channel stable",
+    "rollback:stable": "node ../../ops/rollback-desktop-release.mjs --channel stable"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.1"

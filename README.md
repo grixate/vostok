@@ -35,32 +35,50 @@ Desktop wrapper:
 
 - `npm run setup:desktop`
 - `npm run dev:desktop`
-- `npm run build:desktop` (now also regenerates the desktop release manifest)
+- `npm run build:desktop` (unsigned build + manifest)
 - `npm run manifest:desktop`
+- `npm run sign:desktop`
+- `npm run package:desktop`
+- `npm run release:desktop`
+- `npm run promote:desktop:stable`
+- `npm run rollback:desktop:stable`
 
 Helpful endpoints:
 
 - `GET /health`
 - `GET /api/v1/health`
 - `GET /api/v1/bootstrap`
+- `POST /api/v1/federation/deliveries`
 - `POST /api/v1/register`
 - `POST /api/v1/auth/challenge`
 - `POST /api/v1/auth/verify`
+- `POST /api/v1/devices/link`
 - `POST /api/v1/devices/prekeys`
 - `GET /api/v1/users/:username/devices/prekeys`
 - `GET /api/v1/me`
 - `GET /api/v1/chats`
 - `POST /api/v1/chats/direct`
 - `POST /api/v1/chats/group`
+- `PATCH /api/v1/chats/:chat_id/group`
+- `GET /api/v1/chats/:chat_id/members`
+- `PATCH /api/v1/chats/:chat_id/members/:user_id`
+- `POST /api/v1/chats/:chat_id/members/:user_id/remove`
+- `GET /api/v1/chats/:chat_id/sender-keys`
+- `POST /api/v1/chats/:chat_id/sender-keys`
 - `POST /api/v1/chats/:chat_id/session-bootstrap`
+- `POST /api/v1/chats/:chat_id/session-rekey`
 - `GET /api/v1/chats/:chat_id/recipient-devices`
 - `GET /api/v1/chats/:chat_id/messages`
 - `POST /api/v1/chats/:chat_id/messages`
+- `PATCH /api/v1/chats/:chat_id/messages/:message_id`
+- `POST /api/v1/chats/:chat_id/messages/:message_id/delete`
+- `POST /api/v1/chats/:chat_id/messages/:message_id/pin`
 - `POST /api/v1/chats/:chat_id/messages/:message_id/reactions`
 - `POST /api/v1/media/uploads`
 - `PATCH /api/v1/media/uploads/:id/part`
 - `POST /api/v1/media/uploads/:id/complete`
 - `GET /api/v1/media/:id`
+- `POST /api/v1/media/link-metadata`
 - `GET /api/v1/admin/overview`
 - `GET /api/v1/admin/federation/peers`
 - `POST /api/v1/admin/federation/peers`

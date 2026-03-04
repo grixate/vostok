@@ -77,9 +77,12 @@ defmodule VostokServerWeb.ChatFlowTest do
     assert %{
              "sessions" => [
                %{
+                 "established_at" => nil,
+                 "establishment_state" => "pending_first_message",
                  "chat_id" => ^chat_id,
                  "handshake_hash" => handshake_hash,
                  "initiator_device_id" => ^device_id,
+                 "id" => session_id,
                  "initiator_ephemeral_public_key" => ^initiator_ephemeral_public_key,
                  "recipient_device_id" => ^device_id,
                  "recipient_one_time_prekey" => nil,
@@ -105,9 +108,12 @@ defmodule VostokServerWeb.ChatFlowTest do
     assert %{
              "sessions" => [
                %{
+                 "established_at" => nil,
+                 "establishment_state" => "pending_first_message",
                  "chat_id" => ^chat_id,
                  "handshake_hash" => refreshed_handshake_hash,
                  "initiator_device_id" => ^device_id,
+                 "id" => ^session_id,
                  "initiator_ephemeral_public_key" => ^rotated_initiator_ephemeral_public_key,
                  "recipient_device_id" => ^device_id,
                  "recipient_one_time_prekey" => nil,
@@ -209,6 +215,7 @@ defmodule VostokServerWeb.ChatFlowTest do
         ciphertext: ciphertext,
         header: header,
         message_kind: "text",
+        established_session_ids: [session_id],
         recipient_envelopes: %{
           device_id => recipient_envelope
         }
@@ -225,6 +232,90 @@ defmodule VostokServerWeb.ChatFlowTest do
                "sender_device_id" => ^device_id
              }
            } = json_response(create_message_conn, 201)
+
+    established_bootstrap_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/session-bootstrap", %{})
+
+    assert %{
+             "sessions" => [
+               %{
+                 "established_at" => established_at,
+                 "establishment_state" => "established",
+                 "handshake_hash" => ^refreshed_handshake_hash,
+                 "initiator_ephemeral_public_key" => ^rotated_initiator_ephemeral_public_key,
+                 "id" => ^session_id
+               }
+             ]
+           } = json_response(established_bootstrap_conn, 200)
+
+    assert is_binary(established_at)
+    refute established_at == ""
+
+    ignored_rebootstrap_ephemeral_public_key = Base.encode64(:crypto.strong_rand_bytes(65))
+
+    frozen_bootstrap_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/session-bootstrap", %{
+        initiator_ephemeral_keys: %{
+          device_id => ignored_rebootstrap_ephemeral_public_key
+        }
+      })
+
+    assert %{
+             "sessions" => [
+               %{
+                 "established_at" => ^established_at,
+                 "establishment_state" => "established",
+                 "handshake_hash" => ^refreshed_handshake_hash,
+                 "id" => ^session_id,
+                 "initiator_ephemeral_public_key" => ^rotated_initiator_ephemeral_public_key
+               }
+             ]
+           } = json_response(frozen_bootstrap_conn, 200)
+
+    explicit_rekey_ephemeral_public_key = Base.encode64(:crypto.strong_rand_bytes(65))
+
+    explicit_rekey_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/session-rekey", %{
+        initiator_ephemeral_keys: %{
+          device_id => explicit_rekey_ephemeral_public_key
+        }
+      })
+
+    assert %{"sessions" => rekeyed_sessions} = json_response(explicit_rekey_conn, 200)
+
+    assert %{
+             "established_at" => nil,
+             "establishment_state" => "pending_first_message",
+             "handshake_hash" => rekey_handshake_hash,
+             "id" => rekeyed_session_id,
+             "initiator_ephemeral_public_key" => ^explicit_rekey_ephemeral_public_key,
+             "session_state" => "active",
+             "superseded_at" => nil
+           } =
+             Enum.find(rekeyed_sessions, &(&1["session_state"] == "active"))
+
+    assert %{
+             "established_at" => ^established_at,
+             "establishment_state" => "established",
+             "handshake_hash" => ^refreshed_handshake_hash,
+             "id" => ^session_id,
+             "initiator_ephemeral_public_key" => ^rotated_initiator_ephemeral_public_key,
+             "session_state" => "superseded",
+             "superseded_at" => superseded_at
+           } =
+             Enum.find(rekeyed_sessions, &(&1["id"] == session_id))
+
+    assert is_binary(rekey_handshake_hash)
+    refute rekey_handshake_hash in [handshake_hash, refreshed_handshake_hash]
+    refute rekeyed_session_id == session_id
+    assert is_binary(superseded_at)
+    refute superseded_at == ""
 
     react_message_conn =
       build_conn()
@@ -261,10 +352,63 @@ defmodule VostokServerWeb.ChatFlowTest do
 
     assert %{
              "message" => %{
+               "id" => reply_message_id,
                "message_kind" => "text",
                "reply_to_message_id" => ^first_message_id
              }
            } = json_response(reply_message_conn, 201)
+
+    edit_reply_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> patch("/api/v1/chats/#{chat_id}/messages/#{reply_message_id}", %{
+        client_id: "client-reply",
+        ciphertext: ciphertext,
+        header: header,
+        message_kind: "text",
+        reply_to_message_id: first_message_id,
+        recipient_envelopes: %{
+          device_id => recipient_envelope
+        }
+      })
+
+    assert %{
+             "message" => %{
+               "id" => ^reply_message_id,
+               "edited_at" => edited_at,
+               "reply_to_message_id" => ^first_message_id
+             }
+           } = json_response(edit_reply_conn, 200)
+
+    assert is_binary(edited_at)
+
+    pin_first_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{first_message_id}/pin", %{})
+
+    assert %{
+             "message" => %{
+               "id" => ^first_message_id,
+               "pinned_at" => first_pinned_at
+             }
+           } = json_response(pin_first_message_conn, 200)
+
+    assert is_binary(first_pinned_at)
+
+    pin_reply_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{reply_message_id}/pin", %{})
+
+    assert %{
+             "message" => %{
+               "id" => ^reply_message_id,
+               "pinned_at" => reply_pinned_at
+             }
+           } = json_response(pin_reply_message_conn, 200)
+
+    assert is_binary(reply_pinned_at)
 
     attachment_message_conn =
       build_conn()
@@ -281,9 +425,25 @@ defmodule VostokServerWeb.ChatFlowTest do
 
     assert %{
              "message" => %{
+               "id" => attachment_message_id,
                "message_kind" => "attachment"
              }
            } = json_response(attachment_message_conn, 201)
+
+    delete_attachment_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{attachment_message_id}/delete", %{})
+
+    assert %{
+             "message" => %{
+               "id" => ^attachment_message_id,
+               "deleted_at" => deleted_at,
+               "recipient_envelope" => nil
+             }
+           } = json_response(delete_attachment_conn, 200)
+
+    assert is_binary(deleted_at)
 
     chats_conn =
       build_conn()
@@ -310,6 +470,9 @@ defmodule VostokServerWeb.ChatFlowTest do
                  "ciphertext" => ^ciphertext,
                  "header" => ^header,
                  "message_kind" => "text",
+                 "pinned_at" => nil,
+                 "edited_at" => nil,
+                 "deleted_at" => nil,
                  "reactions" => [
                    %{
                      "count" => 1,
@@ -323,10 +486,15 @@ defmodule VostokServerWeb.ChatFlowTest do
                },
                %{
                  "message_kind" => "text",
+                 "pinned_at" => ^reply_pinned_at,
+                 "edited_at" => ^edited_at,
+                 "deleted_at" => nil,
                  "reply_to_message_id" => ^first_message_id
                },
                %{
-                 "message_kind" => "attachment"
+                 "message_kind" => "attachment",
+                 "pinned_at" => nil,
+                 "deleted_at" => ^deleted_at
                }
              ]
            } = json_response(messages_conn, 200)

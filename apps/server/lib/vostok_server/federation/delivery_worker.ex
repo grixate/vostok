@@ -11,11 +11,17 @@ defmodule VostokServer.Federation.DeliveryWorker do
   def perform(%Oban.Job{args: %{"delivery_job_id" => delivery_job_id}})
       when is_binary(delivery_job_id) do
     case Federation.dispatch_delivery(delivery_job_id) do
-      {:ok, %{status: "delivered"}} ->
+      {:ok, _delivery} ->
         :ok
 
-      {:ok, %{status: "failed"}} ->
-        {:snooze, 30}
+      {:retry, _delivery, retry_seconds} when is_integer(retry_seconds) and retry_seconds > 0 ->
+        {:snooze, retry_seconds}
+
+      {:retry, _delivery, _retry_seconds} ->
+        {:snooze, 1}
+
+      {:discard, delivery} ->
+        {:discard, "permanent federation failure: #{Map.get(delivery, :last_error) || "unknown"}"}
 
       {:error, {:not_found, _message}} ->
         :ok

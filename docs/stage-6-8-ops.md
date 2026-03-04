@@ -14,6 +14,8 @@ This repository now includes early operator scaffolding that reaches into the la
   - `GET /api/v1/admin/federation/deliveries`
   - `POST /api/v1/admin/federation/peers/:peer_id/deliveries`
   - `POST /api/v1/admin/federation/deliveries/:job_id/attempt`
+- Federation ingress API:
+  - `POST /api/v1/federation/deliveries`
 - TURN credential API:
   - `POST /api/v1/calls/turn-credentials`
 - Call session APIs:
@@ -32,25 +34,27 @@ This repository now includes early operator scaffolding that reaches into the la
 - Persisted `federation_peers` table for remote peer configuration
 - Persisted `federation_delivery_jobs` table for durable outbound queue state
 - Queued federation deliveries now auto-enqueue background Oban jobs for worker-driven dispatch
+- Outbound federation deliveries now dispatch over a real mTLS `Req` transport to remote `/api/v1/federation/deliveries`
+- Inbound federation relay ingestion now persists idempotent `inbound` delivery rows keyed by remote delivery ID
 - Persisted `call_sessions` table for lightweight call signaling state
 - Persisted `call_participants` table for device-level join/leave state
 - Persisted `call_signals` table for offer/answer/ICE signaling state
 - Supervised `VostokServer.Calls.MembraneRoom` processes that boot real `membrane_rtc_engine` instances
 - Per-device `Membrane.RTC.Engine.Endpoint.WebRTC` instances now boot inside each active room
-- A local endpoint queue is retained only for custom bridge events plus native endpoint-emitted media events
-- `call_signals` are mirrored into the per-device Membrane endpoint queue, and native WebRTC endpoints now emit their own media events (for example the initial `connected` event)
-- Joining a call now provisions the current device's Membrane bridge endpoint automatically
-- Leaving a call now removes the current device's bridge endpoint and clears the local queue state
+- A local endpoint queue is retained for polled native endpoint-emitted media events (for example the initial `connected` event)
+- `call_signals` remain persisted and realtime-visible for operator inspection while native media negotiation runs through Membrane
+- Joining a call now provisions the current device's Membrane WebRTC endpoint automatically
+- Leaving a call now removes the current device endpoint and clears local endpoint queue state
 - Call start and end now write `system` messages into the chat timeline, including a missed-call variant when no remote participant ever joined
 - Tauri desktop wrapper scaffold in `apps/desktop`
 - Web operator surface for peer activation, heartbeat, call-session controls, Membrane room join state, per-device endpoint provisioning, and signaling inspection
-- Browser-side `RTCPeerConnection` lab that generates real SDP offers/answers and ICE candidates against the existing signaling API
-- Browser-side `getUserMedia` track attachment so offers can advertise real microphone/camera transports before server-side Membrane media handling lands
+- The Stage 6 operator surface now renders recent federation delivery rows, not just aggregate queue counts
+- The Stage 6 operator surface can now queue a relay on a peer row and manually advance recent delivery jobs
 - Browser-side `@jellyfish-dev/membrane-webrtc-js` client wiring that now sends native `connect` / `updateEndpointMetadata` media events and consumes native endpoint events from the polled Membrane queue
-- Local browser microphone/camera tracks now sync into the native Membrane client automatically after the endpoint connects
+- Local browser microphone/camera tracks now attach directly into the native Membrane client pipeline
 - Automatic endpoint polling in the web call panel while a per-device Membrane endpoint exists
-- Polled `call_signal_bridge` events are now merged into the client call state and processed as a WebRTC fallback transport
-- Once the native Membrane client is connected, fallback manual offer/answer/ICE controls remain visible for debugging but are disabled by default
+- The fallback browser `RTCPeerConnection` lab path is fully removed from the web shell and operator panel
+- Backend `call_signal_bridge` fanout has been removed, so polled endpoint queues now carry protocol-native Membrane media events only
 - The Stage 7 operator panel now exposes native remote endpoint IDs and track IDs reported by the Membrane browser client
 - The Stage 7 operator panel now distinguishes native remote track discovery from native remote track readiness (`Negotiating` vs `Ready`)
 - Ready native remote tracks now render as live audio/video previews in the Stage 7 operator panel
@@ -75,20 +79,15 @@ This repository now includes early operator scaffolding that reaches into the la
 - The desktop host card can now reset the native window back to its default centered frame, and `Cmd/Ctrl+Shift+0` exposes the same action from the keyboard
 - The desktop host card can now copy a full desktop diagnostics snapshot to the clipboard for debugging and support, and `Cmd/Ctrl+Shift+D` exposes the same action from the keyboard
 - The repo now includes a desktop release-manifest generator that hashes built artifacts into `apps/desktop/release-manifest.json`
-- Untargeted signals now fan out to joined participant device endpoints by default, with sender-loopback only as a fallback
-- The web call panel now exposes an explicit "Broadcast to joined peers" signal target, matching the backend fanout behavior
-- Backend coverage now includes a real two-device joined-call fanout test for untargeted signal bridging
+- The repo now includes desktop signing automation (`ops/sign-desktop-bundles.mjs`) for signed bundle output with optional notarization
+- The repo now includes installer-grade desktop release packaging (`ops/package-desktop-release.mjs`) into versioned `apps/desktop/releases/<version>` directories
+- The repo now includes desktop channel promotion and rollback orchestration (`ops/promote-desktop-release.mjs`, `ops/rollback-desktop-release.mjs`)
 - The chat timeline now renders persisted call lifecycle entries as system bubbles instead of opaque encrypted placeholders
 
 ## Not Yet Implemented
 
-- mTLS federation transport
-- real cross-instance delivery over the new durable queue (the queue now auto-enqueues background workers, but transport is still local-only)
-- full replacement of the fallback browser `RTCPeerConnection` lab with the native `membrane-webrtc-js` path
-- camera/microphone track attachment and binding those transports into the real Membrane RTC Engine pipeline
-- signed desktop bundles and installer flows
-- rollback/update orchestration
+- None in the current Stage 6-8 scope.
 
 ## Current Meaning of Stage 6-8
 
-The backend now exposes real operator and call-setup surfaces instead of placeholders. This is not complete federation or calling yet, but it now boots a real `membrane_rtc_engine` per room, creates live `Membrane.RTC.Engine.Endpoint.WebRTC` endpoints per joined device, and preserves the bridge queue only for custom fallback traffic while the protocol-native client path is finished.
+The backend now exposes real operator and call-setup surfaces instead of placeholders. It boots a real `membrane_rtc_engine` per room, creates live `Membrane.RTC.Engine.Endpoint.WebRTC` endpoints per joined device, and now runs a native Membrane-first media path without the previous browser-only fallback bridge.

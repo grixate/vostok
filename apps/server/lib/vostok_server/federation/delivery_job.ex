@@ -15,6 +15,7 @@ defmodule VostokServer.Federation.DeliveryJob do
     field :event_type, :string
     field :status, :string
     field :payload, :map
+    field :remote_delivery_id, :string
     field :attempt_count, :integer, default: 0
     field :available_at, :utc_datetime_usec
     field :last_attempted_at, :utc_datetime_usec
@@ -34,6 +35,7 @@ defmodule VostokServer.Federation.DeliveryJob do
       :event_type,
       :status,
       :payload,
+      :remote_delivery_id,
       :attempt_count,
       :available_at,
       :last_attempted_at,
@@ -41,9 +43,12 @@ defmodule VostokServer.Federation.DeliveryJob do
       :last_error
     ])
     |> validate_required([:peer_id, :direction, :event_type, :status, :payload, :available_at])
-    |> validate_inclusion(:direction, ["outbound"])
+    |> validate_inclusion(:direction, ["outbound", "inbound"])
     |> validate_inclusion(:status, ["queued", "processing", "delivered", "failed"])
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
     |> assoc_constraint(:peer)
+    |> unique_constraint(:remote_delivery_id,
+      name: :federation_delivery_jobs_peer_direction_remote_delivery_id_index
+    )
   end
 end

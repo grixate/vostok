@@ -20,6 +20,13 @@ This is the Stage 8 desktop scaffold for the Tauri wrapper around the Vostok web
 - The shared web shell can also reset the native desktop frame back to the default centered size from the host card or `Cmd/Ctrl+Shift+0`
 - The shared web shell can also copy a desktop diagnostics snapshot (runtime, window state, layout state) to the clipboard from the host card or `Cmd/Ctrl+Shift+D`
 - `npm run build` now emits `release-manifest.json` automatically after packaging, and `npm run manifest` can regenerate it on demand
+- Release signing and packaging scripts are now wired:
+  - `npm run sign` signs generated bundles with `codesign` (macOS) and optionally notarizes
+  - `npm run package:release` creates a versioned release folder under `apps/desktop/releases/<version>`
+  - `npm run release` runs unsigned build + signing + release packaging end-to-end
+- Release channel orchestration is now available:
+  - `npm run promote:stable` updates `apps/desktop/releases/channels/stable.json`
+  - `npm run rollback:stable` rolls stable back to the previous promoted version
 
 ## Commands
 
@@ -27,6 +34,16 @@ This is the Stage 8 desktop scaffold for the Tauri wrapper around the Vostok web
 - `npm run dev`
 - `npm run build`
 - `npm run manifest`
+- `npm run sign`
+- `npm run package:release`
+- `npm run release`
+- `npm run promote:stable`
+- `npm run rollback:stable`
+
+## Signing Environment
+
+- `APPLE_CODESIGN_IDENTITY` (required for `npm run sign`)
+- `APPLE_NOTARY_PROFILE` (optional, enables `xcrun notarytool submit ... --wait` and stapling)
 
 ## Notes
 
@@ -34,3 +51,4 @@ This is the Stage 8 desktop scaffold for the Tauri wrapper around the Vostok web
 - The root workspace now exposes `npm run setup:desktop` as a one-step install for this package.
 - `npm run dev` and `npm run build` now rely on the Tauri `beforeDevCommand` / `beforeBuildCommand` hooks to start or build the shared web shell automatically.
 - The current Rust entrypoint is minimal and only bootstraps the Tauri host.
+- Release channel files live under `apps/desktop/releases/channels/` and keep a bounded promotion history for rollback.

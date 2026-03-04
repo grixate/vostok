@@ -4,6 +4,7 @@ export type CachedAttachment = {
   contentType: string
   size: number
   thumbnailDataUrl?: string
+  waveform?: number[]
   contentKeyBase64?: string
   ivBase64?: string
 }
@@ -14,6 +15,9 @@ export type CachedMessage = {
   replyToMessageId?: string
   text: string
   sentAt: string
+  pinnedAt?: string
+  editedAt?: string
+  deletedAt?: string
   side: 'incoming' | 'outgoing' | 'system'
   decryptable: boolean
   attachment?: CachedAttachment
