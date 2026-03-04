@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "chat.vostok.desktop",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "devUrl": "http://localhost:5173",
-    "frontendDist": "../web/dist"
+    "beforeDevCommand": "cd ../.. && npm run dev --workspace @vostok/web -- --host 127.0.0.1",
+    "beforeBuildCommand": "cd ../.. && npm run build --workspace @vostok/web",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [

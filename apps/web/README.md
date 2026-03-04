@@ -55,6 +55,15 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - desktop keyboard shortcuts are now wired for quick chat focus, send, and voice/video call start actions
 - desktop keyboard navigation now supports `Alt+ArrowUp/Down` chat switching with visible focus rings on the chat list
 - the desktop sidebar now includes a live chat-title filter with `Cmd/Ctrl+Shift+F` keyboard focus
+- the desktop shell now supports a toggleable detail rail (`Cmd/Ctrl+\\`) that switches between two-column and three-column layout
+- the detail-rail preference is now persisted in local storage and automatically re-applies whenever the window is back in wide desktop mode
+- when running inside Tauri, the web shell now exposes a desktop host bridge for runtime info plus minimize/maximize window controls
+- when running inside Tauri, the sidebar now shows a compact desktop titlebar strip and keyboard shortcuts for minimize/maximize host window actions
+- the desktop titlebar now uses a real Tauri window-state query and a draggable region, so its controls and state label stay aligned with the host window
+- the desktop shell now listens to native Tauri window resize/move/focus events, so maximize and focus state stay synchronized without manual refresh
+- the desktop titlebar and host card now expose an always-on-top toggle, including a `Cmd/Ctrl+Shift+P` shortcut
+- the desktop shell now synchronizes the native Tauri window title with the active chat and call mode
+- the desktop shell now persists and restores the native window frame (size and position) across launches
 
 ## Commands
 

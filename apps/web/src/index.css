@@ -59,6 +59,14 @@ button {
   padding: 1rem;
 }
 
+.app-shell--detail-hidden {
+  grid-template-columns: 320px minmax(320px, 1fr);
+}
+
+.app-shell--detail-hidden .detail-rail {
+  display: none;
+}
+
 .sidebar,
 .conversation-pane,
 .detail-rail {
@@ -79,6 +87,51 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.detail-rail-toggle {
+  width: 100%;
+}
+
+.desktop-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.desktop-titlebar--inactive {
+  opacity: 0.72;
+}
+
+.desktop-titlebar__meta {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.desktop-titlebar__meta strong {
+  font-size: 0.84rem;
+}
+
+.desktop-titlebar__meta span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.desktop-titlebar__actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.desktop-titlebar__button {
+  width: 2.2rem;
+  height: 2.2rem;
+  box-shadow: none;
 }
 
 .sidebar__header h1,
@@ -194,6 +247,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.detail-rail--hidden {
+  display: none;
 }
 
 .auth-shell {

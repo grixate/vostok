@@ -54,6 +54,17 @@ This repository now includes early operator scaffolding that reaches into the la
 - The desktop/web shell now includes keyboard shortcuts for composer focus, direct/group entry points, quick send, and voice/video call launch
 - The desktop/web shell now supports keyboard chat-list traversal (`Alt+ArrowUp/Down`) with explicit focus treatment
 - The desktop/web sidebar now includes a live title filter, and `Cmd/Ctrl+Shift+F` focuses that filter for keyboard-first chat selection
+- The desktop/web shell now supports a user-controlled detail rail toggle (`Cmd/Ctrl+\`) that switches between focused two-column and full three-column mode
+- The detail-rail layout preference is now persisted locally and automatically reapplied when the viewport returns to desktop width
+- The Tauri desktop wrapper now auto-starts the shared web dev server in development and auto-builds the shared web bundle for desktop packaging
+- The Tauri host now exposes runtime metadata plus minimize/maximize window commands, and the shared web shell consumes that bridge when running inside desktop mode
+- The desktop shell now renders a compact titlebar control strip and supports keyboard minimize/maximize shortcuts when hosted in Tauri
+- The desktop titlebar now doubles as a draggable host region and initializes from the real native maximized state
+- Full desktop packaging now succeeds locally and produces both `Vostok.app` and a distributable `.dmg`
+- The desktop shell now reacts to native Tauri resize/move/focus events, keeping window maximize/focus state live in the UI
+- The desktop shell now exposes a real always-on-top control with live state in both the titlebar and the desktop host panel
+- The native desktop window title now tracks the active chat and live call mode instead of staying static
+- The desktop wrapper now restores and re-persists its last window frame, so reopened sessions keep their prior size and position
 - Untargeted signals now fan out to joined participant device endpoints by default, with sender-loopback only as a fallback
 - The web call panel now exposes an explicit "Broadcast to joined peers" signal target, matching the backend fanout behavior
 - Backend coverage now includes a real two-device joined-call fanout test for untargeted signal bridging

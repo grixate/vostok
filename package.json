@@ -12,6 +12,7 @@
     "build:desktop": "cd apps/desktop && npm run build",
     "dev:web": "npm run dev --workspace @vostok/web",
     "dev:desktop": "cd apps/desktop && npm run dev",
+    "setup:desktop": "cd apps/desktop && npm install",
     "lint:web": "npm run lint --workspace @vostok/web",
     "dev:server": "cd apps/server && mix phx.server",
     "setup:server": "cd apps/server && mix setup",

@@ -31,6 +31,12 @@ Backend:
 - `cd apps/server && mix ecto.create && mix ecto.migrate`
 - `npm run dev:server`
 
+Desktop wrapper:
+
+- `npm run setup:desktop`
+- `npm run dev:desktop`
+- `npm run build:desktop`
+
 Helpful endpoints:
 
 - `GET /health`

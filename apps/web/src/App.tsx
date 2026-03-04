@@ -113,6 +113,22 @@ import {
   type MembraneRemoteEndpointSnapshot,
   type MembraneRemoteTrackSnapshot
 } from './lib/membrane-native'
+import {
+  applyDesktopWindowGeometry,
+  closeDesktopWindow,
+  fetchDesktopWindowGeometry,
+  fetchDesktopRuntimeInfo,
+  fetchDesktopWindowState,
+  type DesktopWindowGeometry,
+  isDesktopShell,
+  minimizeDesktopWindow,
+  subscribeDesktopWindowGeometry,
+  setDesktopWindowTitle,
+  subscribeDesktopWindowState,
+  toggleDesktopWindowAlwaysOnTop,
+  toggleDesktopWindowMaximize,
+  type DesktopRuntimeInfo
+} from './lib/desktop-shell'
 import { base64ToBytes } from './lib/base64'
 
 type AuthView = 'welcome' | 'register' | 'login' | 'link' | 'chat'
@@ -149,6 +165,9 @@ type AttachmentDescriptor = {
 }
 
 const STORAGE_KEY = 'vostok.device'
+const DETAIL_RAIL_STORAGE_KEY = 'vostok.layout.detail_rail_visible'
+const DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY = 'vostok.desktop.window_geometry'
+const DESKTOP_DETAIL_RAIL_BREAKPOINT = 1200
 const CALL_SIGNAL_BROADCAST = '__broadcast__'
 
 function readStoredDevice(): StoredDevice | null {
@@ -175,6 +194,59 @@ function persistStoredDevice(device: StoredDevice | null) {
   window.localStorage.removeItem(STORAGE_KEY)
 }
 
+function readDetailRailPreference(): boolean {
+  if (typeof window === 'undefined') {
+    return true
+  }
+
+  const raw = window.localStorage.getItem(DETAIL_RAIL_STORAGE_KEY)
+
+  if (raw === 'true') {
+    return true
+  }
+
+  if (raw === 'false') {
+    return false
+  }
+
+  return window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT
+}
+
+function readDesktopWindowGeometry(): DesktopWindowGeometry | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY)
+
+  if (!raw) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<DesktopWindowGeometry>
+
+    if (
+      typeof parsed.x === 'number' &&
+      typeof parsed.y === 'number' &&
+      typeof parsed.width === 'number' &&
+      typeof parsed.height === 'number'
+    ) {
+      return {
+        x: parsed.x,
+        y: parsed.y,
+        width: parsed.width,
+        height: parsed.height
+      }
+    }
+  } catch {
+    // Fall through to remove invalid desktop geometry state.
+  }
+
+  window.localStorage.removeItem(DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY)
+  return null
+}
+
 function App() {
   const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(() => readStoredDevice())
   const [view, setView] = useState<AuthView>(() => (readStoredDevice() ? 'chat' : 'welcome'))
@@ -186,6 +258,15 @@ function App() {
   const [chatItems, setChatItems] = useState<ChatSummary[]>([])
   const [chatFilter, setChatFilter] = useState('')
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [detailRailPreferred, setDetailRailPreferred] = useState(() => readDetailRailPreference())
+  const [isDesktopWide, setIsDesktopWide] = useState(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT
+  )
+  const [desktopRuntime, setDesktopRuntime] = useState<DesktopRuntimeInfo | null>(null)
+  const [desktopWindowMaximized, setDesktopWindowMaximized] = useState<boolean | null>(null)
+  const [desktopWindowFocused, setDesktopWindowFocused] = useState<boolean | null>(null)
+  const [desktopWindowAlwaysOnTop, setDesktopWindowAlwaysOnTop] = useState<boolean | null>(null)
+  const [desktopWindowGeometry, setDesktopWindowGeometry] = useState<DesktopWindowGeometry | null>(null)
   const [messageItems, setMessageItems] = useState<CachedMessage[]>([])
   const [draft, setDraft] = useState('')
   const [newChatUsername, setNewChatUsername] = useState('')
@@ -1178,6 +1259,111 @@ function App() {
     })
   }, [deferredActiveChatId, storedDevice, view])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const syncViewportMode = () => {
+      setIsDesktopWide(window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT)
+    }
+
+    syncViewportMode()
+    window.addEventListener('resize', syncViewportMode)
+
+    return () => {
+      window.removeEventListener('resize', syncViewportMode)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(DETAIL_RAIL_STORAGE_KEY, String(detailRailPreferred))
+  }, [detailRailPreferred])
+
+  useEffect(() => {
+    if (!isDesktopShell()) {
+      setDesktopRuntime(null)
+      setDesktopWindowMaximized(null)
+      setDesktopWindowFocused(null)
+      setDesktopWindowAlwaysOnTop(null)
+      setDesktopWindowGeometry(null)
+      return
+    }
+
+    let cancelled = false
+    let stopStateSync: (() => void) | null = null
+    let stopGeometrySync: (() => void) | null = null
+
+    async function loadDesktopRuntime() {
+      try {
+        const savedGeometry = readDesktopWindowGeometry()
+
+        if (savedGeometry) {
+          await applyDesktopWindowGeometry(savedGeometry)
+        }
+
+        const [runtime, windowState, geometry, unlistenState, unlistenGeometry] = await Promise.all([
+          fetchDesktopRuntimeInfo(),
+          fetchDesktopWindowState(),
+          fetchDesktopWindowGeometry(),
+          subscribeDesktopWindowState((nextState) => {
+            if (!cancelled) {
+              setDesktopWindowMaximized(nextState.maximized)
+              setDesktopWindowFocused(nextState.focused)
+              setDesktopWindowAlwaysOnTop(nextState.alwaysOnTop)
+            }
+          }),
+          subscribeDesktopWindowGeometry((nextGeometry) => {
+            if (!cancelled) {
+              setDesktopWindowGeometry(nextGeometry)
+              window.localStorage.setItem(
+                DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY,
+                JSON.stringify(nextGeometry)
+              )
+            }
+          })
+        ])
+
+        if (!cancelled) {
+          setDesktopRuntime(runtime)
+          setDesktopWindowMaximized(windowState.maximized)
+          setDesktopWindowFocused(windowState.focused)
+          setDesktopWindowAlwaysOnTop(windowState.alwaysOnTop)
+          setDesktopWindowGeometry(geometry)
+          window.localStorage.setItem(
+            DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY,
+            JSON.stringify(geometry)
+          )
+          stopStateSync = unlistenState
+          stopGeometrySync = unlistenGeometry
+        } else {
+          unlistenState()
+          unlistenGeometry()
+        }
+      } catch {
+        if (!cancelled) {
+          setDesktopRuntime(null)
+          setDesktopWindowMaximized(null)
+          setDesktopWindowFocused(null)
+          setDesktopWindowAlwaysOnTop(null)
+          setDesktopWindowGeometry(null)
+        }
+      }
+    }
+
+    void loadDesktopRuntime()
+
+    return () => {
+      cancelled = true
+      stopStateSync?.()
+      stopGeometrySync?.()
+    }
+  }, [])
+
   function focusRelativeChat(offset: number) {
     const navigableChats = visibleChatItems
 
@@ -1239,6 +1425,38 @@ function App() {
 
     if (!hasModifier) {
       return
+    }
+
+    if ((event.key === '\\' || event.code === 'Backslash') && !event.shiftKey) {
+      event.preventDefault()
+      setDetailRailPreferred((current) => !current)
+      return
+    }
+
+    if (isDesktopShell() && event.shiftKey) {
+      if (event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        void handleMinimizeDesktopHostWindow()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        void handleToggleDesktopAlwaysOnTop()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'w') {
+        event.preventDefault()
+        void handleCloseDesktopHostWindow()
+        return
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        void handleToggleDesktopWindowMaximize()
+        return
+      }
     }
 
     if (event.key.toLowerCase() === 'f' && event.shiftKey) {
@@ -1715,6 +1933,116 @@ function App() {
     }
   }
 
+  async function handleRefreshDesktopRuntime() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Desktop runtime details are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const [runtime, windowState] = await Promise.all([
+        fetchDesktopRuntimeInfo(),
+        fetchDesktopWindowState()
+      ])
+      setDesktopRuntime(runtime)
+      setDesktopWindowMaximized(windowState.maximized)
+      setDesktopWindowFocused(windowState.focused)
+      setDesktopWindowAlwaysOnTop(windowState.alwaysOnTop)
+      setBanner({ tone: 'success', message: 'Desktop runtime details refreshed.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh desktop runtime info.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggleDesktopWindowMaximize() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const nextState = await toggleDesktopWindowMaximize()
+      setDesktopWindowMaximized(nextState)
+      setBanner({
+        tone: 'success',
+        message: nextState ? 'Desktop window maximized.' : 'Desktop window restored.'
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to toggle the desktop window state.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleMinimizeDesktopHostWindow() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      await minimizeDesktopWindow()
+      setBanner({ tone: 'success', message: 'Desktop window minimized.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to minimize the desktop window.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCloseDesktopHostWindow() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      await closeDesktopWindow()
+      setBanner({ tone: 'success', message: 'Desktop window close requested.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to close the desktop window.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggleDesktopAlwaysOnTop() {
+    if (!isDesktopShell()) {
+      setBanner({ tone: 'info', message: 'Window controls are only available inside the Tauri shell.' })
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const nextState = await toggleDesktopWindowAlwaysOnTop()
+      setDesktopWindowAlwaysOnTop(nextState)
+      setBanner({
+        tone: 'success',
+        message: nextState ? 'Desktop window pinned on top.' : 'Desktop window returned to normal stacking.'
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update always-on-top state.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleCreateWebRtcOffer() {
     if (!activeCall) {
       return
@@ -2155,13 +2483,41 @@ function App() {
     normalizedChatFilter === ''
       ? chatItems
       : chatItems.filter((chat) => chat.title.toLowerCase().includes(normalizedChatFilter))
+  const detailRailVisible = detailRailPreferred && isDesktopWide
+  const desktopShell = isDesktopShell()
   const activeChat =
     chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatItems[0] ?? null
+  const desktopWindowTitle = buildDesktopWindowTitle(activeChat?.title ?? null, activeCall?.mode ?? null)
+  const appShellClassName = detailRailVisible ? 'app-shell' : 'app-shell app-shell--detail-hidden'
   const dominantRemoteEndpointId = pickDominantRemoteSpeakerEndpointId(membraneRemoteTracks)
   const featuredRemoteTrack = pickFeaturedRemoteTrack(membraneRemoteTracks, dominantRemoteEndpointId)
   const dominantRemoteEndpoint = dominantRemoteEndpointId
     ? membraneRemoteEndpoints.find((endpoint) => endpoint.id === dominantRemoteEndpointId) ?? null
     : null
+
+  useEffect(() => {
+    if (!desktopShell) {
+      return
+    }
+
+    let cancelled = false
+
+    async function syncDesktopTitle() {
+      try {
+        await setDesktopWindowTitle(desktopWindowTitle)
+      } catch {
+        if (!cancelled) {
+          // Ignore transient desktop title sync failures.
+        }
+      }
+    }
+
+    void syncDesktopTitle()
+
+    return () => {
+      cancelled = true
+    }
+  }, [desktopShell, desktopWindowTitle])
 
   if (onboarding) {
     return (
@@ -2316,13 +2672,85 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={appShellClassName}>
       <aside className="sidebar">
         <div className="sidebar__header">
           <span className="sidebar__eyebrow">Vostok</span>
+          {desktopShell ? (
+            <div
+              className={
+                desktopWindowFocused === false
+                  ? 'desktop-titlebar desktop-titlebar--inactive'
+                  : 'desktop-titlebar'
+              }
+            >
+              <div className="desktop-titlebar__meta" data-tauri-drag-region>
+                <strong>{desktopRuntime?.appName ?? 'Vostok Desktop'}</strong>
+                <span>
+                  {desktopRuntime
+                    ? `${desktopRuntime.platform}/${desktopRuntime.arch}`
+                    : 'Tauri desktop host'}
+                </span>
+              </div>
+              <div className="desktop-titlebar__actions">
+                <button
+                  aria-label={desktopWindowAlwaysOnTop ? 'Disable always on top' : 'Enable always on top'}
+                  className="vostok-icon-button desktop-titlebar__button"
+                  disabled={loading}
+                  onClick={handleToggleDesktopAlwaysOnTop}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">
+                    {desktopWindowAlwaysOnTop ? 'P' : 'p'}
+                  </span>
+                </button>
+                <button
+                  aria-label="Minimize desktop window"
+                  className="vostok-icon-button desktop-titlebar__button"
+                  disabled={loading}
+                  onClick={handleMinimizeDesktopHostWindow}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">-</span>
+                </button>
+                <button
+                  aria-label={desktopWindowMaximized ? 'Restore desktop window' : 'Maximize desktop window'}
+                  className="vostok-icon-button desktop-titlebar__button"
+                  disabled={loading}
+                  onClick={handleToggleDesktopWindowMaximize}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">
+                    {desktopWindowMaximized ? 'R' : '+'}
+                  </span>
+                </button>
+                <button
+                  aria-label="Close desktop window"
+                  className="vostok-icon-button desktop-titlebar__button"
+                  disabled={loading}
+                  onClick={handleCloseDesktopHostWindow}
+                  type="button"
+                >
+                  <span className="vostok-icon-button__glyph">x</span>
+                </button>
+              </div>
+            </div>
+          ) : null}
           <h1>Chats</h1>
           <p>Stage 3 now uses authenticated direct chats and opaque encrypted message envelopes.</p>
         </div>
+        <button
+          aria-pressed={detailRailVisible}
+          className="secondary-action detail-rail-toggle"
+          onClick={() => setDetailRailPreferred((current) => !current)}
+          type="button"
+        >
+          {detailRailVisible
+            ? 'Hide Detail Rail'
+            : isDesktopWide
+              ? 'Show Detail Rail'
+              : 'Detail Rail Hidden on Narrow Window'}
+        </button>
         <div className="new-chat-form">
           <label className="auth-field">
             <span>Filter chats</span>
@@ -2516,7 +2944,7 @@ function App() {
         </form>
       </main>
 
-      <aside className="detail-rail">
+      <aside className={detailRailVisible ? 'detail-rail' : 'detail-rail detail-rail--hidden'}>
         <ChatInfoPanel
           title={profileUsername ?? storedDevice?.username ?? 'Dinosaur'}
           phone="+7 999 555 01 10"
@@ -2554,6 +2982,70 @@ function App() {
         </GlassSurface>
         <GlassSurface className="settings-card">
           <div className="settings-card__header">
+            <span className="sidebar__eyebrow">Desktop</span>
+            <h3>Host bridge</h3>
+          </div>
+          <div className="device-summary-card">
+            <strong>{isDesktopShell() ? 'Tauri desktop host detected' : 'Browser session'}</strong>
+            <span>
+              {desktopRuntime
+                ? `${desktopRuntime.appName} ${desktopRuntime.appVersion} • ${desktopRuntime.platform}/${desktopRuntime.arch}`
+                : isDesktopShell()
+                  ? 'Runtime metadata available after the desktop host responds.'
+                  : 'Desktop bridge commands are hidden until this UI runs inside the desktop wrapper.'}
+            </span>
+            <span>Native title: {desktopWindowTitle}</span>
+            <span>
+              {desktopRuntime
+                ? desktopRuntime.debug
+                  ? 'Desktop host is running in debug mode.'
+                  : 'Desktop host is running in release mode.'
+                : 'No desktop runtime metadata loaded yet.'}
+            </span>
+            <span>
+              {desktopWindowMaximized === null
+                ? 'Window state has not been toggled in this session yet.'
+                : desktopWindowMaximized
+                  ? 'Window is currently maximized.'
+                  : 'Window is currently restored.'}
+            </span>
+            <span>
+              {desktopWindowFocused === null
+                ? 'Window focus state is not known yet.'
+                : desktopWindowFocused
+                  ? 'Window is currently focused.'
+                  : 'Window is currently unfocused.'}
+            </span>
+            <span>
+              {desktopWindowAlwaysOnTop === null
+                ? 'Always-on-top state is not known yet.'
+                : desktopWindowAlwaysOnTop
+                  ? 'Window is pinned above other windows.'
+                  : 'Window follows normal stacking order.'}
+            </span>
+            <span>
+              {desktopWindowGeometry
+                ? `Window frame ${desktopWindowGeometry.width}×${desktopWindowGeometry.height} at ${desktopWindowGeometry.x}, ${desktopWindowGeometry.y}`
+                : 'Window frame has not been captured yet.'}
+            </span>
+          </div>
+          <div className="settings-card__actions">
+            <button className="secondary-action" disabled={loading} onClick={handleRefreshDesktopRuntime} type="button">
+              Refresh Host Info
+            </button>
+            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopAlwaysOnTop} type="button">
+              {desktopWindowAlwaysOnTop ? 'Disable Always On Top' : 'Enable Always On Top'}
+            </button>
+            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopWindowMaximize} type="button">
+              {desktopWindowMaximized ? 'Restore Window' : 'Toggle Maximize'}
+            </button>
+            <button className="secondary-action" disabled={loading} onClick={handleMinimizeDesktopHostWindow} type="button">
+              Minimize Window
+            </button>
+          </div>
+        </GlassSurface>
+        <GlassSurface className="settings-card">
+          <div className="settings-card__header">
             <span className="sidebar__eyebrow">Stage 8</span>
             <h3>Desktop shortcuts</h3>
           </div>
@@ -2574,6 +3066,28 @@ function App() {
               <div className="settings-card__row-main">
                 <strong>Filter chats</strong>
                 <span>`Cmd/Ctrl+Shift+F` focuses the chat filter field.</span>
+              </div>
+            </div>
+            <div className="settings-card__row">
+              <div className="settings-card__row-main">
+                <strong>Toggle detail rail</strong>
+                <span>`Cmd/Ctrl+\` switches between two-column and three-column desktop layout.</span>
+              </div>
+            </div>
+            <div className="settings-card__row">
+              <div className="settings-card__row-main">
+                <strong>Layout memory</strong>
+                <span>
+                  {isDesktopWide
+                    ? `The saved desktop preference is currently ${detailRailPreferred ? 'expanded' : 'collapsed'}.`
+                    : 'Your saved desktop rail preference is preserved while narrow windows force focus mode.'}
+                </span>
+              </div>
+            </div>
+            <div className="settings-card__row">
+              <div className="settings-card__row-main">
+                <strong>Desktop host controls</strong>
+                <span>`Cmd/Ctrl+Shift+P` always on top • `Cmd/Ctrl+Shift+M` minimize • `Cmd/Ctrl+Shift+Enter` maximize/restore • `Cmd/Ctrl+Shift+W` close</span>
               </div>
             </div>
             <div className="settings-card__row">
@@ -3524,6 +4038,30 @@ function decodeSystemMessageText(payloadBase64: string): string {
 
 function truncateSignalPayload(payload: string): string {
   return payload.length > 88 ? `${payload.slice(0, 85)}...` : payload
+}
+
+function buildDesktopWindowTitle(
+  activeChatTitle: string | null,
+  activeCallMode: 'voice' | 'video' | 'group' | null
+): string {
+  const parts = ['Vostok']
+
+  if (activeChatTitle) {
+    parts.push(activeChatTitle)
+  }
+
+  if (activeCallMode) {
+    const label =
+      activeCallMode === 'group'
+        ? 'Group Call'
+        : activeCallMode === 'video'
+          ? 'Video Call'
+          : 'Voice Call'
+
+    parts.push(label)
+  }
+
+  return parts.join(' • ')
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
