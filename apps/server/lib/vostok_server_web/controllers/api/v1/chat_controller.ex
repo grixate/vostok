@@ -1,12 +1,14 @@
 defmodule VostokServerWeb.Api.V1.ChatController do
   use VostokServerWeb, :controller
 
+  alias VostokServer.Identity
   alias VostokServer.Messaging
 
   def me(conn, _params) do
     current_user = conn.assigns.current_user
     current_device = conn.assigns.current_device
     current_session = conn.assigns.current_session
+    prekeys = prekey_inventory(current_device.id)
 
     json(conn, %{
       user: %{
@@ -15,12 +17,20 @@ defmodule VostokServerWeb.Api.V1.ChatController do
       },
       device: %{
         id: current_device.id,
-        device_name: current_device.device_name
+        device_name: current_device.device_name,
+        prekeys: prekeys
       },
       session: %{
         expires_at: DateTime.to_iso8601(current_session.expires_at)
       }
     })
+  end
+
+  defp prekey_inventory(device_id) when is_binary(device_id) do
+    case Identity.prekey_inventory(device_id) do
+      {:ok, inventory} -> inventory
+      _ -> nil
+    end
   end
 
   def index(conn, _params) do
@@ -156,6 +166,35 @@ defmodule VostokServerWeb.Api.V1.ChatController do
          ) do
       {:ok, sessions} ->
         json(conn, %{sessions: sessions})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def safety_numbers(conn, %{"chat_id" => chat_id}) do
+    case Messaging.list_safety_numbers(
+           chat_id,
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id
+         ) do
+      {:ok, safety_numbers} ->
+        json(conn, %{safety_numbers: safety_numbers})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def verify_safety_number(conn, %{"chat_id" => chat_id, "peer_device_id" => peer_device_id}) do
+    case Messaging.verify_safety_number(
+           chat_id,
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id,
+           peer_device_id
+         ) do
+      {:ok, safety_number} ->
+        json(conn, %{safety_number: safety_number})
 
       {:error, {kind, message}} ->
         render_error(conn, kind, message)

@@ -1,5 +1,10 @@
 import type { ChatDeviceSession, ChatMessage } from './api'
 import { base64ToBytes, bytesToBase64 } from './base64'
+import {
+  bootstrapSecureStore,
+  persistSecureStoreValue,
+  removeSecureStoreValue
+} from './secure-kv-store'
 
 const SESSION_ALGORITHM = 'vostok-chat-session-v1'
 const SESSION_KEY_PREFIX = 'vostok.session-key.'
@@ -16,6 +21,19 @@ const X3DH_DOMAIN_PREFIX = new Uint8Array(32).fill(0xff)
 const LEGACY_RATCHET_VERSION = 'v1'
 const TRANSITION_RATCHET_VERSION = 'v2'
 const CURRENT_RATCHET_VERSION = 'v3'
+
+const SESSION_SECURE_PREFIXES = [
+  SESSION_KEY_PREFIX,
+  SESSION_HANDSHAKE_PREFIX,
+  SESSION_RATCHET_PREFIX,
+  SESSION_SKIPPED_KEY_PREFIX,
+  SESSION_EPHEMERAL_KEY_PREFIX,
+  SESSION_LOCAL_RATCHET_KEY_PREFIX,
+  SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX,
+  PENDING_SESSION_EPHEMERAL_KEY_PREFIX
+]
+
+void bootstrapSecureStore(SESSION_SECURE_PREFIXES)
 
 type SessionHeader = {
   algorithm: string
@@ -113,7 +131,7 @@ export async function prepareSessionBootstrap(
   const entries = await Promise.all(
     uniqueRecipientDeviceIds.map(async (deviceId) => {
       const ephemeralKeyPair = await generateEphemeralKeyPair()
-      window.localStorage.setItem(
+      persistSecureStoreValue(
         `${PENDING_SESSION_EPHEMERAL_KEY_PREFIX}${ephemeralKeyPair.publicKeyBase64}`,
         ephemeralKeyPair.privateKeyPkcs8Base64
       )
@@ -180,7 +198,7 @@ export async function synchronizeChatSessions(
     }
 
     writeStoredSessionKeyBytes(session.id, keyBytes)
-    window.localStorage.setItem(`${SESSION_HANDSHAKE_PREFIX}${session.id}`, session.handshake_hash)
+    persistSecureStoreValue(`${SESSION_HANDSHAKE_PREFIX}${session.id}`, session.handshake_hash)
 
     if (previousHandshakeHash !== session.handshake_hash || !existingKeyBytes) {
       const ratchetState = await buildInitialRatchetState(
@@ -674,7 +692,7 @@ function readStoredSessionKeyBytes(sessionId: string): Uint8Array | null {
 }
 
 function writeStoredSessionKeyBytes(sessionId: string, keyBytes: Uint8Array) {
-  window.localStorage.setItem(`${SESSION_KEY_PREFIX}${sessionId}`, bytesToBase64(keyBytes))
+  persistSecureStoreValue(`${SESSION_KEY_PREFIX}${sessionId}`, bytesToBase64(keyBytes))
 }
 
 async function readOrBuildSessionRatchetState(
@@ -727,7 +745,7 @@ function readStoredSessionEphemeralKey(sessionId: string): StoredSessionEphemera
 }
 
 function writeStoredSessionEphemeralKey(sessionId: string, keyPair: StoredSessionEphemeralKey) {
-  window.localStorage.setItem(`${SESSION_EPHEMERAL_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
+  persistSecureStoreValue(`${SESSION_EPHEMERAL_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
 }
 
 function readStoredLocalRatchetKey(sessionId: string): StoredSessionEphemeralKey | null {
@@ -757,7 +775,7 @@ function readStoredLocalRatchetKey(sessionId: string): StoredSessionEphemeralKey
 }
 
 function writeStoredLocalRatchetKey(sessionId: string, keyPair: StoredSessionEphemeralKey) {
-  window.localStorage.setItem(`${SESSION_LOCAL_RATCHET_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
+  persistSecureStoreValue(`${SESSION_LOCAL_RATCHET_KEY_PREFIX}${sessionId}`, JSON.stringify(keyPair))
 }
 
 async function ensureStoredLocalRatchetKey(sessionId: string): Promise<StoredSessionEphemeralKey> {
@@ -780,7 +798,7 @@ function claimPendingSessionEphemeralKey(publicKeyBase64: string): string | null
     return null
   }
 
-  window.localStorage.removeItem(storageKey)
+  removeSecureStoreValue(storageKey)
   return privateKeyPkcs8Base64
 }
 
@@ -790,7 +808,7 @@ function readStoredRemoteRatchetPublicKey(sessionId: string): string | null {
 }
 
 function writeStoredRemoteRatchetPublicKey(sessionId: string, publicKeyBase64: string) {
-  window.localStorage.setItem(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${sessionId}`, publicKeyBase64)
+  persistSecureStoreValue(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${sessionId}`, publicKeyBase64)
 }
 
 function readStoredSessionRatchetState(sessionId: string): SessionRatchetState | null {
@@ -831,7 +849,7 @@ function readStoredSessionRatchetState(sessionId: string): SessionRatchetState |
 }
 
 function writeStoredSessionRatchetState(sessionId: string, ratchetState: SessionRatchetState) {
-  window.localStorage.setItem(`${SESSION_RATCHET_PREFIX}${sessionId}`, JSON.stringify(ratchetState))
+  persistSecureStoreValue(`${SESSION_RATCHET_PREFIX}${sessionId}`, JSON.stringify(ratchetState))
 }
 
 function readStoredSkippedMessageKeys(sessionId: string): Record<string, string> {
@@ -855,7 +873,7 @@ function readStoredSkippedMessageKeys(sessionId: string): Record<string, string>
 }
 
 function writeStoredSkippedMessageKeys(sessionId: string, skippedKeys: Record<string, string>) {
-  window.localStorage.setItem(`${SESSION_SKIPPED_KEY_PREFIX}${sessionId}`, JSON.stringify(skippedKeys))
+  persistSecureStoreValue(`${SESSION_SKIPPED_KEY_PREFIX}${sessionId}`, JSON.stringify(skippedKeys))
 }
 
 async function importPrivateKey(privateKeyPkcs8Base64: string): Promise<CryptoKey> {

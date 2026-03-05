@@ -1,21 +1,23 @@
 # Vostok
 
-Vostok is a greenfield secure messaging monorepo. This repository now includes the first implementation slice from the product plan:
+Vostok is a greenfield secure messaging monorepo. This repository now includes an end-to-end Stage 1-8 implementation baseline:
 
-- a Phoenix backend scaffold in [`apps/server`](./apps/server)
+- a Phoenix backend in [`apps/server`](./apps/server)
 - a React web client in [`apps/web`](./apps/web)
 - shared frontend packages for design tokens, primitives, and chat UI contracts in [`packages`](./packages)
 - Figma mapping and architecture notes in [`docs`](./docs)
-- an initial local deployment skeleton in [`docker-compose.yml`](./docker-compose.yml)
+- local deployment orchestration in [`docker-compose.yml`](./docker-compose.yml)
 
-Implemented scope in this pass:
+Implemented scope:
 
-- monorepo and workspace structure
-- shared design-system packages
-- Figma-derived chat shell and responsive desktop adaptation
-- versioned backend API scaffolding and identity schema stubs
+- design-system-first web/desktop shell from the shared Figma mapping
+- secure identity + linked devices + safety number verification
+- encrypted direct/group messaging, sender-key group transport, media uploads
+- federation queue + transport pipeline with protobuf envelope support
+- Membrane-based calls with server-enforced group-call E2EE key epochs
+- desktop packaging, signing, promotion, and rollback scripts
 
-This is not the full product yet. It is the foundation the remaining roadmap builds on.
+Native mobile clients remain out of scope for this repository phase.
 
 ## Quick Start
 
@@ -49,6 +51,7 @@ Helpful endpoints:
 - `GET /api/v1/health`
 - `GET /api/v1/bootstrap`
 - `POST /api/v1/federation/deliveries`
+- `POST /api/v1/federation/peers/accept`
 - `POST /api/v1/register`
 - `POST /api/v1/auth/challenge`
 - `POST /api/v1/auth/verify`
@@ -75,6 +78,7 @@ Helpful endpoints:
 - `POST /api/v1/chats/:chat_id/messages/:message_id/pin`
 - `POST /api/v1/chats/:chat_id/messages/:message_id/reactions`
 - `POST /api/v1/media/uploads`
+- `GET /api/v1/media/uploads/:id`
 - `PATCH /api/v1/media/uploads/:id/part`
 - `POST /api/v1/media/uploads/:id/complete`
 - `GET /api/v1/media/:id`
@@ -87,11 +91,14 @@ Helpful endpoints:
 - `POST /api/v1/admin/federation/deliveries/:job_id/attempt`
 - `POST /api/v1/admin/federation/peers/:peer_id/status`
 - `POST /api/v1/admin/federation/peers/:peer_id/heartbeat`
+- `POST /api/v1/admin/federation/peers/:peer_id/invite`
 - `GET /api/v1/chats/:chat_id/calls/active`
 - `POST /api/v1/chats/:chat_id/calls`
 - `POST /api/v1/calls/turn-credentials`
 - `GET /api/v1/calls/:call_id`
 - `POST /api/v1/calls/:call_id/join`
+- `GET /api/v1/calls/:call_id/keys`
+- `POST /api/v1/calls/:call_id/keys`
 - `POST /api/v1/calls/:call_id/webrtc-endpoint`
 - `GET /api/v1/calls/:call_id/webrtc-endpoint`
 - `POST /api/v1/calls/:call_id/webrtc-endpoint/media-events`
@@ -108,4 +115,4 @@ Stage 4 media status is tracked in [docs/stage-4-media.md](./docs/stage-4-media.
 Stage 5 groups status is tracked in [docs/stage-5-groups.md](./docs/stage-5-groups.md).
 Stage 6-8 ops status is tracked in [docs/stage-6-8-ops.md](./docs/stage-6-8-ops.md).
 
-Desktop packaging now has an initial scaffold in [apps/desktop/README.md](./apps/desktop/README.md).
+Desktop release flow details are documented in [apps/desktop/README.md](./apps/desktop/README.md).

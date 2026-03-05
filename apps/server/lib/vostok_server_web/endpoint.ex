@@ -46,6 +46,7 @@ defmodule VostokServerWeb.Endpoint do
 
   plug Plug.MethodOverride
   plug Plug.Head
+  plug VostokServerWeb.Plugs.SecurityHeaders
   plug Plug.Session, @session_options
   plug VostokServerWeb.Router
 end

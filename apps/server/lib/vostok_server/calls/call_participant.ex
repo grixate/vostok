@@ -12,6 +12,9 @@ defmodule VostokServer.Calls.CallParticipant do
   schema "call_participants" do
     field :status, :string
     field :track_kind, :string
+    field :e2ee_capable, :boolean, default: false
+    field :e2ee_algorithm, :string
+    field :e2ee_key_epoch, :integer
     field :joined_at, :utc_datetime_usec
     field :left_at, :utc_datetime_usec
 
@@ -24,10 +27,25 @@ defmodule VostokServer.Calls.CallParticipant do
 
   def changeset(call_participant, attrs) do
     call_participant
-    |> cast(attrs, [:call_id, :user_id, :device_id, :status, :track_kind, :joined_at, :left_at])
+    |> cast(
+      attrs,
+      [
+        :call_id,
+        :user_id,
+        :device_id,
+        :status,
+        :track_kind,
+        :e2ee_capable,
+        :e2ee_algorithm,
+        :e2ee_key_epoch,
+        :joined_at,
+        :left_at
+      ]
+    )
     |> validate_required([:call_id, :user_id, :device_id, :status, :track_kind, :joined_at])
     |> validate_inclusion(:status, ["joined", "left"])
     |> validate_inclusion(:track_kind, ["audio", "video", "audio_video"])
+    |> validate_number(:e2ee_key_epoch, greater_than_or_equal_to: 0)
     |> unique_constraint(:device_id, name: :call_participants_call_id_device_id_index)
   end
 end

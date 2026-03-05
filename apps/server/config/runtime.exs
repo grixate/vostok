@@ -80,12 +80,14 @@ if config_env() == :prod do
     federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
     federation_transport: [
       scheme: System.get_env("VOSTOK_FEDERATION_SCHEME", "https"),
+      wire_format: System.get_env("VOSTOK_FEDERATION_WIRE_FORMAT", "protobuf"),
       delivery_path:
         System.get_env("VOSTOK_FEDERATION_DELIVERY_PATH", "/api/v1/federation/deliveries"),
       connect_timeout_ms: env_integer.("VOSTOK_FEDERATION_CONNECT_TIMEOUT_MS", 5_000),
       request_timeout_ms: env_integer.("VOSTOK_FEDERATION_REQUEST_TIMEOUT_MS", 10_000),
       retry_backoff_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_SECONDS", 30),
       retry_backoff_cap_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_CAP_SECONDS", 900),
+      signing_secret: System.get_env("VOSTOK_FEDERATION_SIGNING_SECRET"),
       allow_insecure_http: env_boolean.("VOSTOK_FEDERATION_ALLOW_INSECURE_HTTP", false),
       require_client_cert: env_boolean.("VOSTOK_FEDERATION_REQUIRE_CLIENT_CERT", true),
       mtls: [
@@ -150,12 +152,14 @@ if config_env() in [:dev, :test] do
     federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
     federation_transport: [
       scheme: System.get_env("VOSTOK_FEDERATION_SCHEME", "https"),
+      wire_format: System.get_env("VOSTOK_FEDERATION_WIRE_FORMAT", "protobuf"),
       delivery_path:
         System.get_env("VOSTOK_FEDERATION_DELIVERY_PATH", "/api/v1/federation/deliveries"),
       connect_timeout_ms: env_integer.("VOSTOK_FEDERATION_CONNECT_TIMEOUT_MS", 5_000),
       request_timeout_ms: env_integer.("VOSTOK_FEDERATION_REQUEST_TIMEOUT_MS", 10_000),
       retry_backoff_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_SECONDS", 30),
       retry_backoff_cap_seconds: env_integer.("VOSTOK_FEDERATION_RETRY_BACKOFF_CAP_SECONDS", 900),
+      signing_secret: System.get_env("VOSTOK_FEDERATION_SIGNING_SECRET"),
       allow_insecure_http: env_boolean.("VOSTOK_FEDERATION_ALLOW_INSECURE_HTTP", false),
       require_client_cert: env_boolean.("VOSTOK_FEDERATION_REQUIRE_CLIENT_CERT", false),
       mtls: [

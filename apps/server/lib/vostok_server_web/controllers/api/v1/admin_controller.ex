@@ -96,6 +96,16 @@ defmodule VostokServerWeb.Api.V1.AdminController do
     end
   end
 
+  def create_federation_peer_invite(conn, %{"peer_id" => peer_id}) do
+    case Federation.create_peer_invite(peer_id) do
+      {:ok, %{peer: peer, invite_token: invite_token}} ->
+        json(conn, %{peer: peer, invite_token: invite_token})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   defp render_error(conn, :not_found, message) do
     conn
     |> put_status(:not_found)
@@ -106,6 +116,12 @@ defmodule VostokServerWeb.Api.V1.AdminController do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: "validation", message: message})
+  end
+
+  defp render_error(conn, :unauthorized, message) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "unauthorized", message: message})
   end
 
   defp render_error(conn, _kind, message) do

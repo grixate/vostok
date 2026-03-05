@@ -32,9 +32,7 @@ defmodule VostokServerWeb.TopicChannel do
     end
   end
 
-  def join(topic, _params, socket) do
-    {:ok, %{status: "connected", topic: topic}, assign(socket, :topic_name, topic)}
-  end
+  def join(_topic, _params, _socket), do: {:error, %{reason: "unsupported_topic"}}
 
   @impl true
   def handle_in("ping", payload, socket) do

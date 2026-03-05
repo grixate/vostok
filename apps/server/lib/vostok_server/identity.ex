@@ -6,8 +6,11 @@ defmodule VostokServer.Identity do
   import Ecto.Query
 
   alias Ecto.Multi
-  alias VostokServer.Identity.{Device, Invite, OneTimePrekey, User}
+  alias VostokServer.Identity.{Device, DeviceSession, Invite, OneTimePrekey, User}
   alias VostokServer.Repo
+
+  @prekey_low_watermark 20
+  @prekey_target_count 100
 
   @type register_result ::
           {:ok, %{user: User.t(), device: Device.t(), one_time_prekeys: [OneTimePrekey.t()]}}
@@ -94,6 +97,87 @@ defmodule VostokServer.Identity do
 
   def get_device(device_id) when is_binary(device_id) do
     Repo.get(Device, device_id)
+  end
+
+  def prekey_inventory(device_id) when is_binary(device_id) do
+    case Repo.get(Device, device_id) do
+      %Device{} = device ->
+        active_count = active_prekey_count(device.id)
+
+        {:ok,
+         %{
+           device_id: device.id,
+           available_one_time_prekeys: active_count,
+           low_watermark: @prekey_low_watermark,
+           target_count: @prekey_target_count,
+           replenish_recommended: active_count < @prekey_low_watermark
+         }}
+
+      nil ->
+        {:error, {:not_found, "Device not found."}}
+    end
+  end
+
+  def list_user_devices(user_id, current_device_id)
+      when is_binary(user_id) and is_binary(current_device_id) do
+    with %User{} <- Repo.get(User, user_id) do
+      devices =
+        from(device in Device,
+          where: device.user_id == ^user_id,
+          order_by: [
+            desc: is_nil(device.revoked_at),
+            desc: device.last_active_at,
+            asc: device.inserted_at
+          ]
+        )
+        |> Repo.all()
+        |> Enum.map(&present_device_summary(&1, current_device_id))
+
+      {:ok, devices}
+    else
+      nil ->
+        {:error, {:not_found, "User not found."}}
+    end
+  end
+
+  def revoke_device(user_id, device_id, current_device_id)
+      when is_binary(user_id) and is_binary(device_id) and is_binary(current_device_id) do
+    with %Device{} = current_device <- Repo.get(Device, current_device_id),
+         :ok <- ensure_device_owner(current_device, user_id),
+         %Device{} = target_device <- Repo.get(Device, device_id),
+         :ok <- ensure_device_owner(target_device, user_id),
+         :ok <- ensure_not_current_device(target_device.id, current_device_id) do
+      if target_device.revoked_at do
+        {:ok, present_device_summary(target_device, current_device_id)}
+      else
+        now = DateTime.utc_now()
+
+        Repo.transaction(fn ->
+          {:ok, revoked_device} =
+            target_device
+            |> Device.changeset(%{revoked_at: now, last_active_at: now})
+            |> Repo.update()
+
+          Repo.delete_all(
+            from(session in DeviceSession, where: session.device_id == ^revoked_device.id)
+          )
+
+          Repo.delete_all(
+            from(prekey in OneTimePrekey,
+              where: prekey.device_id == ^revoked_device.id and is_nil(prekey.used_at)
+            )
+          )
+
+          present_device_summary(revoked_device, current_device_id)
+        end)
+      end
+    else
+      nil ->
+        {:error, {:not_found, "Device not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def publish_device_prekeys(device_id, attrs) when is_binary(device_id) and is_map(attrs) do
@@ -404,6 +488,30 @@ defmodule VostokServer.Identity do
     )
     |> Repo.one()
   end
+
+  defp present_device_summary(%Device{} = device, current_device_id) do
+    %{
+      id: device.id,
+      device_name: device.device_name,
+      is_current: device.id == current_device_id,
+      revoked_at: device.revoked_at && DateTime.to_iso8601(device.revoked_at),
+      last_active_at: device.last_active_at && DateTime.to_iso8601(device.last_active_at),
+      inserted_at: device.inserted_at && DateTime.to_iso8601(device.inserted_at),
+      one_time_prekey_count: active_prekey_count(device.id)
+    }
+  end
+
+  defp ensure_device_owner(%Device{user_id: user_id}, user_id), do: :ok
+
+  defp ensure_device_owner(_device, _user_id),
+    do: {:error, {:unauthorized, "This device does not belong to the authenticated user."}}
+
+  defp ensure_not_current_device(device_id, current_device_id)
+       when device_id == current_device_id do
+    {:error, {:validation, "The active device cannot revoke itself."}}
+  end
+
+  defp ensure_not_current_device(_device_id, _current_device_id), do: :ok
 
   defp active_devices_for_prekeys(user_id) do
     from(device in Device,

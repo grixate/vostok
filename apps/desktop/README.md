@@ -1,11 +1,11 @@
 # Vostok Desktop
 
-This is the Stage 8 desktop scaffold for the Tauri wrapper around the Vostok web client.
+This is the Stage 8 desktop release package for the Tauri wrapper around the Vostok web client.
 
 ## Current Scope
 
 - Tauri application shell configuration
-- Desktop window metadata and permissions scaffold
+- Desktop window metadata and permissions bridge
 - Dev mode now boots the shared web client automatically and points Tauri at `http://127.0.0.1:5173`
 - Production mode now builds the shared web workspace automatically and loads the built bundle from `../../web/dist`
 - Custom Tauri commands now expose desktop runtime metadata plus minimize/maximize window controls to the shared web UI
@@ -52,3 +52,5 @@ This is the Stage 8 desktop scaffold for the Tauri wrapper around the Vostok web
 - `npm run dev` and `npm run build` now rely on the Tauri `beforeDevCommand` / `beforeBuildCommand` hooks to start or build the shared web shell automatically.
 - The current Rust entrypoint is minimal and only bootstraps the Tauri host.
 - Release channel files live under `apps/desktop/releases/channels/` and keep a bounded promotion history for rollback.
+- CI release orchestration is defined in `.github/workflows/desktop-release.yml`.
+- Operational release and rollback procedure is documented in `ops/desktop-release-runbook.md`.

@@ -28,6 +28,7 @@ defmodule VostokServer.Identity.Device do
   def changeset(device, attrs) do
     device
     |> cast(attrs, [
+      :user_id,
       :device_name,
       :identity_public_key,
       :encryption_public_key,
@@ -36,7 +37,7 @@ defmodule VostokServer.Identity.Device do
       :last_active_at,
       :revoked_at
     ])
-    |> validate_required([:device_name, :identity_public_key])
+    |> validate_required([:user_id, :device_name, :identity_public_key])
     |> validate_length(:device_name, min: 1, max: 64)
   end
 end

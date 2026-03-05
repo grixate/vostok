@@ -18,6 +18,7 @@ defmodule VostokServer.Media.Upload do
     field :uploaded_byte_size, :integer
     field :expected_part_count, :integer
     field :ciphertext, :binary
+    field :ciphertext_sha256, :string
     field :completed_at, :utc_datetime_usec
 
     belongs_to :uploader_device, VostokServer.Identity.Device
@@ -38,6 +39,7 @@ defmodule VostokServer.Media.Upload do
       :uploaded_byte_size,
       :expected_part_count,
       :ciphertext,
+      :ciphertext_sha256,
       :completed_at
     ])
     |> validate_required([:uploader_device_id, :status, :media_kind, :filename])
@@ -47,5 +49,6 @@ defmodule VostokServer.Media.Upload do
     |> validate_number(:uploaded_byte_size, greater_than_or_equal_to: 0)
     |> validate_number(:expected_part_count, greater_than: 0)
     |> validate_length(:filename, min: 1, max: 255)
+    |> validate_length(:ciphertext_sha256, is: 64)
   end
 end

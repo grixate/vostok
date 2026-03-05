@@ -44,17 +44,28 @@ defmodule VostokServer.Media do
     end
   end
 
-  def complete_upload(upload_id, current_device_id)
-      when is_binary(upload_id) and is_binary(current_device_id) do
+  def complete_upload(upload_id, current_device_id, attrs \\ %{})
+
+  def complete_upload(upload_id, current_device_id, attrs)
+      when is_binary(upload_id) and is_binary(current_device_id) and is_map(attrs) do
     with %Upload{} = upload <- Repo.get(Upload, upload_id),
          :ok <- authorize_upload_access(upload, current_device_id, true),
+         {:ok, expected_ciphertext_sha256} <-
+           normalize_optional_sha256(attrs["ciphertext_sha256"], "ciphertext_sha256"),
          {:ok, assembled_ciphertext, assembled_part_indexes} <- assemble_upload_ciphertext(upload),
+         actual_ciphertext_sha256 = sha256_hex(assembled_ciphertext),
+         :ok <-
+           verify_ciphertext_digest(
+             expected_ciphertext_sha256,
+             actual_ciphertext_sha256
+           ),
          {:ok, updated} <-
            upload
            |> Upload.changeset(%{
              status: "completed",
              completed_at: DateTime.utc_now(),
              ciphertext: assembled_ciphertext,
+             ciphertext_sha256: actual_ciphertext_sha256,
              uploaded_byte_size: byte_size(assembled_ciphertext),
              expected_part_count: upload.expected_part_count || length(assembled_part_indexes)
            })
@@ -76,6 +87,20 @@ defmodule VostokServer.Media do
 
       nil ->
         {:error, {:not_found, "Upload not found."}}
+    end
+  end
+
+  def fetch_upload_state(upload_id, current_device_id)
+      when is_binary(upload_id) and is_binary(current_device_id) do
+    with %Upload{} = upload <- Repo.get(Upload, upload_id),
+         :ok <- authorize_upload_access(upload, current_device_id, true) do
+      {:ok, present_upload(upload)}
+    else
+      nil ->
+        {:error, {:not_found, "Upload not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -183,7 +208,11 @@ defmodule VostokServer.Media do
     {:error, {:validation, "This upload has already been completed."}}
   end
 
-  defp append_chunk(%Upload{} = upload, %{chunk: chunk, part_index: part_index, part_count: part_count}) do
+  defp append_chunk(%Upload{} = upload, %{
+         chunk: chunk,
+         part_index: part_index,
+         part_count: part_count
+       }) do
     with {:ok, expected_part_count} <- resolve_expected_part_count(upload, part_count),
          {:ok, resolved_part_index} <- resolve_part_index(upload, part_index, expected_part_count),
          {:ok, _part} <- upsert_upload_part(upload, chunk, resolved_part_index),
@@ -194,7 +223,8 @@ defmodule VostokServer.Media do
 
   defp resolve_expected_part_count(%Upload{expected_part_count: current}, nil), do: {:ok, current}
 
-  defp resolve_expected_part_count(%Upload{expected_part_count: nil}, incoming) when is_integer(incoming) do
+  defp resolve_expected_part_count(%Upload{expected_part_count: nil}, incoming)
+       when is_integer(incoming) do
     {:ok, incoming}
   end
 
@@ -217,7 +247,8 @@ defmodule VostokServer.Media do
     end
   end
 
-  defp resolve_part_index(%Upload{}, part_index, expected_part_count) when is_integer(part_index) do
+  defp resolve_part_index(%Upload{}, part_index, expected_part_count)
+       when is_integer(part_index) do
     if is_integer(expected_part_count) and part_index >= expected_part_count do
       {:error, {:validation, "part_index exceeds the upload's expected part count."}}
     else
@@ -388,7 +419,7 @@ defmodule VostokServer.Media do
     a == 10 or
       (a == 172 and b in 16..31) or
       (a == 192 and b == 168) or
-      (a == 127) or
+      a == 127 or
       (a == 169 and b == 254) or
       (a == 100 and b in 64..127) or
       (a == 0 and b == 0 and c == 0 and d == 0)
@@ -501,7 +532,11 @@ defmodule VostokServer.Media do
   end
 
   defp extract_canonical_url(body, base_uri) when is_binary(body) and is_map(base_uri) do
-    case Regex.run(~r/<link[^>]*rel\s*=\s*["']canonical["'][^>]*href\s*=\s*["']([^"']+)["'][^>]*>/isu, body, capture: :all_but_first) do
+    case Regex.run(
+           ~r/<link[^>]*rel\s*=\s*["']canonical["'][^>]*href\s*=\s*["']([^"']+)["'][^>]*>/isu,
+           body,
+           capture: :all_but_first
+         ) do
       [href] ->
         href = String.trim(href)
 
@@ -568,6 +603,7 @@ defmodule VostokServer.Media do
       expected_part_count: upload.expected_part_count,
       uploaded_part_count: length(uploaded_part_indexes),
       uploaded_part_indexes: uploaded_part_indexes,
+      ciphertext_sha256: upload.ciphertext_sha256,
       completed_at: iso_or_nil(upload.completed_at),
       ciphertext:
         if Keyword.get(opts, :include_ciphertext, false) do
@@ -644,6 +680,38 @@ defmodule VostokServer.Media do
   end
 
   defp normalize_positive_integer_optional(_), do: nil
+
+  defp normalize_optional_sha256(nil, _field), do: {:ok, nil}
+
+  defp normalize_optional_sha256(value, field) when is_binary(field) do
+    normalized =
+      value
+      |> normalize_string()
+      |> case do
+        nil -> nil
+        candidate -> String.downcase(candidate)
+      end
+
+    cond do
+      is_nil(normalized) ->
+        {:ok, nil}
+
+      String.match?(normalized, ~r/\A[0-9a-f]{64}\z/u) ->
+        {:ok, normalized}
+
+      true ->
+        {:error, {:validation, "#{field} must be a lowercase 64-character SHA-256 hex digest."}}
+    end
+  end
+
+  defp verify_ciphertext_digest(nil, _actual), do: :ok
+  defp verify_ciphertext_digest(expected, expected), do: :ok
+
+  defp verify_ciphertext_digest(expected, actual) do
+    {:error,
+     {:validation,
+      "ciphertext_sha256 does not match the assembled ciphertext digest (expected #{expected}, got #{actual})."}}
+  end
 
   defp sha256_hex(binary) when is_binary(binary) do
     :crypto.hash(:sha256, binary)

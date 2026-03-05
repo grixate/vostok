@@ -6,6 +6,7 @@ defmodule VostokServer.Federation.Transport.MTLS do
   @behaviour VostokServer.Federation.Transport
 
   alias VostokServer.Federation.DeliveryJob
+  alias VostokServer.Federation.EnvelopeCodec
   alias VostokServer.Federation.Peer
 
   @default_connect_timeout_ms 5_000
@@ -23,28 +24,71 @@ defmodule VostokServer.Federation.Transport.MTLS do
   end
 
   defp do_post(endpoint_url, source_domain, %DeliveryJob{} = job, connect_options, options) do
-    request_options = [
-      method: :post,
-      url: endpoint_url,
-      json: %{
-        delivery_id: job.id,
-        event_type: job.event_type,
-        payload: job.payload,
-        source_domain: source_domain,
-        sent_at: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-      },
-      headers: [{"x-vostok-source-domain", source_domain}],
-      retry: false,
-      receive_timeout: config_value(options, :request_timeout_ms, @default_request_timeout_ms),
-      connect_options: connect_options
-    ]
+    idempotency_key = "#{job.id}:#{payload_digest(job.payload)}"
 
-    case Req.request(request_options) do
-      {:ok, %Req.Response{} = response} ->
-        {:ok, response}
+    signature =
+      delivery_signature(
+        options,
+        source_domain,
+        job.event_type,
+        job.id,
+        idempotency_key,
+        job.payload
+      )
 
-      {:error, exception} ->
-        {:error, classify_exception(exception)}
+    body = %{
+      delivery_id: job.id,
+      idempotency_key: idempotency_key,
+      event_type: job.event_type,
+      payload: job.payload,
+      source_domain: source_domain,
+      signature: signature,
+      sent_at: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601(),
+      protocol_version: 1
+    }
+
+    with {:ok, body_options, content_type} <- encode_wire_payload(body, options),
+         request_options =
+           [
+             method: :post,
+             url: endpoint_url,
+             headers: [
+               {"x-vostok-source-domain", source_domain},
+               {"content-type", content_type},
+               {"accept", "application/json"}
+             ],
+             retry: false,
+             receive_timeout:
+               config_value(options, :request_timeout_ms, @default_request_timeout_ms),
+             connect_options: connect_options
+           ] ++ body_options do
+      case Req.request(request_options) do
+        {:ok, %Req.Response{} = response} ->
+          {:ok, response}
+
+        {:error, exception} ->
+          {:error, classify_exception(exception)}
+      end
+    end
+  end
+
+  defp encode_wire_payload(payload, options) when is_map(payload) do
+    wire_format =
+      options
+      |> config_value(:wire_format, "protobuf")
+      |> normalize_string()
+      |> Kernel.||("protobuf")
+
+    case wire_format do
+      "protobuf" ->
+        {:ok, [body: EnvelopeCodec.encode_protobuf(payload)],
+         EnvelopeCodec.protobuf_content_type()}
+
+      "json" ->
+        {:ok, [json: payload], "application/json"}
+
+      _ ->
+        {:error, {:permanent, "Unsupported federation wire_format."}}
     end
   end
 
@@ -196,6 +240,69 @@ defmodule VostokServer.Federation.Transport.MTLS do
     value = Keyword.get(options, key, default)
     if is_nil(value), do: default, else: value
   end
+
+  defp delivery_signature(
+         options,
+         source_domain,
+         event_type,
+         delivery_id,
+         idempotency_key,
+         payload
+       ) do
+    signing_secret = config_value(options, :signing_secret, nil)
+
+    if is_nil(signing_secret) do
+      nil
+    else
+      canonical =
+        [
+          normalize_string(source_domain) || "",
+          normalize_string(event_type) || "",
+          normalize_string(delivery_id) || "",
+          normalize_string(idempotency_key) || "",
+          payload_digest(payload)
+        ]
+        |> Enum.join("|")
+
+      :crypto.mac(:hmac, :sha256, signing_secret, canonical)
+      |> Base.encode64()
+    end
+  end
+
+  defp payload_digest(payload) when is_map(payload) do
+    payload
+    |> canonicalize_map()
+    |> Jason.encode!()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+  end
+
+  defp payload_digest(payload) do
+    payload
+    |> inspect()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+  end
+
+  defp canonicalize_map(map) when is_map(map) do
+    map
+    |> Enum.map(fn {key, value} ->
+      normalized_value =
+        cond do
+          is_map(value) -> canonicalize_map(value)
+          is_list(value) -> Enum.map(value, &canonicalize_value/1)
+          true -> canonicalize_value(value)
+        end
+
+      {to_string(key), normalized_value}
+    end)
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Map.new()
+  end
+
+  defp canonicalize_value(value) when is_map(value), do: canonicalize_map(value)
+  defp canonicalize_value(value) when is_list(value), do: Enum.map(value, &canonicalize_value/1)
+  defp canonicalize_value(value), do: value
 
   defp normalize_keyword_list(options) when is_list(options), do: options
   defp normalize_keyword_list(%{} = options), do: Map.to_list(options)

@@ -19,8 +19,39 @@ export type LinkDevicePayload = {
 
 export type MeResponse = {
   user: { id: string; username: string }
-  device: { id: string; device_name: string }
+  device: {
+    id: string
+    device_name: string
+    prekeys?: {
+      device_id: string
+      available_one_time_prekeys: number
+      low_watermark: number
+      target_count: number
+      replenish_recommended: boolean
+    } | null
+  }
   session: { expires_at: string }
+}
+
+export type DeviceInfo = {
+  id: string
+  device_name: string
+  is_current: boolean
+  revoked_at: string | null
+  last_active_at: string | null
+  inserted_at: string | null
+  one_time_prekey_count: number
+}
+
+export type SafetyNumberRecord = {
+  chat_id: string
+  peer_device_id: string
+  peer_user_id: string
+  peer_username: string
+  peer_device_name: string
+  fingerprint: string
+  verified: boolean
+  verified_at: string | null
 }
 
 export type ChatSummary = {
@@ -46,6 +77,7 @@ export type GroupSenderKey = {
   owner_device_id: string
   recipient_device_id: string
   key_id: string
+  sender_key_epoch: number
   algorithm: string
   status: 'active' | 'superseded'
   wrapped_sender_key: string
@@ -55,8 +87,12 @@ export type GroupSenderKey = {
 
 export type ChatMessage = {
   id: string
+  chat_id: string
   client_id: string
   message_kind: string
+  crypto_scheme: string | null
+  sender_key_id: string | null
+  sender_key_epoch: number | null
   sender_device_id: string
   inserted_at: string
   pinned_at: string | null
@@ -125,6 +161,7 @@ export type MediaUpload = {
   expected_part_count: number | null
   uploaded_part_count: number
   uploaded_part_indexes: number[]
+  ciphertext_sha256: string | null
   completed_at: string | null
   ciphertext: string | null
 }
@@ -144,8 +181,10 @@ export type FederationPeer = {
   domain: string
   display_name: string | null
   status: string
+  trust_state: 'untrusted' | 'invited' | 'trusted' | 'revoked'
   last_error: string | null
   last_seen_at: string | null
+  trusted_at: string | null
   inserted_at: string | null
   updated_at: string | null
 }
@@ -201,6 +240,9 @@ export type CallParticipant = {
   device_id: string
   status: 'joined' | 'left'
   track_kind: 'audio' | 'video' | 'audio_video'
+  e2ee_capable: boolean
+  e2ee_algorithm: string | null
+  e2ee_key_epoch: number | null
   joined_at: string
   left_at: string | null
 }
@@ -232,6 +274,19 @@ export type CallSignal = {
   signal_type: 'offer' | 'answer' | 'ice' | 'renegotiate' | 'heartbeat'
   payload: string
   inserted_at: string
+}
+
+export type CallKeyDistribution = {
+  id: string
+  call_id: string
+  owner_device_id: string
+  recipient_device_id: string
+  key_epoch: number
+  algorithm: string
+  status: 'active' | 'superseded'
+  wrapped_key: string
+  inserted_at: string | null
+  updated_at: string | null
 }
 
 type ChallengeResponse = {
@@ -303,6 +358,24 @@ export async function fetchMe(token: string): Promise<MeResponse> {
   return apiRequest<MeResponse>('/me', {
     method: 'GET',
     headers: authHeader(token)
+  })
+}
+
+export async function listDevices(token: string): Promise<{ devices: DeviceInfo[] }> {
+  return apiRequest<{ devices: DeviceInfo[] }>('/devices', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function revokeDevice(
+  token: string,
+  deviceId: string
+): Promise<{ device: DeviceInfo }> {
+  return apiRequest<{ device: DeviceInfo }>(`/devices/${deviceId}/revoke`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({})
   })
 }
 
@@ -448,6 +521,31 @@ export async function rekeyChatSessions(
   })
 }
 
+export async function listSafetyNumbers(
+  token: string,
+  chatId: string
+): Promise<{ safety_numbers: SafetyNumberRecord[] }> {
+  return apiRequest<{ safety_numbers: SafetyNumberRecord[] }>(`/chats/${chatId}/safety-numbers`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function verifySafetyNumber(
+  token: string,
+  chatId: string,
+  peerDeviceId: string
+): Promise<{ safety_number: SafetyNumberRecord }> {
+  return apiRequest<{ safety_number: SafetyNumberRecord }>(
+    `/chats/${chatId}/safety-numbers/${peerDeviceId}/verify`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({})
+    }
+  )
+}
+
 export async function listGroupSenderKeys(
   token: string,
   chatId: string
@@ -463,6 +561,7 @@ export async function distributeGroupSenderKeys(
   chatId: string,
   payload: {
     key_id: string
+    sender_key_epoch?: number
     algorithm?: string
     wrapped_keys: Record<string, string>
   }
@@ -499,6 +598,9 @@ export async function createMessage(
     ciphertext: string
     message_kind: string
     header?: string
+    crypto_scheme?: string
+    sender_key_id?: string
+    sender_key_epoch?: number
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
     established_session_ids?: string[]
@@ -520,6 +622,9 @@ export async function updateMessage(
     ciphertext: string
     message_kind: string
     header?: string
+    crypto_scheme?: string
+    sender_key_id?: string
+    sender_key_epoch?: number
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
     established_session_ids?: string[]
@@ -600,11 +705,25 @@ export async function appendMediaUploadPart(
   })
 }
 
-export async function completeMediaUpload(token: string, uploadId: string): Promise<{ upload: MediaUpload }> {
+export async function completeMediaUpload(
+  token: string,
+  uploadId: string,
+  payload?: { ciphertext_sha256?: string }
+): Promise<{ upload: MediaUpload }> {
   return apiRequest<{ upload: MediaUpload }>(`/media/uploads/${uploadId}/complete`, {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify({})
+    body: JSON.stringify(payload ?? {})
+  })
+}
+
+export async function fetchMediaUploadState(
+  token: string,
+  uploadId: string
+): Promise<{ upload: MediaUpload }> {
+  return apiRequest<{ upload: MediaUpload }>(`/media/uploads/${uploadId}`, {
+    method: 'GET',
+    headers: authHeader(token)
   })
 }
 
@@ -713,6 +832,30 @@ export async function recordFederationPeerHeartbeat(
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({})
+  })
+}
+
+export async function createFederationPeerInvite(
+  token: string,
+  peerId: string
+): Promise<{ peer: FederationPeer; invite_token: string }> {
+  return apiRequest<{ peer: FederationPeer; invite_token: string }>(
+    `/admin/federation/peers/${peerId}/invite`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({})
+    }
+  )
+}
+
+export async function acceptFederationPeerInvite(payload: {
+  domain: string
+  invite_token: string
+}): Promise<{ peer: FederationPeer }> {
+  return apiRequest<{ peer: FederationPeer }>('/federation/peers/accept', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   })
 }
 
@@ -854,6 +997,9 @@ export async function joinCallSession(
   callId: string,
   payload?: {
     track_kind?: 'audio' | 'video' | 'audio_video'
+    e2ee_capable?: boolean
+    e2ee_algorithm?: string
+    e2ee_key_epoch?: number
   }
 ): Promise<{
   call: CallSession
@@ -937,6 +1083,44 @@ export async function endCallSession(token: string, callId: string): Promise<{ c
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({})
+  })
+}
+
+export async function fetchCallKeys(
+  token: string,
+  callId: string
+): Promise<{
+  call: CallSession
+  keys: CallKeyDistribution[]
+}> {
+  return apiRequest<{
+    call: CallSession
+    keys: CallKeyDistribution[]
+  }>(`/calls/${callId}/keys`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function rotateCallKeys(
+  token: string,
+  callId: string,
+  payload: {
+    key_epoch?: number
+    algorithm?: string
+    wrapped_keys: Record<string, string>
+  }
+): Promise<{
+  call: CallSession
+  keys: CallKeyDistribution[]
+}> {
+  return apiRequest<{
+    call: CallSession
+    keys: CallKeyDistribution[]
+  }>(`/calls/${callId}/keys`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
   })
 }
 

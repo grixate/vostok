@@ -1,12 +1,12 @@
 # Stage 6-8 Ops Status
 
-This repository now includes early operator scaffolding that reaches into the later implementation stages.
+This repository now includes a production-oriented operator surface across Stages 6-8.
 
 ## Implemented
 
 - Admin overview API:
   - `GET /api/v1/admin/overview`
-- Federation peer scaffold APIs:
+- Federation peer APIs:
   - `GET /api/v1/admin/federation/peers`
   - `POST /api/v1/admin/federation/peers`
   - `POST /api/v1/admin/federation/peers/:peer_id/status`
@@ -35,6 +35,7 @@ This repository now includes early operator scaffolding that reaches into the la
 - Persisted `federation_delivery_jobs` table for durable outbound queue state
 - Queued federation deliveries now auto-enqueue background Oban jobs for worker-driven dispatch
 - Outbound federation deliveries now dispatch over a real mTLS `Req` transport to remote `/api/v1/federation/deliveries`
+- Federation transport now supports protobuf envelope wire format (`application/x-protobuf`) with JSON compatibility during rollout
 - Inbound federation relay ingestion now persists idempotent `inbound` delivery rows keyed by remote delivery ID
 - Persisted `call_sessions` table for lightweight call signaling state
 - Persisted `call_participants` table for device-level join/leave state
@@ -43,10 +44,11 @@ This repository now includes early operator scaffolding that reaches into the la
 - Per-device `Membrane.RTC.Engine.Endpoint.WebRTC` instances now boot inside each active room
 - A local endpoint queue is retained for polled native endpoint-emitted media events (for example the initial `connected` event)
 - `call_signals` remain persisted and realtime-visible for operator inspection while native media negotiation runs through Membrane
+- Group call joins now fail closed when the joining device lacks an active E2EE call-key epoch distribution
 - Joining a call now provisions the current device's Membrane WebRTC endpoint automatically
 - Leaving a call now removes the current device endpoint and clears local endpoint queue state
 - Call start and end now write `system` messages into the chat timeline, including a missed-call variant when no remote participant ever joined
-- Tauri desktop wrapper scaffold in `apps/desktop`
+- Tauri desktop wrapper with build/sign/package/release channel tooling in `apps/desktop`
 - Web operator surface for peer activation, heartbeat, call-session controls, Membrane room join state, per-device endpoint provisioning, and signaling inspection
 - The Stage 6 operator surface now renders recent federation delivery rows, not just aggregate queue counts
 - The Stage 6 operator surface can now queue a relay on a peer row and manually advance recent delivery jobs

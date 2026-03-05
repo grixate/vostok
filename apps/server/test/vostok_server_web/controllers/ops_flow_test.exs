@@ -610,6 +610,181 @@ defmodule VostokServerWeb.OpsFlowTest do
     assert Base.decode64!(second_system_ciphertext) == "Voice call ended"
   end
 
+  test "call key distributions can be rotated and fetched by recipient devices", %{conn: conn} do
+    %{device_id: alice_device_id, token: alice_token} = register_device(conn, "alice-call-keys")
+    %{device_id: bob_device_id, token: bob_token} = register_device(build_conn(), "bob-call-keys")
+
+    create_chat_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/direct", %{username: "bob-call-keys"})
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_chat_conn, 201)
+
+    create_call_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/calls", %{mode: "group"})
+
+    assert %{"call" => %{"id" => call_id}} = json_response(create_call_conn, 201)
+
+    _alice_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "sframe-aes-gcm-v1",
+        e2ee_key_epoch: 0
+      })
+
+    rotate_keys_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/calls/#{call_id}/keys", %{
+        key_epoch: 1,
+        algorithm: "sframe-aes-gcm-v1",
+        wrapped_keys: %{
+          bob_device_id => Base.encode64("wrapped-call-key")
+        }
+      })
+
+    assert %{
+             "keys" => [
+               %{
+                 "owner_device_id" => ^alice_device_id,
+                 "recipient_device_id" => ^bob_device_id,
+                 "key_epoch" => 1,
+                 "algorithm" => "sframe-aes-gcm-v1",
+                 "status" => "active"
+               }
+             ]
+           } = json_response(rotate_keys_conn, 201)
+
+    bob_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "sframe-aes-gcm-v1",
+        e2ee_key_epoch: 1
+      })
+
+    assert %{
+             "participant" => %{
+               "device_id" => ^bob_device_id,
+               "status" => "joined",
+               "e2ee_capable" => true,
+               "e2ee_algorithm" => "sframe-aes-gcm-v1",
+               "e2ee_key_epoch" => 1
+             }
+           } = json_response(bob_join_conn, 200)
+
+    bob_keys_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> get("/api/v1/calls/#{call_id}/keys")
+
+    assert %{
+             "keys" => [
+               %{
+                 "recipient_device_id" => ^bob_device_id,
+                 "key_epoch" => 1,
+                 "algorithm" => "sframe-aes-gcm-v1",
+                 "status" => "active",
+                 "wrapped_key" => wrapped_key
+               }
+             ]
+           } = json_response(bob_keys_conn, 200)
+
+    assert wrapped_key == Base.encode64("wrapped-call-key")
+  end
+
+  test "group join fails closed when no call key distribution exists for joining device", %{
+    conn: conn
+  } do
+    %{token: alice_token} = register_device(conn, "alice-call-fail-closed")
+
+    %{device_id: bob_device_id, token: bob_token} =
+      register_device(build_conn(), "bob-call-fail-closed")
+
+    create_chat_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/direct", %{username: "bob-call-fail-closed"})
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_chat_conn, 201)
+
+    create_call_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/calls", %{mode: "group"})
+
+    assert %{"call" => %{"id" => call_id}} = json_response(create_call_conn, 201)
+
+    alice_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "sframe-aes-gcm-v1",
+        e2ee_key_epoch: 0
+      })
+
+    assert %{"participant" => %{"status" => "joined"}} = json_response(alice_join_conn, 200)
+
+    bob_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "sframe-aes-gcm-v1",
+        e2ee_key_epoch: 1
+      })
+
+    assert %{"error" => "validation", "message" => error_message} =
+             json_response(bob_join_conn, 422)
+
+    assert String.contains?(
+             error_message,
+             "Group call join requires an active call key distribution for this device and epoch."
+           )
+
+    rotate_keys_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/calls/#{call_id}/keys", %{
+        key_epoch: 1,
+        algorithm: "sframe-aes-gcm-v1",
+        wrapped_keys: %{
+          bob_device_id => Base.encode64("wrapped-fail-closed-key")
+        }
+      })
+
+    assert %{"keys" => [_]} = json_response(rotate_keys_conn, 201)
+
+    bob_join_after_rotation_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "sframe-aes-gcm-v1",
+        e2ee_key_epoch: 1
+      })
+
+    assert %{
+             "participant" => %{
+               "device_id" => ^bob_device_id,
+               "status" => "joined",
+               "e2ee_key_epoch" => 1
+             }
+           } = json_response(bob_join_after_rotation_conn, 200)
+  end
+
   defp register_device(conn, username) do
     {identity_public_key_raw, identity_private_key_raw} = :crypto.generate_key(:eddsa, :ed25519)
     public_key = Base.encode64(identity_public_key_raw)

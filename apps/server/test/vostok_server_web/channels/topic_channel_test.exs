@@ -72,6 +72,19 @@ defmodule VostokServerWeb.TopicChannelTest do
              |> subscribe_and_join(TopicChannel, "chat:#{chat_id}")
   end
 
+  test "unsupported topics are rejected" do
+    alice = register_identity("alice")
+
+    assert {:error, %{reason: "unsupported_topic"}} =
+             DeviceSocket
+             |> socket("device_socket:#{alice.device.id}", %{
+               device_id: alice.device.id,
+               device_token: "test-token",
+               user_id: alice.user.id
+             })
+             |> subscribe_and_join(TopicChannel, "ops:dashboard")
+  end
+
   test "chat members can join the call topic and receive call state broadcasts" do
     alice = register_identity("alice")
     {:ok, chat} = Messaging.ensure_direct_chat(alice.user.id, alice.user.username)

@@ -6,11 +6,13 @@ defmodule VostokServer.Messaging do
   import Ecto.Query
 
   alias Ecto.Multi
+  alias VostokServer.Federation
   alias VostokServer.Identity.{Device, OneTimePrekey, User}
 
   alias VostokServer.Messaging.{
     Chat,
     ChatDeviceSession,
+    ChatSafetyVerification,
     GroupSenderKey,
     ChatMember,
     Message,
@@ -172,7 +174,7 @@ defmodule VostokServer.Messaging do
       nil ->
         {:error, {:not_found, "Group member not found."}}
 
-        {:error, reason} ->
+      {:error, reason} ->
         {:error, reason}
     end
   end
@@ -210,6 +212,7 @@ defmodule VostokServer.Messaging do
                 existing
                 |> GroupSenderKey.changeset(%{
                   wrapped_sender_key: wrapped_sender_key,
+                  sender_key_epoch: normalized.sender_key_epoch,
                   algorithm: normalized.algorithm,
                   status: "active"
                 })
@@ -222,6 +225,7 @@ defmodule VostokServer.Messaging do
                   owner_device_id: owner_device_id,
                   recipient_device_id: recipient_device_id,
                   key_id: normalized.key_id,
+                  sender_key_epoch: normalized.sender_key_epoch,
                   wrapped_sender_key: wrapped_sender_key,
                   algorithm: normalized.algorithm,
                   status: "active"
@@ -272,6 +276,141 @@ defmodule VostokServer.Messaging do
     else
       nil ->
         {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def list_safety_numbers(chat_id, current_user_id, verifier_device_id)
+      when is_binary(chat_id) and is_binary(current_user_id) and is_binary(verifier_device_id) do
+    with {:ok, _membership} <- ensure_membership(chat_id, current_user_id),
+         %Device{} = verifier_device <- Repo.get(Device, verifier_device_id),
+         :ok <- ensure_device_belongs_to_user(verifier_device, current_user_id) do
+      peer_devices =
+        from(chat_member in ChatMember,
+          join: user in User,
+          on: user.id == chat_member.user_id,
+          join: device in Device,
+          on:
+            device.user_id == chat_member.user_id and is_nil(device.revoked_at) and
+              not is_nil(device.identity_public_key),
+          where: chat_member.chat_id == ^chat_id and device.id != ^verifier_device_id,
+          order_by: [asc: user.username, asc: device.device_name, asc: device.inserted_at],
+          select: %{
+            user_id: user.id,
+            username: user.username,
+            device_id: device.id,
+            device_name: device.device_name,
+            identity_public_key: device.identity_public_key
+          }
+        )
+        |> Repo.all()
+
+      verification_map =
+        from(verification in ChatSafetyVerification,
+          where:
+            verification.chat_id == ^chat_id and
+              verification.verifier_device_id == ^verifier_device_id,
+          select: {verification.peer_device_id, verification}
+        )
+        |> Repo.all()
+        |> Map.new()
+
+      safety_numbers =
+        peer_devices
+        |> Enum.map(fn peer ->
+          fingerprint =
+            safety_number_fingerprint(
+              verifier_device.identity_public_key,
+              peer.identity_public_key
+            )
+
+          verification = Map.get(verification_map, peer.device_id)
+          verified_at = verification && verification.verified_at
+          verified = !is_nil(verified_at) and verification.fingerprint == fingerprint
+
+          %{
+            chat_id: chat_id,
+            peer_device_id: peer.device_id,
+            peer_user_id: peer.user_id,
+            peer_username: peer.username,
+            peer_device_name: peer.device_name,
+            fingerprint: fingerprint,
+            verified: verified,
+            verified_at: iso_or_nil(verified_at)
+          }
+        end)
+
+      {:ok, safety_numbers}
+    else
+      nil ->
+        {:error, {:not_found, "Verifier device not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def verify_safety_number(chat_id, current_user_id, verifier_device_id, peer_device_id)
+      when is_binary(chat_id) and is_binary(current_user_id) and is_binary(verifier_device_id) and
+             is_binary(peer_device_id) do
+    with {:ok, _membership} <- ensure_membership(chat_id, current_user_id),
+         %Device{} = verifier_device <- Repo.get(Device, verifier_device_id),
+         :ok <- ensure_device_belongs_to_user(verifier_device, current_user_id),
+         {:ok, peer} <- resolve_safety_peer_device(chat_id, peer_device_id),
+         :ok <- ensure_not_self_safety_device(verifier_device_id, peer.device_id) do
+      fingerprint =
+        safety_number_fingerprint(verifier_device.identity_public_key, peer.identity_public_key)
+
+      now = DateTime.utc_now()
+
+      upserted =
+        case Repo.get_by(ChatSafetyVerification,
+               chat_id: chat_id,
+               verifier_device_id: verifier_device_id,
+               peer_device_id: peer.device_id
+             ) do
+          %ChatSafetyVerification{} = existing ->
+            existing
+            |> ChatSafetyVerification.changeset(%{
+              fingerprint: fingerprint,
+              verified_at: now
+            })
+            |> Repo.update()
+
+          nil ->
+            %ChatSafetyVerification{}
+            |> ChatSafetyVerification.changeset(%{
+              chat_id: chat_id,
+              verifier_device_id: verifier_device_id,
+              peer_device_id: peer.device_id,
+              fingerprint: fingerprint,
+              verified_at: now
+            })
+            |> Repo.insert()
+        end
+
+      case upserted do
+        {:ok, verification} ->
+          {:ok,
+           %{
+             chat_id: chat_id,
+             peer_device_id: peer.device_id,
+             peer_user_id: peer.user_id,
+             peer_username: peer.username,
+             peer_device_name: peer.device_name,
+             fingerprint: fingerprint,
+             verified: true,
+             verified_at: iso_or_nil(verification.verified_at)
+           }}
+
+        {:error, changeset} ->
+          {:error, {:validation, format_changeset_error(changeset)}}
+      end
+    else
+      nil ->
+        {:error, {:not_found, "Verifier device not found."}}
 
       {:error, reason} ->
         {:error, reason}
@@ -422,9 +561,17 @@ defmodule VostokServer.Messaging do
       when is_binary(chat_id) and is_binary(sender_device_id) and is_binary(user_id) and
              is_binary(current_device_id) and is_map(attrs) do
     with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
          {:ok, normalized} <- normalize_message_attrs(attrs),
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
-         {:ok, recipient_device_ids} <- recipient_device_ids(chat_id) do
+         {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
+         :ok <-
+           ensure_group_message_transport(
+             chat,
+             sender_device_id,
+             normalized,
+             recipient_device_ids
+           ) do
       Multi.new()
       |> Multi.insert(:message, build_message_changeset(chat_id, sender_device_id, normalized))
       |> Multi.run(:recipient_envelopes, fn repo, %{message: message} ->
@@ -458,8 +605,12 @@ defmodule VostokServer.Messaging do
             |> Map.from_struct()
             |> Map.take([
               :id,
+              :chat_id,
               :client_id,
               :message_kind,
+              :crypto_scheme,
+              :sender_key_id,
+              :sender_key_epoch,
               :sender_device_id,
               :inserted_at,
               :pinned_at,
@@ -474,12 +625,19 @@ defmodule VostokServer.Messaging do
 
           presented_message = present_message(message, current_device_id, user_id)
           broadcast_message(chat_id, message.id)
+          maybe_queue_federation_message(chat_id, message)
 
           {:ok, presented_message}
 
         {:error, _step, reason, _changes} ->
           {:error, reason}
       end
+    else
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -511,17 +669,85 @@ defmodule VostokServer.Messaging do
     end
   end
 
+  def ingest_federated_message(chat_id, sender_device_id, attrs)
+      when is_binary(chat_id) and is_binary(sender_device_id) and is_map(attrs) do
+    with %Chat{} = chat <- Repo.get(Chat, chat_id),
+         %Device{} <- Repo.get(Device, sender_device_id),
+         {:ok, normalized} <- normalize_message_attrs(attrs),
+         {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
+         {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
+         :ok <-
+           ensure_group_message_transport(
+             chat,
+             sender_device_id,
+             normalized,
+             recipient_device_ids
+           ) do
+      case Repo.get_by(Message, client_id: normalized.client_id) do
+        %Message{chat_id: ^chat_id} = existing ->
+          {:ok, %{id: existing.id, duplicate: true}}
+
+        %Message{} ->
+          {:error, {:validation, "client_id already exists for a different chat."}}
+
+        nil ->
+          Multi.new()
+          |> Multi.insert(
+            :message,
+            build_message_changeset(chat_id, sender_device_id, normalized)
+          )
+          |> Multi.run(:recipient_envelopes, fn repo, %{message: message} ->
+            insert_recipient_envelopes(
+              repo,
+              message,
+              recipient_device_ids,
+              normalized.ciphertext,
+              normalized.recipient_envelopes
+            )
+          end)
+          |> Multi.update_all(
+            :touch_chat,
+            from(chat in Chat, where: chat.id == ^chat_id),
+            set: [updated_at: DateTime.utc_now()]
+          )
+          |> Repo.transaction()
+          |> case do
+            {:ok, %{message: message}} ->
+              broadcast_message(chat_id, message.id)
+              {:ok, %{id: message.id, duplicate: false}}
+
+            {:error, _step, reason, _changes} ->
+              {:error, reason}
+          end
+      end
+    else
+      nil ->
+        {:error, {:not_found, "Chat or sender device not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   def edit_message(chat_id, message_id, sender_device_id, user_id, attrs, current_device_id)
       when is_binary(chat_id) and is_binary(message_id) and is_binary(sender_device_id) and
              is_binary(user_id) and is_binary(current_device_id) and is_map(attrs) do
-    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
          {:ok, normalized} <- normalize_message_attrs(attrs),
          %Message{} = message <- Repo.get(Message, message_id),
          :ok <- ensure_message_chat(message, chat_id),
-         :ok <- ensure_message_owner(message, sender_device_id),
+         :ok <- ensure_message_edit_permission(chat, membership, message, sender_device_id),
          :ok <- ensure_not_deleted(message),
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
-         {:ok, recipient_device_ids} <- recipient_device_ids(chat_id) do
+         {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
+         :ok <-
+           ensure_group_message_transport(
+             chat,
+             sender_device_id,
+             normalized,
+             recipient_device_ids
+           ) do
       Multi.new()
       |> Multi.update(
         :message,
@@ -530,6 +756,9 @@ defmodule VostokServer.Messaging do
           header: normalized.header,
           ciphertext: normalized.ciphertext,
           message_kind: normalized.message_kind,
+          crypto_scheme: normalized.crypto_scheme,
+          sender_key_id: normalized.sender_key_id,
+          sender_key_epoch: normalized.sender_key_epoch,
           reply_to_message_id: normalized.reply_to_message_id,
           edited_at: DateTime.utc_now()
         })
@@ -578,7 +807,7 @@ defmodule VostokServer.Messaging do
       end
     else
       nil ->
-        {:error, {:not_found, "Message not found."}}
+        {:error, {:not_found, "Chat or message not found."}}
 
       {:error, reason} ->
         {:error, reason}
@@ -588,10 +817,11 @@ defmodule VostokServer.Messaging do
   def delete_message(chat_id, message_id, sender_device_id, user_id, current_device_id)
       when is_binary(chat_id) and is_binary(message_id) and is_binary(sender_device_id) and
              is_binary(user_id) and is_binary(current_device_id) do
-    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
          %Message{} = message <- Repo.get(Message, message_id),
          :ok <- ensure_message_chat(message, chat_id),
-         :ok <- ensure_message_owner(message, sender_device_id),
+         :ok <- ensure_message_delete_permission(chat, membership, message, sender_device_id),
          :ok <- ensure_not_deleted(message) do
       Multi.new()
       |> Multi.update(
@@ -641,9 +871,11 @@ defmodule VostokServer.Messaging do
   def toggle_message_pin(chat_id, message_id, user_id, current_device_id)
       when is_binary(chat_id) and is_binary(message_id) and is_binary(user_id) and
              is_binary(current_device_id) do
-    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
          %Message{} = message <- Repo.get(Message, message_id),
          :ok <- ensure_message_chat(message, chat_id),
+         :ok <- ensure_message_pin_permission(chat, membership),
          :ok <- ensure_not_deleted(message),
          :ok <- ensure_pinnable(message) do
       Repo.transaction(fn ->
@@ -1202,6 +1434,11 @@ defmodule VostokServer.Messaging do
          {:ok, ciphertext} <- fetch_base64(attrs, "ciphertext", "ciphertext"),
          {:ok, header} <- fetch_optional_base64(attrs, "header"),
          {:ok, message_kind} <- fetch_string(attrs, "message_kind", "message kind"),
+         {:ok, crypto_scheme} <- fetch_optional_string(attrs, "crypto_scheme"),
+         {:ok, sender_key_id} <- fetch_optional_string(attrs, "sender_key_id"),
+         {:ok, sender_key_epoch} <- fetch_optional_integer(attrs, "sender_key_epoch"),
+         {:ok, group_transport_fallback} <-
+           fetch_optional_boolean(attrs, "group_transport_fallback"),
          {:ok, reply_to_message_id} <- fetch_optional_string(attrs, "reply_to_message_id"),
          {:ok, recipient_envelopes} <- fetch_optional_recipient_envelopes(attrs),
          {:ok, established_session_ids} <-
@@ -1212,6 +1449,10 @@ defmodule VostokServer.Messaging do
          ciphertext: ciphertext,
          header: header,
          message_kind: message_kind,
+         crypto_scheme: crypto_scheme,
+         sender_key_id: sender_key_id,
+         sender_key_epoch: sender_key_epoch,
+         group_transport_fallback: group_transport_fallback,
          reply_to_message_id: reply_to_message_id,
          recipient_envelopes: recipient_envelopes,
          established_session_ids: established_session_ids
@@ -1226,6 +1467,9 @@ defmodule VostokServer.Messaging do
       header: normalized.header,
       ciphertext: normalized.ciphertext,
       message_kind: normalized.message_kind,
+      crypto_scheme: normalized.crypto_scheme,
+      sender_key_id: normalized.sender_key_id,
+      sender_key_epoch: normalized.sender_key_epoch,
       reply_to_message_id: normalized.reply_to_message_id
     })
   end
@@ -1241,6 +1485,123 @@ defmodule VostokServer.Messaging do
       |> Repo.all()
 
     {:ok, ids}
+  end
+
+  defp ensure_group_message_transport(
+         %Chat{type: "group", id: chat_id},
+         sender_device_id,
+         normalized,
+         recipient_device_ids
+       )
+       when is_map(normalized) and is_list(recipient_device_ids) do
+    fallback? = Map.get(normalized, :group_transport_fallback, false)
+    crypto_scheme = normalize_string(Map.get(normalized, :crypto_scheme))
+
+    cond do
+      crypto_scheme == "group_sender_key_v1" ->
+        with {:ok, sender_key_id} <-
+               require_present_string(Map.get(normalized, :sender_key_id), "sender_key_id"),
+             {:ok, sender_key_epoch} <-
+               require_non_negative_integer(
+                 Map.get(normalized, :sender_key_epoch),
+                 "sender_key_epoch"
+               ),
+             :ok <- ensure_nil_or_empty_map(Map.get(normalized, :recipient_envelopes)),
+             :ok <-
+               ensure_sender_key_distribution_coverage(
+                 chat_id,
+                 sender_device_id,
+                 sender_key_id,
+                 sender_key_epoch,
+                 recipient_device_ids
+               ) do
+          :ok
+        end
+
+      fallback? ->
+        :ok
+
+      true ->
+        {:error,
+         {:validation,
+          "Group messages must use crypto_scheme=group_sender_key_v1 unless group_transport_fallback=true."}}
+    end
+  end
+
+  defp ensure_group_message_transport(
+         %Chat{},
+         _sender_device_id,
+         _normalized,
+         _recipient_device_ids
+       ),
+       do: :ok
+
+  defp ensure_sender_key_distribution_coverage(
+         chat_id,
+         owner_device_id,
+         sender_key_id,
+         sender_key_epoch,
+         recipient_device_ids
+       ) do
+    required_recipient_ids =
+      recipient_device_ids
+      |> Enum.reject(&(&1 == owner_device_id))
+      |> Enum.uniq()
+
+    if required_recipient_ids == [] do
+      :ok
+    else
+      distributed_ids =
+        from(group_sender_key in GroupSenderKey,
+          where:
+            group_sender_key.chat_id == ^chat_id and
+              group_sender_key.owner_device_id == ^owner_device_id and
+              group_sender_key.key_id == ^sender_key_id and
+              group_sender_key.sender_key_epoch == ^sender_key_epoch and
+              group_sender_key.status == "active" and
+              group_sender_key.recipient_device_id in ^required_recipient_ids,
+          select: group_sender_key.recipient_device_id,
+          distinct: true
+        )
+        |> Repo.all()
+        |> MapSet.new()
+
+      expected_ids = MapSet.new(required_recipient_ids)
+
+      if MapSet.equal?(distributed_ids, expected_ids) do
+        :ok
+      else
+        {:error,
+         {:validation,
+          "Sender key distribution is incomplete for active recipient devices in this group chat."}}
+      end
+    end
+  end
+
+  defp require_present_string(value, field_name) when is_binary(field_name) do
+    case normalize_string(value) do
+      nil -> {:error, {:validation, "#{field_name} is required."}}
+      normalized -> {:ok, normalized}
+    end
+  end
+
+  defp require_non_negative_integer(value, field_name) when is_binary(field_name) do
+    cond do
+      is_integer(value) and value >= 0 ->
+        {:ok, value}
+
+      true ->
+        {:error, {:validation, "#{field_name} must be a non-negative integer."}}
+    end
+  end
+
+  defp ensure_nil_or_empty_map(nil), do: :ok
+  defp ensure_nil_or_empty_map(map) when is_map(map) and map_size(map) == 0, do: :ok
+
+  defp ensure_nil_or_empty_map(_other) do
+    {:error,
+     {:validation,
+      "recipient_envelopes is not supported for group sender-key encrypted messages."}}
   end
 
   defp insert_recipient_envelopes(_repo, _message, [], _ciphertext, _recipient_envelopes),
@@ -1451,6 +1812,7 @@ defmodule VostokServer.Messaging do
       owner_device_id: group_sender_key.owner_device_id,
       recipient_device_id: group_sender_key.recipient_device_id,
       key_id: group_sender_key.key_id,
+      sender_key_epoch: group_sender_key.sender_key_epoch,
       algorithm: group_sender_key.algorithm,
       status: group_sender_key.status,
       wrapped_sender_key: Base.encode64(group_sender_key.wrapped_sender_key),
@@ -1465,8 +1827,12 @@ defmodule VostokServer.Messaging do
 
     %{
       id: message.id,
+      chat_id: message.chat_id,
       client_id: message.client_id,
       message_kind: message.message_kind,
+      crypto_scheme: message.crypto_scheme,
+      sender_key_id: message.sender_key_id,
+      sender_key_epoch: message.sender_key_epoch,
       sender_device_id: message.sender_device_id,
       inserted_at: DateTime.to_iso8601(message.inserted_at),
       pinned_at: iso_or_nil(message.pinned_at),
@@ -1522,6 +1888,45 @@ defmodule VostokServer.Messaging do
 
   defp fetch_optional_string(attrs, key) do
     {:ok, attrs |> Map.get(key) |> normalize_string()}
+  end
+
+  defp fetch_optional_integer(attrs, key) do
+    case Map.get(attrs, key) do
+      nil ->
+        {:ok, nil}
+
+      value when is_integer(value) and value >= 0 ->
+        {:ok, value}
+
+      value when is_binary(value) ->
+        case Integer.parse(String.trim(value)) do
+          {parsed, ""} when parsed >= 0 -> {:ok, parsed}
+          _ -> {:error, {:validation, "#{key} must be a non-negative integer."}}
+        end
+
+      _other ->
+        {:error, {:validation, "#{key} must be a non-negative integer."}}
+    end
+  end
+
+  defp fetch_optional_boolean(attrs, key) do
+    case Map.get(attrs, key) do
+      nil ->
+        {:ok, false}
+
+      value when value in [true, false] ->
+        {:ok, value}
+
+      value when is_binary(value) ->
+        case String.downcase(String.trim(value)) do
+          "true" -> {:ok, true}
+          "false" -> {:ok, false}
+          _ -> {:error, {:validation, "#{key} must be a boolean."}}
+        end
+
+      _other ->
+        {:error, {:validation, "#{key} must be a boolean."}}
+    end
   end
 
   defp fetch_base64(attrs, key, label) do
@@ -1614,6 +2019,7 @@ defmodule VostokServer.Messaging do
 
   defp normalize_sender_key_distribution(attrs) do
     with {:ok, key_id} <- fetch_string(attrs, "key_id", "sender key id"),
+         {:ok, sender_key_epoch} <- fetch_optional_integer(attrs, "sender_key_epoch"),
          {:ok, wrapped_sender_keys} <- fetch_sender_key_map(attrs, "wrapped_keys"),
          {:ok, algorithm} <- fetch_optional_string(attrs, "algorithm"),
          {:ok, recipient_wrapped_keys} <- decode_sender_key_map(wrapped_sender_keys) do
@@ -1622,7 +2028,8 @@ defmodule VostokServer.Messaging do
       {:ok,
        %{
          key_id: key_id,
-         algorithm: algorithm || "x25519+sealedbox",
+         sender_key_epoch: sender_key_epoch || 0,
+         algorithm: algorithm || "p256-ecdh+a256gcm",
          recipient_device_ids: recipient_device_ids,
          recipient_wrapped_keys: recipient_wrapped_keys
        }}
@@ -1681,7 +2088,8 @@ defmodule VostokServer.Messaging do
       "wrapped_keys.#{recipient_device_id} must be a base64-encoded wrapped sender key."}}
   end
 
-  defp resolve_group_sender_key_recipients(chat_id, recipient_device_ids) when is_list(recipient_device_ids) do
+  defp resolve_group_sender_key_recipients(chat_id, recipient_device_ids)
+       when is_list(recipient_device_ids) do
     recipient_device_ids = Enum.uniq(recipient_device_ids)
 
     devices =
@@ -1700,8 +2108,63 @@ defmodule VostokServer.Messaging do
       {:ok, recipient_device_ids}
     else
       {:error,
-       {:validation, "wrapped_keys must only contain active recipient devices in this group chat."}}
+       {:validation,
+        "wrapped_keys must only contain active recipient devices in this group chat."}}
     end
+  end
+
+  defp resolve_safety_peer_device(chat_id, peer_device_id) do
+    from(chat_member in ChatMember,
+      join: user in User,
+      on: user.id == chat_member.user_id,
+      join: device in Device,
+      on:
+        device.user_id == chat_member.user_id and is_nil(device.revoked_at) and
+          not is_nil(device.identity_public_key),
+      where: chat_member.chat_id == ^chat_id and device.id == ^peer_device_id,
+      select: %{
+        user_id: user.id,
+        username: user.username,
+        device_id: device.id,
+        device_name: device.device_name,
+        identity_public_key: device.identity_public_key
+      },
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> {:error, {:not_found, "Peer device is not available in this chat."}}
+      peer -> {:ok, peer}
+    end
+  end
+
+  defp ensure_device_belongs_to_user(%Device{user_id: user_id}, user_id), do: :ok
+
+  defp ensure_device_belongs_to_user(_device, _user_id),
+    do: {:error, {:unauthorized, "Verifier device does not belong to the authenticated user."}}
+
+  defp ensure_not_self_safety_device(device_id, device_id),
+    do: {:error, {:validation, "Cannot verify the active device fingerprint against itself."}}
+
+  defp ensure_not_self_safety_device(_left, _right), do: :ok
+
+  defp safety_number_fingerprint(local_identity_public_key, remote_identity_public_key)
+       when is_binary(local_identity_public_key) and is_binary(remote_identity_public_key) do
+    [left, right] = Enum.sort([local_identity_public_key, remote_identity_public_key])
+
+    <<digest::binary-size(32)>> = :crypto.hash(:sha256, left <> right)
+
+    digits =
+      digest
+      |> :binary.bin_to_list()
+      |> Enum.map(&(Integer.to_string(rem(&1, 100)) |> String.pad_leading(2, "0")))
+      |> Enum.join("")
+      |> binary_part(0, 30)
+
+    digits
+    |> String.codepoints()
+    |> Enum.chunk_every(5)
+    |> Enum.map_join(" ", &Enum.join/1)
   end
 
   defp normalize_string(value) when is_binary(value) do
@@ -1782,6 +2245,33 @@ defmodule VostokServer.Messaging do
   defp ensure_message_owner(%Message{}, _sender_device_id),
     do: {:error, {:validation, "Only the sending device can modify this message."}}
 
+  defp ensure_message_edit_permission(_chat, _membership, %Message{} = message, sender_device_id) do
+    ensure_message_owner(message, sender_device_id)
+  end
+
+  defp ensure_message_delete_permission(
+         %Chat{type: "group"},
+         %ChatMember{role: "admin"},
+         %Message{},
+         _sender_device_id
+       ),
+       do: :ok
+
+  defp ensure_message_delete_permission(
+         _chat,
+         _membership,
+         %Message{} = message,
+         sender_device_id
+       ) do
+    ensure_message_owner(message, sender_device_id)
+  end
+
+  defp ensure_message_pin_permission(%Chat{type: "group"}, %ChatMember{} = membership) do
+    ensure_group_admin(membership)
+  end
+
+  defp ensure_message_pin_permission(%Chat{}, %ChatMember{}), do: :ok
+
   defp ensure_group_admin(%ChatMember{role: "admin"}), do: :ok
 
   defp ensure_group_admin(%ChatMember{}),
@@ -1848,6 +2338,54 @@ defmodule VostokServer.Messaging do
     |> Enum.map(fn {field, [message | _]} -> "#{field} #{message}" end)
     |> List.first()
     |> Kernel.||("The record could not be saved.")
+  end
+
+  defp maybe_queue_federation_message(chat_id, message)
+       when is_binary(chat_id) and is_map(message) do
+    payload = federation_message_payload(chat_id, message)
+
+    case Federation.queue_outbound_message(chat_id, payload) do
+      :ok -> :ok
+      _other -> :ok
+    end
+  rescue
+    _error -> :ok
+  end
+
+  defp federation_message_payload(chat_id, message) do
+    recipient_envelopes =
+      message
+      |> Map.get(:recipient_envelopes, [])
+      |> Enum.reduce(%{}, fn recipient, acc ->
+        case recipient do
+          %{device_id: device_id, ciphertext_for_device: ciphertext_for_device}
+          when is_binary(device_id) and is_binary(ciphertext_for_device) ->
+            Map.put(acc, device_id, Base.encode64(ciphertext_for_device))
+
+          _other ->
+            acc
+        end
+      end)
+
+    %{
+      "chat_id" => chat_id,
+      "message_id" => Map.get(message, :id),
+      "client_id" => Map.get(message, :client_id),
+      "message_kind" => Map.get(message, :message_kind),
+      "crypto_scheme" => Map.get(message, :crypto_scheme),
+      "sender_key_id" => Map.get(message, :sender_key_id),
+      "sender_key_epoch" => Map.get(message, :sender_key_epoch),
+      "sender_device_id" => Map.get(message, :sender_device_id),
+      "header" => encode_binary(Map.get(message, :header)),
+      "ciphertext" =>
+        case Map.get(message, :ciphertext) do
+          value when is_binary(value) -> Base.encode64(value)
+          _ -> nil
+        end,
+      "reply_to_message_id" => Map.get(message, :reply_to_message_id),
+      "recipient_envelopes" => recipient_envelopes,
+      "inserted_at" => iso_or_nil(Map.get(message, :inserted_at))
+    }
   end
 
   defp broadcast_message(chat_id, message_id) do

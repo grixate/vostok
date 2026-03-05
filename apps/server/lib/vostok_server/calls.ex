@@ -1,11 +1,12 @@
 defmodule VostokServer.Calls do
   @moduledoc """
-  Stage 7 call session scaffold.
+  Stage 7 call session context with Membrane room orchestration and E2EE key epoch coordination.
   """
 
   import Ecto.Query
 
   alias VostokServer.Calls.{
+    CallKeyDistribution,
     CallParticipant,
     CallSession,
     CallSignal,
@@ -13,6 +14,8 @@ defmodule VostokServer.Calls do
     RoomSupervisor
   }
 
+  alias VostokServer.Identity.Device
+  alias VostokServer.Messaging.ChatMember
   alias VostokServer.Messaging
   alias VostokServer.Repo
 
@@ -94,8 +97,10 @@ defmodule VostokServer.Calls do
          {:ok, _membership} <- Messaging.ensure_membership(call.chat_id, user_id),
          :ok <- ensure_active(call),
          {:ok, track_kind} <- normalize_track_kind(call, attrs),
+         {:ok, e2ee_attrs} <- normalize_join_e2ee(call, attrs, current_device_id),
          {:ok, _room, _pid} <- RoomSupervisor.ensure_room(call.id, call.mode),
-         {:ok, participant} <- upsert_participant(call, user_id, current_device_id, track_kind) do
+         {:ok, participant} <-
+           upsert_participant(call, user_id, current_device_id, track_kind, e2ee_attrs) do
       ensure_bridge_endpoint(call, current_device_id, %{
         user_id: user_id,
         track_kind: track_kind,
@@ -203,6 +208,119 @@ defmodule VostokServer.Calls do
          call: present_call(call),
          signals: list_presented_signals(call.id)
        }}
+    else
+      nil ->
+        {:error, {:not_found, "Call not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def list_call_keys(call_id, user_id, current_device_id)
+      when is_binary(call_id) and is_binary(user_id) and is_binary(current_device_id) do
+    with %CallSession{} = call <- Repo.get(CallSession, call_id),
+         {:ok, _membership} <- Messaging.ensure_membership(call.chat_id, user_id) do
+      keys =
+        from(distribution in CallKeyDistribution,
+          where:
+            distribution.call_id == ^call_id and
+              distribution.recipient_device_id == ^current_device_id and
+              distribution.status == "active",
+          order_by: [desc: distribution.key_epoch, desc: distribution.inserted_at]
+        )
+        |> Repo.all()
+        |> Enum.map(&present_call_key_distribution/1)
+
+      {:ok,
+       %{
+         call: present_call(call),
+         keys: keys
+       }}
+    else
+      nil ->
+        {:error, {:not_found, "Call not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def rotate_call_keys(call_id, user_id, current_device_id, attrs)
+      when is_binary(call_id) and is_binary(user_id) and is_binary(current_device_id) and
+             is_map(attrs) do
+    with %CallSession{} = call <- Repo.get(CallSession, call_id),
+         {:ok, _membership} <- Messaging.ensure_membership(call.chat_id, user_id),
+         :ok <- ensure_active(call),
+         {:ok, normalized} <- normalize_call_key_distribution_attrs(attrs),
+         {:ok, recipient_device_ids} <-
+           resolve_call_key_recipients(
+             call.id,
+             current_device_id,
+             normalized.recipient_device_ids
+           ) do
+      Repo.transaction(fn ->
+        recipient_device_ids
+        |> Enum.reduce([], fn recipient_device_id, inserted ->
+          from(distribution in CallKeyDistribution,
+            where:
+              distribution.call_id == ^call.id and
+                distribution.owner_device_id == ^current_device_id and
+                distribution.recipient_device_id == ^recipient_device_id and
+                distribution.status == "active" and
+                distribution.key_epoch != ^normalized.key_epoch
+          )
+          |> Repo.update_all(set: [status: "superseded", updated_at: DateTime.utc_now()])
+
+          wrapped_key = Map.fetch!(normalized.wrapped_keys, recipient_device_id)
+
+          record =
+            case Repo.get_by(CallKeyDistribution,
+                   call_id: call.id,
+                   owner_device_id: current_device_id,
+                   recipient_device_id: recipient_device_id,
+                   key_epoch: normalized.key_epoch
+                 ) do
+              %CallKeyDistribution{} = existing ->
+                existing
+                |> CallKeyDistribution.changeset(%{
+                  algorithm: normalized.algorithm,
+                  wrapped_key: wrapped_key,
+                  status: "active"
+                })
+                |> Repo.update()
+
+              nil ->
+                %CallKeyDistribution{}
+                |> CallKeyDistribution.changeset(%{
+                  call_id: call.id,
+                  owner_device_id: current_device_id,
+                  recipient_device_id: recipient_device_id,
+                  key_epoch: normalized.key_epoch,
+                  algorithm: normalized.algorithm,
+                  wrapped_key: wrapped_key,
+                  status: "active"
+                })
+                |> Repo.insert()
+            end
+
+          case record do
+            {:ok, distribution} ->
+              [present_call_key_distribution(distribution) | inserted]
+
+            {:error, changeset} ->
+              Repo.rollback({:validation, format_changeset_error(changeset)})
+          end
+        end)
+        |> Enum.reverse()
+      end)
+      |> case do
+        {:ok, keys} ->
+          {:ok, %{call: present_call(call), keys: keys}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     else
       nil ->
         {:error, {:not_found, "Call not found."}}
@@ -380,6 +498,60 @@ defmodule VostokServer.Calls do
     end
   end
 
+  defp normalize_join_e2ee(%CallSession{mode: "group"} = call, attrs, current_device_id)
+       when is_map(attrs) and is_binary(current_device_id) do
+    with {:ok, true} <- fetch_required_boolean(attrs, "e2ee_capable"),
+         {:ok, algorithm} <- fetch_required_string(attrs, "e2ee_algorithm"),
+         {:ok, key_epoch} <- fetch_required_non_negative_integer(attrs, "e2ee_key_epoch"),
+         :ok <- ensure_group_join_key_available(call.id, current_device_id, key_epoch) do
+      {:ok,
+       %{
+         e2ee_capable: true,
+         e2ee_algorithm: algorithm,
+         e2ee_key_epoch: key_epoch
+       }}
+    end
+  end
+
+  defp normalize_join_e2ee(%CallSession{}, _attrs, _current_device_id) do
+    {:ok, %{e2ee_capable: false, e2ee_algorithm: nil, e2ee_key_epoch: nil}}
+  end
+
+  defp ensure_group_join_key_available(call_id, current_device_id, key_epoch)
+       when is_binary(call_id) and is_binary(current_device_id) and is_integer(key_epoch) do
+    other_joined_count =
+      from(participant in CallParticipant,
+        where:
+          participant.call_id == ^call_id and participant.status == "joined" and
+            participant.device_id != ^current_device_id,
+        select: count(participant.id)
+      )
+      |> Repo.one()
+
+    if other_joined_count == 0 do
+      :ok
+    else
+      distribution_count =
+        from(distribution in CallKeyDistribution,
+          where:
+            distribution.call_id == ^call_id and
+              distribution.recipient_device_id == ^current_device_id and
+              distribution.key_epoch == ^key_epoch and
+              distribution.status == "active",
+          select: count(distribution.id)
+        )
+        |> Repo.one()
+
+      if distribution_count > 0 do
+        :ok
+      else
+        {:error,
+         {:validation,
+          "Group call join requires an active call key distribution for this device and epoch."}}
+      end
+    end
+  end
+
   defp normalize_signal_attrs(call_id, current_device_id, attrs) do
     signal_type =
       case attrs |> Map.get("signal_type") |> normalize_string() do
@@ -431,6 +603,106 @@ defmodule VostokServer.Calls do
     end
   end
 
+  defp normalize_call_key_distribution_attrs(attrs) do
+    key_epoch = parse_non_negative_integer(Map.get(attrs, "key_epoch"))
+
+    algorithm =
+      attrs
+      |> Map.get("algorithm")
+      |> normalize_string()
+      |> Kernel.||("sframe-aes-gcm-v1")
+
+    wrapped_keys =
+      case Map.get(attrs, "wrapped_keys") do
+        map when is_map(map) and map_size(map) > 0 ->
+          decode_wrapped_keys_map(map)
+
+        _ ->
+          {:error, {:validation, "wrapped_keys must be a non-empty object."}}
+      end
+
+    with {:ok, wrapped_key_map} <- wrapped_keys do
+      recipient_device_ids = wrapped_key_map |> Map.keys() |> Enum.uniq()
+
+      {:ok,
+       %{
+         key_epoch: key_epoch || 0,
+         algorithm: algorithm,
+         wrapped_keys: wrapped_key_map,
+         recipient_device_ids: recipient_device_ids
+       }}
+    end
+  end
+
+  defp decode_wrapped_keys_map(map) when is_map(map) do
+    map
+    |> Enum.reduce_while({:ok, %{}}, fn
+      {device_id, wrapped_key_base64}, {:ok, acc}
+      when is_binary(device_id) and is_binary(wrapped_key_base64) ->
+        case Base.decode64(wrapped_key_base64) do
+          {:ok, wrapped_key} ->
+            {:cont, {:ok, Map.put(acc, device_id, wrapped_key)}}
+
+          :error ->
+            {:halt, {:error, {:validation, "wrapped_keys.#{device_id} must be valid base64."}}}
+        end
+
+      _entry, _acc ->
+        {:halt, {:error, {:validation, "wrapped_keys must map device ids to base64 strings."}}}
+    end)
+  end
+
+  defp resolve_call_key_recipients(call_id, current_device_id, recipient_device_ids)
+       when is_binary(call_id) and is_binary(current_device_id) and is_list(recipient_device_ids) do
+    active_chat_devices =
+      from(call in CallSession,
+        where: call.id == ^call_id,
+        join: member in ChatMember,
+        on: member.chat_id == call.chat_id,
+        join: device in Device,
+        on: device.user_id == member.user_id and is_nil(device.revoked_at),
+        select: device.id
+      )
+      |> Repo.all()
+      |> Enum.reject(&(&1 == current_device_id))
+      |> Enum.uniq()
+
+    requested_recipients =
+      recipient_device_ids
+      |> Enum.reject(&(&1 == current_device_id))
+      |> Enum.uniq()
+
+    if requested_recipients == [] do
+      if active_chat_devices == [] do
+        {:error,
+         {:validation, "No active recipient devices are available for call key rotation."}}
+      else
+        {:ok, active_chat_devices}
+      end
+    else
+      expected = MapSet.new(active_chat_devices)
+      requested = MapSet.new(requested_recipients)
+
+      if MapSet.subset?(requested, expected) do
+        {:ok, requested_recipients}
+      else
+        {:error,
+         {:validation, "wrapped_keys includes a device that is not an active chat device."}}
+      end
+    end
+  end
+
+  defp parse_non_negative_integer(value) when is_integer(value) and value >= 0, do: value
+
+  defp parse_non_negative_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {parsed, ""} when parsed >= 0 -> parsed
+      _ -> nil
+    end
+  end
+
+  defp parse_non_negative_integer(_value), do: nil
+
   defp present_call(nil), do: nil
 
   defp present_call(%CallSession{} = call) do
@@ -453,6 +725,9 @@ defmodule VostokServer.Calls do
       device_id: participant.device_id,
       status: participant.status,
       track_kind: participant.track_kind,
+      e2ee_capable: participant.e2ee_capable,
+      e2ee_algorithm: participant.e2ee_algorithm,
+      e2ee_key_epoch: participant.e2ee_key_epoch,
       joined_at: iso_or_nil(participant.joined_at),
       left_at: iso_or_nil(participant.left_at)
     }
@@ -470,6 +745,21 @@ defmodule VostokServer.Calls do
     }
   end
 
+  defp present_call_key_distribution(%CallKeyDistribution{} = distribution) do
+    %{
+      id: distribution.id,
+      call_id: distribution.call_id,
+      owner_device_id: distribution.owner_device_id,
+      recipient_device_id: distribution.recipient_device_id,
+      key_epoch: distribution.key_epoch,
+      algorithm: distribution.algorithm,
+      status: distribution.status,
+      wrapped_key: Base.encode64(distribution.wrapped_key),
+      inserted_at: iso_or_nil(distribution.inserted_at),
+      updated_at: iso_or_nil(distribution.updated_at)
+    }
+  end
+
   defp normalize_string(value) when is_binary(value) do
     trimmed = String.trim(value)
     if trimmed == "", do: nil, else: trimmed
@@ -484,7 +774,7 @@ defmodule VostokServer.Calls do
     |> Kernel.||("The call session could not be saved.")
   end
 
-  defp upsert_participant(call, user_id, current_device_id, track_kind) do
+  defp upsert_participant(call, user_id, current_device_id, track_kind, e2ee_attrs) do
     now = DateTime.utc_now()
 
     case Repo.get_by(CallParticipant, call_id: call.id, device_id: current_device_id) do
@@ -494,6 +784,9 @@ defmodule VostokServer.Calls do
           user_id: user_id,
           status: "joined",
           track_kind: track_kind,
+          e2ee_capable: Map.get(e2ee_attrs, :e2ee_capable, false),
+          e2ee_algorithm: Map.get(e2ee_attrs, :e2ee_algorithm),
+          e2ee_key_epoch: Map.get(e2ee_attrs, :e2ee_key_epoch),
           joined_at: participant.joined_at || now,
           left_at: nil
         })
@@ -508,6 +801,9 @@ defmodule VostokServer.Calls do
           device_id: current_device_id,
           status: "joined",
           track_kind: track_kind,
+          e2ee_capable: Map.get(e2ee_attrs, :e2ee_capable, false),
+          e2ee_algorithm: Map.get(e2ee_attrs, :e2ee_algorithm),
+          e2ee_key_epoch: Map.get(e2ee_attrs, :e2ee_key_epoch),
           joined_at: now
         })
         |> Repo.insert()
@@ -617,6 +913,34 @@ defmodule VostokServer.Calls do
 
   defp iso_or_nil(nil), do: nil
   defp iso_or_nil(%DateTime{} = value), do: DateTime.to_iso8601(value)
+
+  defp fetch_required_boolean(attrs, field) when is_map(attrs) and is_binary(field) do
+    case Map.get(attrs, field) do
+      true -> {:ok, true}
+      "true" -> {:ok, true}
+      "1" -> {:ok, true}
+      1 -> {:ok, true}
+      false -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
+      "false" -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
+      nil -> {:error, {:validation, "#{field} is required for group call E2EE."}}
+      _ -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
+    end
+  end
+
+  defp fetch_required_string(attrs, field) when is_map(attrs) and is_binary(field) do
+    case attrs |> Map.get(field) |> normalize_string() do
+      nil -> {:error, {:validation, "#{field} is required."}}
+      value -> {:ok, value}
+    end
+  end
+
+  defp fetch_required_non_negative_integer(attrs, field)
+       when is_map(attrs) and is_binary(field) do
+    case parse_non_negative_integer(Map.get(attrs, field)) do
+      nil -> {:error, {:validation, "#{field} must be a non-negative integer."}}
+      value -> {:ok, value}
+    end
+  end
 
   defp broadcast_call_state(chat_id, %CallSession{} = call) do
     VostokServerWeb.Endpoint.broadcast("call:#{chat_id}", "call:state", %{

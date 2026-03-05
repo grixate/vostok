@@ -203,6 +203,11 @@ function readParticipant(payload: unknown): CallParticipant | null {
     device_id: participant.device_id,
     status: participant.status as CallParticipant['status'],
     track_kind: participant.track_kind as CallParticipant['track_kind'],
+    e2ee_capable: participant.e2ee_capable === true,
+    e2ee_algorithm:
+      typeof participant.e2ee_algorithm === 'string' ? participant.e2ee_algorithm : null,
+    e2ee_key_epoch:
+      typeof participant.e2ee_key_epoch === 'number' ? participant.e2ee_key_epoch : null,
     joined_at: participant.joined_at,
     left_at: typeof participant.left_at === 'string' ? participant.left_at : null
   }

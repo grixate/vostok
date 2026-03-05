@@ -11,6 +11,7 @@ defmodule VostokServer.Messaging.GroupSenderKey do
 
   schema "group_sender_keys" do
     field :key_id, :string
+    field :sender_key_epoch, :integer
     field :wrapped_sender_key, :binary
     field :algorithm, :string
     field :status, :string
@@ -29,6 +30,7 @@ defmodule VostokServer.Messaging.GroupSenderKey do
       :owner_device_id,
       :recipient_device_id,
       :key_id,
+      :sender_key_epoch,
       :wrapped_sender_key,
       :algorithm,
       :status
@@ -38,11 +40,13 @@ defmodule VostokServer.Messaging.GroupSenderKey do
       :owner_device_id,
       :recipient_device_id,
       :key_id,
+      :sender_key_epoch,
       :wrapped_sender_key,
       :algorithm,
       :status
     ])
     |> validate_inclusion(:status, ["active", "superseded"])
+    |> validate_number(:sender_key_epoch, greater_than_or_equal_to: 0)
     |> validate_length(:key_id, min: 1, max: 255)
     |> validate_length(:algorithm, min: 1, max: 128)
     |> unique_constraint(:key_id, name: :group_sender_keys_unique_distribution_index)

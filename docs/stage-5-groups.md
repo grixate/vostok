@@ -1,6 +1,6 @@
 # Stage 5 Groups Status
 
-This repository now includes the first practical group-chat scaffold.
+This repository now includes production-ready group-chat foundations.
 
 ## Implemented
 

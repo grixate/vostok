@@ -12,6 +12,7 @@ defmodule VostokServerWeb.MediaFlowTest do
     conn: conn
   } do
     %{token: token} = register_device(conn, "media-user")
+    %{token: other_token} = register_device(build_conn(), "media-user-other")
 
     create_conn =
       build_conn()
@@ -48,20 +49,45 @@ defmodule VostokServerWeb.MediaFlowTest do
 
     assert uploaded_byte_size == byte_size("encrypted-chunk")
 
+    status_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/media/uploads/#{upload_id}")
+
+    assert %{
+             "upload" => %{
+               "id" => ^upload_id,
+               "uploaded_part_indexes" => [0],
+               "uploaded_part_count" => 1,
+               "ciphertext" => nil
+             }
+           } = json_response(status_conn, 200)
+
+    unauthorized_status_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{other_token}")
+      |> get("/api/v1/media/uploads/#{upload_id}")
+
+    assert %{"error" => "unauthorized"} = json_response(unauthorized_status_conn, 401)
+
     complete_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
-      |> post("/api/v1/media/uploads/#{upload_id}/complete", %{})
+      |> post("/api/v1/media/uploads/#{upload_id}/complete", %{
+        ciphertext_sha256: sha256_hex("encrypted-chunk")
+      })
 
     assert %{
              "upload" => %{
                "id" => ^upload_id,
                "status" => "completed",
+               "ciphertext_sha256" => ciphertext_sha256,
                "completed_at" => completed_at
              }
            } = json_response(complete_conn, 200)
 
     assert is_binary(completed_at)
+    assert ciphertext_sha256 == sha256_hex("encrypted-chunk")
 
     show_conn =
       build_conn()
@@ -81,9 +107,10 @@ defmodule VostokServerWeb.MediaFlowTest do
     assert ciphertext == Base.encode64("encrypted-chunk")
   end
 
-  test "multipart uploads support indexed parts, resumable progress, and deterministic assembly", %{
-    conn: conn
-  } do
+  test "multipart uploads support indexed parts, resumable progress, and deterministic assembly",
+       %{
+         conn: conn
+       } do
     %{token: token} = register_device(conn, "media-multipart")
 
     create_conn =
@@ -177,17 +204,22 @@ defmodule VostokServerWeb.MediaFlowTest do
     complete_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
-      |> post("/api/v1/media/uploads/#{upload_id}/complete", %{})
+      |> post("/api/v1/media/uploads/#{upload_id}/complete", %{
+        ciphertext_sha256: sha256_hex("AAABBBCCC")
+      })
 
     assert %{
              "upload" => %{
                "id" => ^upload_id,
                "status" => "completed",
+               "ciphertext_sha256" => ciphertext_sha256,
                "uploaded_part_count" => 3,
                "uploaded_part_indexes" => [0, 1, 2],
                "ciphertext" => nil
              }
            } = json_response(complete_conn, 200)
+
+    assert ciphertext_sha256 == sha256_hex("AAABBBCCC")
 
     show_conn =
       build_conn()
@@ -217,6 +249,39 @@ defmodule VostokServerWeb.MediaFlowTest do
            } = json_response(localhost_conn, 422)
 
     assert String.contains?(message, "Localhost metadata fetches are blocked")
+  end
+
+  test "completing an upload with a mismatched digest returns validation error", %{conn: conn} do
+    %{token: token} = register_device(conn, "media-digest-mismatch")
+
+    create_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/media/uploads", %{
+        filename: "digest-check.enc",
+        content_type: "application/octet-stream",
+        declared_byte_size: 4,
+        media_kind: "file"
+      })
+
+    assert %{"upload" => %{"id" => upload_id}} = json_response(create_conn, 201)
+
+    _part_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> patch("/api/v1/media/uploads/#{upload_id}/part", %{
+        chunk: Base.encode64("DATA")
+      })
+
+    mismatch_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/media/uploads/#{upload_id}/complete", %{
+        ciphertext_sha256: sha256_hex("different")
+      })
+
+    assert %{"error" => "validation", "message" => message} = json_response(mismatch_conn, 422)
+    assert String.contains?(message, "ciphertext_sha256 does not match")
   end
 
   defp register_device(conn, username) do
@@ -249,5 +314,10 @@ defmodule VostokServerWeb.MediaFlowTest do
            } = json_response(register_conn, 201)
 
     %{token: token, user_id: user_id, device_id: device_id}
+  end
+
+  defp sha256_hex(payload) when is_binary(payload) do
+    :crypto.hash(:sha256, payload)
+    |> Base.encode16(case: :lower)
   end
 end

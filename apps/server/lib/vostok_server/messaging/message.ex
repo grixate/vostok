@@ -14,6 +14,9 @@ defmodule VostokServer.Messaging.Message do
     field :header, :binary
     field :ciphertext, :binary
     field :message_kind, :string
+    field :crypto_scheme, :string
+    field :sender_key_id, :string
+    field :sender_key_epoch, :integer
     field :pinned_at, :utc_datetime_usec
     field :edited_at, :utc_datetime_usec
     field :deleted_at, :utc_datetime_usec
@@ -34,6 +37,9 @@ defmodule VostokServer.Messaging.Message do
       :header,
       :ciphertext,
       :message_kind,
+      :crypto_scheme,
+      :sender_key_id,
+      :sender_key_epoch,
       :pinned_at,
       :reply_to_message_id,
       :edited_at,

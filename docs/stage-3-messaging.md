@@ -52,6 +52,7 @@ This repository now includes the complete Stage 3 slice for the current architec
 - New outbound user messages now require session transport and cannot fall back to legacy recipient wrapping
 - Legacy recipient-wrapped and local-only envelopes remain readable for backward compatibility
 - IndexedDB-backed local message cache for the active chat, with localStorage fallback/migration
+- IndexedDB-backed secure key/value replication for session and sender-key material with localStorage compatibility during migration
 - Phoenix Channel realtime fanout on `chat:{chat_id}` for live message delivery in the active chat
 - Client-side safety-number display derived from local and remote identity keys for the active chat
 

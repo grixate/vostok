@@ -88,6 +88,27 @@ defmodule VostokServer.FederationTest do
     assert second_delivery.id == first_delivery.id
   end
 
+  test "peer invite and acceptance flow updates trust state" do
+    peer = create_peer!("chat.invite.example")
+
+    assert {:ok, %{peer: invited_peer, invite_token: invite_token}} =
+             Federation.create_peer_invite(peer.id)
+
+    assert invited_peer.status == "pending"
+    assert invited_peer.trust_state == "invited"
+    assert is_binary(invite_token)
+
+    assert {:ok, trusted_peer} =
+             Federation.accept_peer_invite(%{
+               "domain" => peer.domain,
+               "invite_token" => invite_token
+             })
+
+    assert trusted_peer.status == "active"
+    assert trusted_peer.trust_state == "trusted"
+    assert is_binary(trusted_peer.trusted_at)
+  end
+
   defp create_peer!(domain) do
     %Peer{}
     |> Peer.changeset(%{domain: domain, status: "active", display_name: "Remote"})

@@ -6,6 +6,7 @@ This repository now includes the first practical Stage 4 attachment slice.
 
 - Opaque encrypted media upload APIs:
   - `POST /api/v1/media/uploads`
+  - `GET /api/v1/media/uploads/:id` (authorized resumable state)
   - `PATCH /api/v1/media/uploads/:id/part`
   - `POST /api/v1/media/uploads/:id/complete`
   - `GET /api/v1/media/:id`
@@ -22,6 +23,7 @@ This repository now includes the first practical Stage 4 attachment slice.
 - Browser-side round-video recording that reuses the encrypted attachment transport with circular preview rendering
 - Inline round-video playback in message threads (not just file download)
 - Chunk-indexed multipart encrypted upload support with resumable progress reporting
+- Deterministic upload-state recovery via uploaded part index snapshots from `GET /api/v1/media/uploads/:id`
 - Privacy-safe server-side link metadata fetches (`POST /api/v1/media/link-metadata`) with local/private-network target blocking
 
 ## Not Yet Implemented

@@ -1,0 +1,68 @@
+name: Desktop Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release channel to promote after packaging"
+        required: false
+        default: "stable"
+      run_signing:
+        description: "Run signing + notarization steps"
+        required: false
+        default: "true"
+
+jobs:
+  build-desktop:
+    runs-on: macos-14
+    env:
+      APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+      APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+      VOSTOK_FEDERATION_SIGNING_SECRET: ${{ secrets.VOSTOK_FEDERATION_SIGNING_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install desktop dependencies
+        run: npm run setup:desktop
+
+      - name: Build desktop bundles
+        run: npm run build:desktop
+
+      - name: Generate release manifest
+        run: npm run manifest:desktop
+
+      - name: Sign desktop bundles
+        if: ${{ github.event.inputs.run_signing != 'false' }}
+        run: npm run sign:desktop
+
+      - name: Package release folder
+        run: npm run package:desktop
+
+      - name: Promote release channel
+        if: ${{ github.event.inputs.channel == 'stable' }}
+        run: npm run promote:desktop:stable
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vostok-desktop-release
+          path: |
+            apps/desktop/releases/**
+            apps/desktop/release-manifest.json
+            apps/desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error

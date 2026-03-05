@@ -91,7 +91,9 @@ defmodule VostokServerWeb.GroupFlowTest do
   test "group sender keys can be distributed and fetched by recipient devices", %{conn: conn} do
     %{token: alice_token} = register_device(conn, "alice-sender")
     %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-sender")
-    %{token: charlie_token, device_id: charlie_device_id} = register_device(build_conn(), "charlie-sender")
+
+    %{token: charlie_token, device_id: charlie_device_id} =
+      register_device(build_conn(), "charlie-sender")
 
     create_group_conn =
       build_conn()
@@ -159,6 +161,157 @@ defmodule VostokServerWeb.GroupFlowTest do
                }
              ]
            } = json_response(charlie_list_conn, 200)
+  end
+
+  test "group messages require sender-key transport unless explicit fallback is set", %{
+    conn: conn
+  } do
+    %{token: alice_token} = register_device(conn, "alice-group-transport")
+
+    %{token: bob_token, device_id: bob_device_id} =
+      register_device(build_conn(), "bob-group-transport")
+
+    create_group_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/group", %{
+        title: "Transport Rules",
+        members: ["bob-group-transport"]
+      })
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_group_conn, 201)
+
+    distribute_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/sender-keys", %{
+        key_id: "sender-key-transport",
+        sender_key_epoch: 1,
+        algorithm: "p256-ecdh+a256gcm",
+        wrapped_keys: %{
+          bob_device_id => Base.encode64("wrapped-for-bob")
+        }
+      })
+
+    assert %{"sender_keys" => [_]} = json_response(distribute_conn, 201)
+
+    legacy_group_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "legacy-group-message",
+        message_kind: "text",
+        ciphertext: Base.encode64("legacy-ciphertext")
+      })
+
+    assert %{"error" => "validation", "message" => legacy_error_message} =
+             json_response(legacy_group_message_conn, 422)
+
+    assert String.contains?(
+             legacy_error_message,
+             "Group messages must use crypto_scheme=group_sender_key_v1"
+           )
+
+    sender_key_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "sender-key-group-message",
+        message_kind: "text",
+        crypto_scheme: "group_sender_key_v1",
+        sender_key_id: "sender-key-transport",
+        sender_key_epoch: 1,
+        header: Base.encode64("{\"algorithm\":\"vostok-group-sender-key-v1\"}"),
+        ciphertext: Base.encode64("group-ciphertext")
+      })
+
+    assert %{
+             "message" => %{
+               "client_id" => "sender-key-group-message",
+               "crypto_scheme" => "group_sender_key_v1",
+               "sender_key_id" => "sender-key-transport",
+               "sender_key_epoch" => 1
+             }
+           } = json_response(sender_key_message_conn, 201)
+
+    # The recipient can still fetch the active sender key state for decryptability.
+    bob_sender_key_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> get("/api/v1/chats/#{chat_id}/sender-keys")
+
+    assert %{"sender_keys" => [%{"key_id" => "sender-key-transport"}]} =
+             json_response(bob_sender_key_conn, 200)
+  end
+
+  test "group message permissions enforce admin pinning and admin-or-owner delete", %{conn: conn} do
+    %{token: alice_token} = register_device(conn, "alice-group-perms")
+    %{token: bob_token} = register_device(build_conn(), "bob-group-perms")
+
+    create_group_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/group", %{
+        title: "Moderated Group",
+        members: ["bob-group-perms"]
+      })
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_group_conn, 201)
+
+    bob_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "bob-group-perms-message",
+        message_kind: "text",
+        group_transport_fallback: true,
+        ciphertext: Base.encode64("member-message")
+      })
+
+    assert %{"message" => %{"id" => message_id}} = json_response(bob_message_conn, 201)
+
+    bob_pin_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/pin", %{})
+
+    assert %{"error" => "validation", "message" => pin_error} = json_response(bob_pin_conn, 422)
+    assert String.contains?(pin_error, "Only group admins can update this chat.")
+
+    alice_pin_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/pin", %{})
+
+    assert %{"message" => %{"id" => ^message_id, "pinned_at" => pinned_at}} =
+             json_response(alice_pin_conn, 200)
+
+    assert is_binary(pinned_at)
+
+    alice_edit_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> patch("/api/v1/chats/#{chat_id}/messages/#{message_id}", %{
+        client_id: "alice-edit-foreign-message",
+        message_kind: "text",
+        group_transport_fallback: true,
+        ciphertext: Base.encode64("admin-cannot-edit-member")
+      })
+
+    assert %{"error" => "validation", "message" => edit_error} =
+             json_response(alice_edit_conn, 422)
+
+    assert String.contains?(edit_error, "Only the sending device can modify this message.")
+
+    alice_delete_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/delete", %{})
+
+    assert %{"message" => %{"id" => ^message_id, "deleted_at" => deleted_at}} =
+             json_response(alice_delete_conn, 200)
+
+    assert is_binary(deleted_at)
   end
 
   defp register_device(conn, username) do

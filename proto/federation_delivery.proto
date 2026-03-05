@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package vostok.federation.v1;
+
+message DeliveryEnvelope {
+  string source_domain = 1;
+  string delivery_id = 2;
+  string idempotency_key = 3;
+  string event_type = 4;
+  bytes payload_json = 5;
+  string signature = 6;
+  string sent_at = 7;
+  uint32 protocol_version = 8;
+}

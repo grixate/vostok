@@ -15,11 +15,13 @@ config :vostok_server,
   federation_transport_adapter: VostokServer.Federation.Transport.MTLS,
   federation_transport: [
     scheme: "https",
+    wire_format: "protobuf",
     delivery_path: "/api/v1/federation/deliveries",
     connect_timeout_ms: 5_000,
     request_timeout_ms: 10_000,
     retry_backoff_seconds: 30,
     retry_backoff_cap_seconds: 900,
+    signing_secret: nil,
     allow_insecure_http: false,
     require_client_cert: false,
     mtls: [

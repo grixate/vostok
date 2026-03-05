@@ -15,8 +15,8 @@ defmodule VostokServerWeb.Api.V1.BootstrapController do
         prekeys: "publish_and_fetch_live",
         messaging: "direct_chat_http_live",
         media: "chunked_upload_live",
-        federation: "admin_scaffold_live",
-        calls: "turn_credentials_live"
+        federation: "mtls_queue_transport_live",
+        calls: "membrane_room_live"
       },
       ui_packages: ["@vostok/ui-tokens", "@vostok/ui-primitives", "@vostok/ui-chat"]
     })

@@ -25,8 +25,18 @@ defmodule VostokServerWeb.Api.V1.MediaController do
     end
   end
 
-  def complete_upload(conn, %{"id" => upload_id}) do
-    case Media.complete_upload(upload_id, conn.assigns.current_device.id) do
+  def complete_upload(conn, %{"id" => upload_id} = params) do
+    case Media.complete_upload(upload_id, conn.assigns.current_device.id, params) do
+      {:ok, upload} ->
+        json(conn, %{upload: upload})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def upload_status(conn, %{"id" => upload_id}) do
+    case Media.fetch_upload_state(upload_id, conn.assigns.current_device.id) do
       {:ok, upload} ->
         json(conn, %{upload: upload})
 

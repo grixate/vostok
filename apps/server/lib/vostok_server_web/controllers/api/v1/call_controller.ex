@@ -82,6 +82,37 @@ defmodule VostokServerWeb.Api.V1.CallController do
     end
   end
 
+  def call_keys(conn, %{"call_id" => call_id}) do
+    case Calls.list_call_keys(
+           call_id,
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id
+         ) do
+      {:ok, payload} ->
+        json(conn, payload)
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def rotate_call_keys(conn, %{"call_id" => call_id} = params) do
+    case Calls.rotate_call_keys(
+           call_id,
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id,
+           params
+         ) do
+      {:ok, payload} ->
+        conn
+        |> put_status(:created)
+        |> json(payload)
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   def provision_webrtc_endpoint(conn, %{"call_id" => call_id}) do
     case Calls.provision_webrtc_endpoint(
            call_id,

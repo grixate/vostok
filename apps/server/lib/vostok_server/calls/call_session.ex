@@ -1,6 +1,6 @@
 defmodule VostokServer.Calls.CallSession do
   @moduledoc """
-  Minimal call session record for Stage 7 HTTP signaling scaffolding.
+  Persisted call session lifecycle record.
   """
 
   use Ecto.Schema

@@ -9,6 +9,7 @@ import {
   type FormEvent
 } from 'react'
 import { GlassSurface } from '@vostok/ui-primitives'
+import { outboxRetryDelayMs, sha256Hex } from '@vostok/crypto-core'
 import {
   CallSurface,
   ChatInfoPanel,
@@ -24,6 +25,7 @@ import {
   createCallSession,
   createFederationDelivery,
   createFederationPeer,
+  createFederationPeerInvite,
   recordFederationPeerHeartbeat,
   bootstrapChatSessions,
   completeMediaUpload,
@@ -31,6 +33,7 @@ import {
   distributeGroupSenderKeys,
   createGroupChat,
   fetchMediaLinkMetadata,
+  fetchMediaUploadState,
   createMediaUpload,
   createMessage,
   deleteMessage,
@@ -41,9 +44,12 @@ import {
   updateMessage,
   fetchAdminOverview,
   fetchActiveCall,
+  fetchCallKeys,
+  listDevices,
   listFederationDeliveries,
   listGroupMembers,
   listGroupSenderKeys,
+  listSafetyNumbers,
   fetchMediaUpload,
   fetchTurnCredentials,
   fetchUserPrekeys,
@@ -62,13 +68,17 @@ import {
   rekeyChatSessions,
   renameGroupChat,
   registerDevice,
+  revokeDevice,
   removeGroupMember,
   toggleMessagePin,
   updateGroupMemberRole,
   updateFederationPeerStatus,
+  rotateCallKeys,
   verifyChallenge,
+  verifySafetyNumber,
   type AdminOverview,
   type CallParticipant,
+  type CallKeyDistribution,
   type CallRoomState,
   type CallSignal,
   type CallSession,
@@ -76,6 +86,7 @@ import {
   type ChatDeviceSession,
   type ChatMessage,
   type ChatSummary,
+  type DeviceInfo,
   type FederationDeliveryJob,
   type FederationPeer,
   type GroupSenderKey,
@@ -83,6 +94,7 @@ import {
   type LinkMetadata,
   type RecipientDevice,
   type PrekeyDeviceBundle,
+  type SafetyNumberRecord,
   type TurnCredentials
 } from './lib/api'
 import {
@@ -100,7 +112,22 @@ import {
   type LocalSessionDeviceMaterial
 } from './lib/chat-session-vault'
 import { readCachedMessages, writeCachedMessages, type CachedMessage } from './lib/message-cache'
-import { decryptMessageText } from './lib/message-vault'
+import {
+  countOutboxMessages,
+  deleteOutboxMessage,
+  listDueOutboxMessages,
+  markOutboxRetry,
+  queueOutboxMessage
+} from './lib/outbox-queue'
+import {
+  decryptMessageText,
+  encryptMessageWithGroupSenderKey,
+  getActiveGroupSenderKey,
+  setActiveGroupSenderKey,
+  storeGroupSenderKeyMaterial,
+  storeInboundGroupSenderKeys,
+  wrapGroupSenderKeyForRecipients
+} from './lib/message-vault'
 import { subscribeToCallStream, subscribeToChatStream } from './lib/realtime'
 import {
   decryptAttachmentFile,
@@ -165,9 +192,13 @@ type Banner = {
 }
 
 type SafetyNumberEntry = {
-  deviceId: string
+  peerDeviceId: string
+  peerUsername: string
+  peerDeviceName: string
   label: string
   fingerprint: string
+  verified: boolean
+  verifiedAt: string | null
 }
 
 type AttachmentDescriptor = {
@@ -297,9 +328,12 @@ function App() {
   const [newGroupMembers, setNewGroupMembers] = useState('')
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
+  const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
+  const [outboxPendingCount, setOutboxPendingCount] = useState(0)
   const [linkMetadataByUrl, setLinkMetadataByUrl] = useState<Record<string, LinkMetadata>>({})
   const [safetyNumbers, setSafetyNumbers] = useState<SafetyNumberEntry[]>([])
+  const [verifyingSafetyDeviceId, setVerifyingSafetyDeviceId] = useState<string | null>(null)
   const [remotePrekeyBundles, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
   const [chatSessions, setChatSessions] = useState<ChatDeviceSession[]>([])
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null)
@@ -307,9 +341,11 @@ function App() {
   const [federationDeliveries, setFederationDeliveries] = useState<FederationDeliveryJob[]>([])
   const [federationDomain, setFederationDomain] = useState('')
   const [federationDisplayName, setFederationDisplayName] = useState('')
+  const [federationInviteToken, setFederationInviteToken] = useState<string | null>(null)
   const [turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
   const [activeCall, setActiveCall] = useState<CallSession | null>(null)
   const [callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
+  const [callKeys, setCallKeys] = useState<CallKeyDistribution[]>([])
   const [callRoom, setCallRoom] = useState<CallRoomState | null>(null)
   const [callWebRtcEndpoint, setCallWebRtcEndpoint] = useState<CallWebRtcEndpointState | null>(null)
   const [callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
@@ -744,6 +780,7 @@ function App() {
       setStoredDevice(nextStoredDevice)
       setProfileUsername(response.user.username)
       setNewChatUsername(response.user.username)
+      await refreshDeviceList(nextStoredDevice.sessionToken)
       setBanner({
         tone: 'success',
         message: `Device registered. Session token issued with ${response.prekey_count} one-time prekeys.`
@@ -779,6 +816,7 @@ function App() {
 
       persistStoredDevice(nextStoredDevice)
       setStoredDevice(nextStoredDevice)
+      await refreshDeviceList(nextStoredDevice.sessionToken)
       setBanner({ tone: 'success', message: 'Challenge verified. Session refreshed.' })
       startTransition(() => setView('chat'))
     } catch (error) {
@@ -817,6 +855,7 @@ function App() {
 
       persistStoredDevice(nextStoredDevice)
       setStoredDevice(nextStoredDevice)
+      await refreshDeviceList(nextStoredDevice.sessionToken)
       setBanner({
         tone: 'success',
         message: `Prekeys rotated. ${response.one_time_prekey_count} one-time prekeys are active on the server.`
@@ -832,6 +871,7 @@ function App() {
   function handleForgetDevice() {
     persistStoredDevice(null)
     setStoredDevice(null)
+    setDevices([])
     setChatSessions([])
     setRemotePrekeyBundles([])
     setSafetyNumbers([])
@@ -918,8 +958,11 @@ function App() {
       setLoading(true)
 
       try {
-        const me = await fetchMe(sessionToken)
-        const chatResponse = await listChats(sessionToken)
+        const [me, chatResponse, deviceResponse] = await Promise.all([
+          fetchMe(sessionToken),
+          listChats(sessionToken),
+          listDevices(sessionToken)
+        ])
         let nextChats = chatResponse.chats
 
         if (nextChats.length === 0) {
@@ -934,6 +977,14 @@ function App() {
         setProfileUsername(me.user.username)
         setChatItems(nextChats)
         setActiveChatId((current) => current ?? nextChats[0]?.id ?? null)
+        setDevices(deviceResponse.devices)
+
+        if (me.device.prekeys?.replenish_recommended) {
+          setBanner({
+            tone: 'info',
+            message: `One-time prekeys are low (${me.device.prekeys.available_one_time_prekeys}/${me.device.prekeys.target_count}). Rotate prekeys soon.`
+          })
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'Failed to load chats.'
@@ -1107,39 +1158,35 @@ function App() {
   }, [chatItems, deferredActiveChatId, storedDevice, view])
 
   useEffect(() => {
-    if (!storedDevice || remotePrekeyBundles.length === 0) {
+    if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
       setSafetyNumbers([])
       return
     }
 
-    const localIdentityPublicKeyBase64 = storedDevice.publicKeyBase64
+    const sessionToken = storedDevice.sessionToken
+    const chatId = deferredActiveChatId
     let cancelled = false
 
-    async function loadSafetyNumbers() {
-      const nextEntries = (
-        await Promise.all(
-          remotePrekeyBundles.map(async (bundle) => ({
-            deviceId: bundle.device_id,
-            label: `${bundle.device_name} • ${bundle.user_id.slice(0, 8)}`,
-            fingerprint: await deriveSafetyNumber(
-              localIdentityPublicKeyBase64,
-              bundle.identity_public_key
-            )
-          }))
-        )
-      ).filter((entry) => entry.fingerprint !== '')
+    async function loadSafetyNumbersForChat() {
+      try {
+        const response = await listSafetyNumbers(sessionToken, chatId)
 
-      if (!cancelled) {
-        setSafetyNumbers(nextEntries)
+        if (!cancelled) {
+          setSafetyNumbers(response.safety_numbers.map(toSafetyNumberEntry))
+        }
+      } catch {
+        if (!cancelled) {
+          setSafetyNumbers([])
+        }
       }
     }
 
-    void loadSafetyNumbers()
+    void loadSafetyNumbersForChat()
 
     return () => {
       cancelled = true
     }
-  }, [remotePrekeyBundles, storedDevice])
+  }, [deferredActiveChatId, storedDevice, view])
 
   useEffect(() => {
     if (!storedDevice || view !== 'chat') {
@@ -1191,6 +1238,7 @@ function App() {
     if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
       setActiveCall(null)
       setCallParticipants([])
+      setCallKeys([])
       setCallRoom(null)
       setCallWebRtcEndpoint(null)
       setCallWebRtcMediaEvents([])
@@ -1229,6 +1277,7 @@ function App() {
   useEffect(() => {
     if (!storedDevice || !activeCall || view !== 'chat') {
       setCallParticipants([])
+      setCallKeys([])
       setCallRoom(null)
       setCallWebRtcEndpoint(null)
       setCallWebRtcMediaEvents([])
@@ -1252,6 +1301,10 @@ function App() {
           callSignalsRef.current = response.signals
           setCallSignals(response.signals)
           setCallRoom(response.room)
+          const callKeysResponse = await fetchCallKeys(sessionToken, callId)
+          if (!cancelled) {
+            setCallKeys(callKeysResponse.keys)
+          }
           const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, callId)
 
           if (!cancelled) {
@@ -1262,6 +1315,7 @@ function App() {
       } catch {
         if (!cancelled) {
           setCallParticipants([])
+          setCallKeys([])
           setCallRoom(null)
           setCallWebRtcEndpoint(null)
           setCallWebRtcMediaEvents([])
@@ -1679,6 +1733,11 @@ function App() {
     }
   }, [])
 
+  async function refreshDeviceList(sessionToken: string) {
+    const response = await listDevices(sessionToken)
+    setDevices(response.devices)
+  }
+
   async function handleCreateDirectChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -1830,26 +1889,83 @@ function App() {
       }
 
       const senderKeyMaterial = window.crypto.getRandomValues(new Uint8Array(32))
+      const senderKeyMaterialBase64 = bytesToBase64(senderKeyMaterial)
       const keyId = `sender-${Date.now()}-${window.crypto.randomUUID()}`
-      const wrappedKeys = Object.fromEntries(
-        recipientDevices.map((device) => [device.device_id, bytesToBase64(senderKeyMaterial)])
+      const wrappedKeys = await wrapGroupSenderKeyForRecipients(
+        senderKeyMaterialBase64,
+        recipientDevices
       )
+      const currentActiveSenderKey = getActiveGroupSenderKey(activeChat.id)
+      const nextEpoch = currentActiveSenderKey ? currentActiveSenderKey.epoch + 1 : 1
       const response = await distributeGroupSenderKeys(storedDevice.sessionToken, activeChat.id, {
         key_id: keyId,
-        algorithm: 'x25519+sealedbox',
+        sender_key_epoch: nextEpoch,
+        algorithm: 'p256-ecdh+a256gcm',
         wrapped_keys: wrappedKeys
       })
 
+      storeGroupSenderKeyMaterial(activeChat.id, keyId, senderKeyMaterialBase64)
+      setActiveGroupSenderKey(activeChat.id, keyId, nextEpoch)
       setGroupSenderKeys(response.sender_keys)
       setBanner({
         tone: 'success',
-        message: `Distributed Sender Key ${keyId} to ${response.sender_keys.length} recipient device${response.sender_keys.length === 1 ? '' : 's'}.`
+        message: `Distributed Sender Key ${keyId} (epoch ${nextEpoch}) to ${response.sender_keys.length} recipient device${response.sender_keys.length === 1 ? '' : 's'}.`
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to rotate the group Sender Key.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleRevokeLinkedDevice(deviceId: string) {
+    if (!storedDevice) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await revokeDevice(storedDevice.sessionToken, deviceId)
+      await refreshDeviceList(storedDevice.sessionToken)
+      setBanner({
+        tone: 'success',
+        message: `Revoked ${response.device.device_name}. Existing sessions for that device are now invalid.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to revoke device.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleVerifyPeerSafetyNumber(peerDeviceId: string) {
+    if (!storedDevice || !activeChatId) {
+      return
+    }
+
+    setVerifyingSafetyDeviceId(peerDeviceId)
+
+    try {
+      const response = await verifySafetyNumber(storedDevice.sessionToken, activeChatId, peerDeviceId)
+      setSafetyNumbers((current) =>
+        current.map((entry) =>
+          entry.peerDeviceId === response.safety_number.peer_device_id
+            ? toSafetyNumberEntry(response.safety_number)
+            : entry
+        )
+      )
+      setBanner({
+        tone: 'success',
+        message: `Verified safety number for ${response.safety_number.peer_device_name}.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to verify safety number.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setVerifyingSafetyDeviceId(null)
     }
   }
 
@@ -1903,6 +2019,31 @@ function App() {
       setBanner({ tone: 'success', message: 'Federation delivery queued.' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to queue the federation delivery.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCreateFederationPeerInvite(peerId: string) {
+    if (!storedDevice) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await createFederationPeerInvite(storedDevice.sessionToken, peerId)
+      setFederationPeers((current) =>
+        current.map((peer) => (peer.id === response.peer.id ? response.peer : peer))
+      )
+      setFederationInviteToken(response.invite_token)
+      setBanner({
+        tone: 'success',
+        message: `Invite token issued for ${response.peer.domain}. Share it with the remote operator to complete trust.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to issue federation invite.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -2047,14 +2188,41 @@ function App() {
       return
     }
 
+    const latestCallKey =
+      activeCall.mode === 'group'
+        ? [...callKeys].sort((left, right) => right.key_epoch - left.key_epoch)[0] ?? null
+        : null
+
+    if (activeCall.mode === 'group' && !latestCallKey) {
+      setBanner({
+        tone: 'error',
+        message:
+          'Group call join is blocked until a call key epoch is distributed. Rotate call keys first.'
+      })
+      return
+    }
+
     const sessionToken = storedDevice.sessionToken
     const trackKind = activeCall.mode === 'voice' ? 'audio' : 'audio_video'
     setLoading(true)
 
     try {
-      const response = await joinCallSession(sessionToken, activeCall.id, {
+      const joinPayload: {
+        track_kind: 'audio' | 'video' | 'audio_video'
+        e2ee_capable?: boolean
+        e2ee_algorithm?: string
+        e2ee_key_epoch?: number
+      } = {
         track_kind: trackKind
-      })
+      }
+
+      if (activeCall.mode === 'group' && latestCallKey) {
+        joinPayload.e2ee_capable = true
+        joinPayload.e2ee_algorithm = latestCallKey.algorithm
+        joinPayload.e2ee_key_epoch = latestCallKey.key_epoch
+      }
+
+      const response = await joinCallSession(sessionToken, activeCall.id, joinPayload)
       setCallParticipants(response.participants)
       setCallRoom(response.room)
       const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, activeCall.id)
@@ -2066,6 +2234,47 @@ function App() {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to join the active call.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRotateCallKeyEpoch() {
+    if (!storedDevice || !activeCall || !activeChatId) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const recipientDeviceResponse = await listRecipientDevices(storedDevice.sessionToken, activeChatId)
+
+      const targetRecipients = recipientDeviceResponse.recipient_devices.filter(
+        (device) => device.device_id !== storedDevice.deviceId
+      )
+
+      if (targetRecipients.length === 0) {
+        throw new Error('No active recipient devices are available for call key rotation.')
+      }
+
+      const keyMaterial = bytesToBase64(window.crypto.getRandomValues(new Uint8Array(32)))
+      const wrappedKeys = await wrapGroupSenderKeyForRecipients(keyMaterial, targetRecipients)
+      const nextEpoch = Math.max(0, ...callKeys.map((key) => key.key_epoch)) + 1
+
+      const response = await rotateCallKeys(storedDevice.sessionToken, activeCall.id, {
+        key_epoch: nextEpoch,
+        algorithm: 'sframe-aes-gcm-v1',
+        wrapped_keys: wrappedKeys
+      })
+
+      setCallKeys(response.keys)
+      setBanner({
+        tone: 'success',
+        message: `Call key epoch ${nextEpoch} rotated for ${response.keys.length} participant device${response.keys.length === 1 ? '' : 's'}.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rotate call key epoch.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -2519,6 +2728,34 @@ function App() {
       throw new Error('No local device identity is available.')
     }
 
+    const targetChat = chatItems.find((chat) => chat.id === chatId) ?? null
+
+    if (targetChat?.type === 'group') {
+      const activeSenderKey = getActiveGroupSenderKey(chatId)
+
+      if (!activeSenderKey) {
+        throw new Error(
+          'No active Sender Key is available for this group chat. Rotate a Sender Key before sending.'
+        )
+      }
+
+      const payload = {
+        client_id: clientId,
+        message_kind: messageKind,
+        ...(await encryptMessageWithGroupSenderKey(
+          plainText,
+          chatId,
+          activeSenderKey.key_id,
+          activeSenderKey.epoch
+        ))
+      }
+
+      return {
+        payload: replyToMessageId ? { ...payload, reply_to_message_id: replyToMessageId } : payload,
+        deliveryMode: 'group_sender_key'
+      } as const
+    }
+
     const recipientDeviceResponse = await listRecipientDevices(storedDevice.sessionToken, chatId)
     const recipientDevices = recipientDeviceResponse.recipient_devices
     const sessions = await syncChatSessionsFromServer(chatId, recipientDevices)
@@ -2542,6 +2779,95 @@ function App() {
     } as const
   }
 
+  async function queueMessageForOutbox(
+    chatId: string,
+    payload: {
+      client_id: string
+      ciphertext: string
+      message_kind: string
+      header?: string
+      crypto_scheme?: string
+      sender_key_id?: string
+      sender_key_epoch?: number
+      reply_to_message_id?: string
+      recipient_envelopes?: Record<string, string>
+      established_session_ids?: string[]
+    },
+    lastError: string
+  ) {
+    await queueOutboxMessage({
+      id: payload.client_id,
+      chatId,
+      payload,
+      createdAt: new Date().toISOString(),
+      attemptCount: 0,
+      nextAttemptAt: Date.now(),
+      lastError
+    })
+    setOutboxPendingCount(await countOutboxMessages())
+  }
+
+  const replayOutboxMessages = useEffectEvent(async () => {
+    if (!storedDevice) {
+      setOutboxPendingCount(0)
+      return
+    }
+
+    const dueMessages = await listDueOutboxMessages(8)
+
+    for (const queued of dueMessages) {
+      try {
+        const response = await createMessage(storedDevice.sessionToken, queued.chatId, queued.payload)
+        await ingestMessageIntoActiveThread(response.message, queued.chatId)
+        await deleteOutboxMessage(queued.id)
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to replay queued outbound message.'
+
+        if (isOutboxDuplicateClientIdError(message)) {
+          await deleteOutboxMessage(queued.id)
+          continue
+        }
+
+        const nextAttemptCount = queued.attemptCount + 1
+        await markOutboxRetry(
+          queued.id,
+          nextAttemptCount,
+          outboxRetryDelayMs(nextAttemptCount),
+          message
+        )
+      }
+    }
+
+    setOutboxPendingCount(await countOutboxMessages())
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function tickOutbox() {
+      if (cancelled) {
+        return
+      }
+
+      try {
+        await replayOutboxMessages()
+      } catch {
+        // Ignore replay loop errors; next tick will retry.
+      }
+    }
+
+    void tickOutbox()
+    const timer = window.setInterval(() => {
+      void tickOutbox()
+    }, 8_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [storedDevice?.deviceId, storedDevice?.sessionToken])
+
   async function sendDraftMessage() {
     if (!storedDevice || !activeChatId || draft.trim() === '') {
       return
@@ -2559,7 +2885,7 @@ function App() {
       setReplyTargetMessageId(null)
 
       try {
-        const { payload } = await buildEncryptedMessagePayload(
+        const { payload, deliveryMode } = await buildEncryptedMessagePayload(
           plainText,
           activeChatId,
           editingTargetMessage.clientId ?? `edit-${activeEditingMessageId}`,
@@ -2575,7 +2901,13 @@ function App() {
         )
 
         await ingestMessageIntoActiveThread(response.message, activeChatId)
-        setBanner({ tone: 'success', message: 'Message edited.' })
+        setBanner({
+          tone: 'success',
+          message:
+            deliveryMode === 'group_sender_key'
+              ? 'Message edited with Sender Key group encryption.'
+              : 'Message edited with session encryption.'
+        })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to edit message.'
         setBanner({ tone: 'error', message })
@@ -2606,7 +2938,7 @@ function App() {
     setReplyTargetMessageId(null)
 
     try {
-      const { payload } = await buildEncryptedMessagePayload(
+      const { payload, deliveryMode } = await buildEncryptedMessagePayload(
         plainText,
         activeChatId,
         clientId,
@@ -2614,13 +2946,31 @@ function App() {
         activeReplyToMessageId
       )
 
-      const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
+      try {
+        const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
 
-      await ingestMessageIntoActiveThread(response.message, activeChatId)
-      setBanner({
-        tone: 'success',
-        message: 'Session-bootstrapped encrypted envelope delivered to the server.'
-      })
+        await ingestMessageIntoActiveThread(response.message, activeChatId)
+        setBanner({
+          tone: 'success',
+          message:
+            deliveryMode === 'group_sender_key'
+              ? 'Sender Key encrypted message delivered to the server.'
+              : 'Session-bootstrapped encrypted envelope delivered to the server.'
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to send message.'
+
+        if (shouldQueueOutboxSendFailure(message)) {
+          await queueMessageForOutbox(activeChatId, payload, message)
+          setBanner({
+            tone: 'info',
+            message: 'Message queued for offline replay. It will retry automatically.'
+          })
+          return
+        }
+
+        throw error
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send message.'
       setBanner({ tone: 'error', message })
@@ -2717,7 +3067,7 @@ function App() {
             throw error
           }
 
-          const snapshot = await fetchMediaUpload(sessionToken, uploadId)
+          const snapshot = await fetchMediaUploadState(sessionToken, uploadId)
           uploadedPartIndexes = new Set(snapshot.upload.uploaded_part_indexes ?? [])
         }
       }
@@ -2731,7 +3081,11 @@ function App() {
       throw new Error('Attachment upload is missing one or more encrypted chunks.')
     }
 
-    await completeMediaUpload(sessionToken, uploadId)
+    const ciphertextSha256 = await sha256Hex(ciphertextBytes)
+
+    await completeMediaUpload(sessionToken, uploadId, {
+      ciphertext_sha256: ciphertextSha256
+    })
     return uploadId
   }
 
@@ -2804,20 +3158,39 @@ function App() {
         ivBase64: encryptedAttachment.ivBase64
       }
 
-      const { payload } = await buildEncryptedMessagePayload(
+      const { payload, deliveryMode } = await buildEncryptedMessagePayload(
         JSON.stringify(descriptor),
         activeChatId,
         clientId,
         'attachment',
         activeReplyToMessageId
       )
-      const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
 
-      await ingestMessageIntoActiveThread(response.message, activeChatId)
-      setBanner({
-        tone: 'success',
-        message: 'Encrypted attachment uploaded and delivered with session transport.'
-      })
+      try {
+        const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
+
+        await ingestMessageIntoActiveThread(response.message, activeChatId)
+        setBanner({
+          tone: 'success',
+          message:
+            deliveryMode === 'group_sender_key'
+              ? 'Encrypted attachment uploaded and delivered with Sender Key transport.'
+              : 'Encrypted attachment uploaded and delivered with session transport.'
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to send attachment.'
+
+        if (shouldQueueOutboxSendFailure(message)) {
+          await queueMessageForOutbox(activeChatId, payload, message)
+          setBanner({
+            tone: 'info',
+            message: 'Attachment message queued for offline replay. It will retry automatically.'
+          })
+          return
+        }
+
+        throw error
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send attachment.'
       setBanner({ tone: 'error', message })
@@ -3292,6 +3665,7 @@ function App() {
     }
 
     const { sessionToken } = storedDevice
+    const encryptionPrivateKeyPkcs8Base64 = storedDevice.encryptionPrivateKeyPkcs8Base64
     const groupChatId = activeGroupChatId
     let cancelled = false
 
@@ -3300,6 +3674,11 @@ function App() {
         const response = await listGroupSenderKeys(sessionToken, groupChatId)
 
         if (!cancelled) {
+          await storeInboundGroupSenderKeys(
+            groupChatId,
+            response.sender_keys,
+            encryptionPrivateKeyPkcs8Base64
+          )
           setGroupSenderKeys(response.sender_keys)
         }
       } catch {
@@ -4127,6 +4506,43 @@ function App() {
               {storedDevice?.signedPrekeyPublicKeyBase64 ? 'signed prekey present' : 'signed prekey missing'}
               {` • ${storedDevice?.oneTimePrekeys?.length ?? 0} local one-time prekeys cached`}
             </span>
+            <span>
+              Offline outbox: {outboxPendingCount} pending message
+              {outboxPendingCount === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="settings-card__list">
+            {devices.length === 0 ? (
+              <span className="settings-card__muted">No linked devices found yet.</span>
+            ) : (
+              devices.map((device) => (
+                <div className="settings-card__row" key={device.id}>
+                  <div className="settings-card__row-main">
+                    <strong>{device.device_name}</strong>
+                    <span>
+                      {device.is_current ? 'current device' : 'linked device'}
+                      {device.revoked_at ? ` • revoked ${formatRelativeTime(device.revoked_at)}` : ''}
+                    </span>
+                    <span>
+                      {device.one_time_prekey_count} active one-time prekey
+                      {device.one_time_prekey_count === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  {!device.is_current && !device.revoked_at ? (
+                    <div className="settings-card__row-actions">
+                      <button
+                        className="danger-action"
+                        disabled={loading}
+                        onClick={() => void handleRevokeLinkedDevice(device.id)}
+                        type="button"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
           </div>
           <div className="settings-card__actions">
             <button className="primary-action" disabled={loading} onClick={handleReauthenticate} type="button">
@@ -4343,10 +4759,29 @@ function App() {
               </span>
             ) : (
               safetyNumbers.map((entry) => (
-                <div className="settings-card__row" key={entry.deviceId}>
+                <div className="settings-card__row" key={entry.peerDeviceId}>
                   <div className="settings-card__row-main">
                     <strong>{entry.label}</strong>
                     <span>{entry.fingerprint}</span>
+                    <span>
+                      {entry.verified
+                        ? `verified ${formatRelativeTime(entry.verifiedAt)}`
+                        : 'not verified'}
+                    </span>
+                  </div>
+                  <div className="settings-card__row-actions">
+                    {!entry.verified ? (
+                      <button
+                        className="mini-action"
+                        disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading}
+                        onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)}
+                        type="button"
+                      >
+                        Verify
+                      </button>
+                    ) : (
+                      <span className="settings-card__muted">Verified</span>
+                    )}
                   </div>
                 </div>
               ))
@@ -4395,6 +4830,14 @@ function App() {
             </button>
           </form>
           <div className="settings-card__list">
+            {federationInviteToken ? (
+              <div className="settings-card__row">
+                <div className="settings-card__row-main">
+                  <strong>Latest invite token</strong>
+                  <span>{federationInviteToken}</span>
+                </div>
+              </div>
+            ) : null}
             {federationPeers.length === 0 ? (
               <span className="settings-card__muted">No federation peers configured yet.</span>
             ) : (
@@ -4403,11 +4846,19 @@ function App() {
                   <div className="settings-card__row-main">
                     <strong>{peer.display_name || peer.domain}</strong>
                     <span>
-                      {peer.status}
+                      {peer.status} • {peer.trust_state}
                       {peer.last_seen_at ? ` • seen ${formatRelativeTime(peer.last_seen_at)}` : ''}
                     </span>
                   </div>
                   <div className="settings-card__row-actions">
+                    <button
+                      className="mini-action"
+                      disabled={loading}
+                      onClick={() => void handleCreateFederationPeerInvite(peer.id)}
+                      type="button"
+                    >
+                      Invite
+                    </button>
                     <button
                       className="mini-action"
                       disabled={loading}
@@ -4505,6 +4956,11 @@ function App() {
                     : 'Membrane WebRTC endpoint not provisioned for this device yet'
                   : 'Membrane WebRTC endpoint state not loaded yet'
                 : 'Endpoint state appears after a call becomes active'}
+            </span>
+            <span>
+              {activeCall
+                ? `${callKeys.length} inbound call key distribution${callKeys.length === 1 ? '' : 's'} cached for this device`
+                : 'Call key distributions appear after a call is active'}
             </span>
             <span>
               {membraneClientReady
@@ -4621,6 +5077,14 @@ function App() {
             <button
               className="secondary-action"
               disabled={loading || !activeCall}
+              onClick={handleRotateCallKeyEpoch}
+              type="button"
+            >
+              Rotate Call Key Epoch
+            </button>
+            <button
+              className="secondary-action"
+              disabled={loading || !activeCall}
               onClick={handleLeaveActiveCall}
               type="button"
             >
@@ -4667,6 +5131,27 @@ function App() {
               ))
             ) : (
               <span className="settings-card__muted">No relay URIs loaded.</span>
+            )}
+          </div>
+          <div className="settings-card__list">
+            {callKeys.length > 0 ? (
+              callKeys.slice(0, 4).map((distribution) => (
+                <div className="settings-card__row" key={distribution.id}>
+                  <div className="settings-card__row-main">
+                    <strong>Epoch {distribution.key_epoch}</strong>
+                    <span>
+                      {distribution.algorithm} • {distribution.status}
+                    </span>
+                    <span>
+                      {distribution.owner_device_id === storedDevice?.deviceId
+                        ? 'owned by this device'
+                        : `owner ${distribution.owner_device_id}`}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <span className="settings-card__muted">No call key distributions fetched yet.</span>
             )}
           </div>
           <div className="settings-card__list">
@@ -5228,6 +5713,31 @@ function canUseChatSessions(
   return recipientDevices.every((device) => outboundRecipientIds.has(device.device_id))
 }
 
+function shouldQueueOutboxSendFailure(message: string): boolean {
+  const normalized = message.toLowerCase()
+
+  if (
+    normalized.includes('required') ||
+    normalized.includes('must ') ||
+    normalized.includes('must be') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('not found') ||
+    normalized.includes('sender key') ||
+    normalized.includes('session transport') ||
+    normalized.includes('already been taken')
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function isOutboxDuplicateClientIdError(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return normalized.includes('client') && normalized.includes('already been taken')
+}
+
 function mergeMessageThread(current: CachedMessage[], next: CachedMessage): CachedMessage[] {
   const filtered = current.filter((message) => {
     if (message.id === next.id) {
@@ -5453,36 +5963,15 @@ function resolveLinkPreview(
   }
 }
 
-async function deriveSafetyNumber(
-  localIdentityPublicKeyBase64: string,
-  remoteIdentityPublicKeyBase64: string
-): Promise<string> {
-  if (!window.crypto?.subtle) {
-    return ''
-  }
-
-  try {
-    const left = base64ToBytes(localIdentityPublicKeyBase64)
-    const right = base64ToBytes(remoteIdentityPublicKeyBase64)
-    const combined = new Uint8Array(left.length + right.length)
-    const ordered = [left, right].sort((a, b) => {
-      const leftKey = Array.from(a).join(',')
-      const rightKey = Array.from(b).join(',')
-      return leftKey.localeCompare(rightKey)
-    })
-
-    combined.set(ordered[0], 0)
-    combined.set(ordered[1], ordered[0].length)
-
-    const digest = new Uint8Array(await window.crypto.subtle.digest('SHA-256', combined))
-    const digits = Array.from(digest)
-      .map((value) => (value % 100).toString().padStart(2, '0'))
-      .join('')
-      .slice(0, 30)
-
-    return digits.match(/.{1,5}/g)?.join(' ') ?? digits
-  } catch {
-    return ''
+function toSafetyNumberEntry(record: SafetyNumberRecord): SafetyNumberEntry {
+  return {
+    peerDeviceId: record.peer_device_id,
+    peerUsername: record.peer_username,
+    peerDeviceName: record.peer_device_name,
+    label: `${record.peer_username} • ${record.peer_device_name}`,
+    fingerprint: record.fingerprint,
+    verified: record.verified,
+    verifiedAt: record.verified_at
   }
 }
 

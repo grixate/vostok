@@ -12,6 +12,7 @@
   "dependencies": {
     "@jellyfish-dev/membrane-webrtc-js": "^0.7.1",
     "@tauri-apps/api": "^2.10.1",
+    "@vostok/crypto-core": "file:../../packages/crypto-core",
     "@vostok/ui-chat": "file:../../packages/ui-chat",
     "@vostok/ui-primitives": "file:../../packages/ui-primitives",
     "@vostok/ui-tokens": "file:../../packages/ui-tokens",

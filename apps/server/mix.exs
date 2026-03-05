@@ -47,6 +47,7 @@ defmodule VostokServer.MixProject do
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
+      {:protobuf, "~> 0.14"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:membrane_rtc_engine, "~> 0.23.0"},
