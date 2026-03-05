@@ -1,0 +1,9 @@
+PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios
+INFOPLIST_KEY_CFBundleDisplayName = Vostok
+SWIFT_VERSION = 5.10
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+VOSTOK_BASE_URL = http://localhost:4000
+VOSTOK_SOCKET_URL = ws://localhost:4000/socket/device/websocket
+VOSTOK_INSTANCE_LABEL = Localhost

@@ -1,0 +1,1157 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00F6DC62237CFF2A65A796F8 /* AppRouteParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F84CC698D47AB4F748D145C /* AppRouteParser.swift */; };
+		05710F19285A55ED3155A1AD /* VostokApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA84C10E8CD165FC1FFD0875 /* VostokApp.swift */; };
+		097F5BCA844F20FF501BAE82 /* VostokAPIClientProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06125DD72EA7A193E1A1F425 /* VostokAPIClientProtocol.swift */; };
+		1356D9B37B941D52E95CE5DD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD4F1A192B6F2B4C4C8128F /* SettingsView.swift */; };
+		177C8E63DE34691881989B24 /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5597C37B87A0EF99E2630D7A /* Typography.swift */; };
+		1921FBBE5FFB75B20710DAE1 /* MediaTransferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 994FF4D5C2B564DDA796D4E8 /* MediaTransferService.swift */; };
+		1C6D8B1B1076297AC5AD3DCE /* VostokButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB95591A01C21FCCC2A5FA8 /* VostokButton.swift */; };
+		240E6EDF869178718360AF8E /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EFDBD4FC3937E55D0A9CE13 /* ChatListView.swift */; };
+		2C312A4D1A6A24A4316B1746 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DC37503D954DEA7A5C68347 /* RootView.swift */; };
+		2E6770C8D4929885A2BFD011 /* MediaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C13E90CF5258235BA9A42B1 /* MediaViews.swift */; };
+		312D690E3C5A3AA9718DE008 /* VostokContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF5C5A25C2C9611960DDEFA /* VostokContractTests.swift */; };
+		37DC41CF8B1EEB6AD8D383C7 /* CallViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFF15C92BBE0C7F9F97A4A3 /* CallViewModelTests.swift */; };
+		3918ED612711C9B20FEB75D0 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78CDAAEBB3AE07E05F75914 /* ProfileView.swift */; };
+		3D7C5FC555D16DE7F8C0FEF7 /* VostokNavBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695073329793126D7D80141 /* VostokNavBar.swift */; };
+		3EF5446B4CAB63EDC75681AF /* MessageRepositoryOutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A89AAD4414093D1F1932DF55 /* MessageRepositoryOutboxTests.swift */; };
+		424CEFBD423EC9C3112744EC /* PushNotificationPayloadParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C73EF6A892112F2B646E95 /* PushNotificationPayloadParserTests.swift */; };
+		43D1FAEAF7BAAD7F2B8B3051 /* AppRouteParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715B00CDC9C1CC3DE98F44AB /* AppRouteParserTests.swift */; };
+		45EA6406C600DF11A5F2B300 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1082F80E31DA1864477BB699 /* LoginView.swift */; };
+		4A52A9F0FEB586F2F1114DEB /* ContainerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74368C34222A56EA59F854E7 /* ContainerEnvironment.swift */; };
+		4C87CF28C533A0F617AC2435 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8529914A3CA3A3FAD198B70D /* AuthViewModel.swift */; };
+		4DB44D015A62185A59467FA6 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899681CAB4213A88B879D0F4 /* Colors.swift */; };
+		4F4B03CB882DADDE129678D5 /* MediaViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C390D4F2FD51FC1D32173DC9 /* MediaViewModel.swift */; };
+		4F9C68F37820A04BE91B88CC /* PhoenixRealtimeParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C55ADC00A290F2D62F6722 /* PhoenixRealtimeParsingTests.swift */; };
+		5227FA9D5409BABB7C684814 /* RealtimeCallEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C801DEFE83A7E28BFF2B20 /* RealtimeCallEvent.swift */; };
+		57AF06D02D9A91EC71725289 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3DC9BC8EA3DE4FE27850FC0 /* Theme.swift */; };
+		58AE170D0ACAD9B31EFE9A8E /* MediaCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2419FD72D757CD67EE2A71 /* MediaCryptoTests.swift */; };
+		5B308689934398D310DE2C2E /* PhoenixRealtimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46EC512411ED61F50A100BBA /* PhoenixRealtimeClient.swift */; };
+		6243CF245D5A568AFCF331FF /* VostokBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A215625B00F291682C3255B8 /* VostokBadge.swift */; };
+		6460B6D38CAB58FB91FDC0D0 /* RecipientEnvelopeBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535F052CBF2F1C4FA8E8513A /* RecipientEnvelopeBuilderTests.swift */; };
+		67BF134369C3DDDED18CED81 /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D19414F7837420DE2F325DD /* SettingsViewModelTests.swift */; };
+		69B3EB76DAF6D6FBC5236F7B /* PushNotificationPayloadParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F891822C1CACF1B87C91A9D7 /* PushNotificationPayloadParser.swift */; };
+		6C6539CF0EE05987DF85EF52 /* ContactListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720341F74671A8A12FF76A68 /* ContactListViewModel.swift */; };
+		723665C15F969B3B265A0FCA /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 503405F44D220A34026C035B /* VoiceRecorder.swift */; };
+		727638B618935A8BE27A6E1E /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 024E38072778DC83BD57B904 /* MessageBubble.swift */; };
+		730CC36FCEC728A76EB32BC0 /* VostokAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899E4CEBDEEBAA543BA3C939 /* VostokAvatar.swift */; };
+		7BC55AD29E580E2492FD8158 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCAF309CEDD2BE82AC8EF38 /* SettingsViewModel.swift */; };
+		83076C0AC52F3ADDE9191EB6 /* VostokComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C167E115FCE2DD192D98A8 /* VostokComposer.swift */; };
+		845A0D0D7E014CD8FF427481 /* GroupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3E485AF68BF89F85EF106C /* GroupViews.swift */; };
+		84C828F0151EB53AE73E0920 /* RealtimeMessageEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EBA3CBA6F0A2689373ACB56 /* RealtimeMessageEventTests.swift */; };
+		87EF12156EBC399589F2DD77 /* PushNotificationPayloadParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F891822C1CACF1B87C91A9D7 /* PushNotificationPayloadParser.swift */; };
+		8B60A92F68241FC01CFCF28E /* AttachmentTypeResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04033B8F430ACDDB34B15E2 /* AttachmentTypeResolverTests.swift */; };
+		8BBAF5B60DF39808B1ECA68F /* SignalSessionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7CDD9FCA066E044483F444C /* SignalSessionRuntime.swift */; };
+		8F677C92DF050DBF97CCB3CF /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B3514F9FAF760D53EC1D97F /* PushManager.swift */; };
+		989F6EA013F27A05549A628C /* ChatListLocalStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F931D560B6D78CDDAF86D377 /* ChatListLocalStateStore.swift */; };
+		9ACB9A78983BD0ABAA959218 /* GroupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB4F9AEE96DB8B381080784 /* GroupViewModel.swift */; };
+		9DF738B4E3E8D9BB1F65055E /* Repositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2857C5741AF24E4AE67C753 /* Repositories.swift */; };
+		9EEE0BE22DDA05FEEBA5B421 /* RegistrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A979F3AF98BF4B802FBF8097 /* RegistrationView.swift */; };
+		A3D3584387122E1054C4C893 /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */; };
+		A63C82B083CBF15E46B5D641 /* VostokListRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ACF52010D346B459E53418 /* VostokListRow.swift */; };
+		A74A2C312D0E81A77513B365 /* RecipientEnvelopeBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23DB1E67CBB34B926874948 /* RecipientEnvelopeBuilder.swift */; };
+		AA7B34E05EDAD2D121991045 /* VostokVoiceBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B7F19302E3DE4524ED82AE /* VostokVoiceBubble.swift */; };
+		ABC71DBF3969B14939E28FFF /* ChatListLocalStateStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99E34757A243F24BB871AF9C /* ChatListLocalStateStoreTests.swift */; };
+		AF6BB171B5BDBF2B39C83BDE /* MessageComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A83C488A72FCA2470A23D6E /* MessageComposer.swift */; };
+		B34A621DF19E92AD692EDA2B /* MediaCryptoBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF0711B1B314F91EF2CBF49 /* MediaCryptoBox.swift */; };
+		BAF0F04005F8DC8E8F00D3A1 /* libsignal in Frameworks */ = {isa = PBXBuildFile; productRef = F2B6994083A23C727569B0F0 /* libsignal */; };
+		BCE08915792799FC4838B19B /* CallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D540DCF21DBE9472E4DED /* CallViews.swift */; };
+		C22D99EA526965AD9CAA90DC /* RoundVideoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */; };
+		C45F32E9A7CDDC1585B4BB76 /* VostokAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA0E88EE790C755630DAEF /* VostokAppDelegate.swift */; };
+		C586BFD315504D9572FBD47E /* ContactListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8808AD8E65990205D25BC2 /* ContactListView.swift */; };
+		C7BC018F2349DBF0A241D1A2 /* CryptoProviderProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD6C64D8F46034204FBE63EA /* CryptoProviderProtocol.swift */; };
+		C987EE1FB71CB61070D90C22 /* VostokMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293FCFB34EEB5368519AF850 /* VostokMessageBubble.swift */; };
+		CC432C7DB4DF862C84CD0091 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0376251AD90382C74D994D7A /* NotificationService.swift */; };
+		CC53A93910F2EDD97EF92C3E /* CallViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE039B708707FE946148B58F /* CallViewModel.swift */; };
+		CD28C34CAAF9395262B51D15 /* VostokUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADF126F7B74AA0A06003CDF /* VostokUITests.swift */; };
+		CE88AB2922313C6AB37F682B /* SignalCryptoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFE0F36BA2666D1FB265E0C /* SignalCryptoProvider.swift */; };
+		CEE2CB23BB04D03D42F70E39 /* Environment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB5AFE5EECAB4881B674119 /* Environment.swift */; };
+		D1C683A0245C38E1C29537FA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D6FEF7407AA2D10524BE9E66 /* GRDB */; };
+		D315BDCC036510CF69947494 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3591ED98675C141B5F53687A /* AppState.swift */; };
+		D406AC01EA047E94224F2C94 /* ChatListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B73F295E43BC04F36E2DF9 /* ChatListViewModel.swift */; };
+		D9154960F3739B22351BBAC9 /* VostokAttachmentBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = E198484239A92A29E599AC68 /* VostokAttachmentBubble.swift */; };
+		D99FC11E5B79A065D53EE202 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3959DCACA90F1C87EEC50900 /* ConversationView.swift */; };
+		DDC065059198CA98E469F132 /* VostokTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744719F4376649726A6CB6B2 /* VostokTabBar.swift */; };
+		DDDE66FC82B7CB48BBBF4C41 /* AttachmentTypeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051B5845B1C33662A63B5B1E /* AttachmentTypeResolver.swift */; };
+		E3D9A0DE257E66C60438307E /* APIContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF2966277D628A2AD12E568 /* APIContracts.swift */; };
+		E674323FEDEA56229CF05909 /* RealtimeMessageEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59204B84C0C04F7FBC8A886D /* RealtimeMessageEvent.swift */; };
+		E9BB7FA46B020DA46C2ED02D /* KeychainSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8FBA75F3484C094F1C8DBE /* KeychainSessionStore.swift */; };
+		EB5CBA3A9E30ACCD4C95A81F /* ContactListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1969ED999B1CEF14D9FF92B /* ContactListViewModelTests.swift */; };
+		EEB1803F4606CB97FD56709F /* Database.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9965ABF7956BDE38CFB26A57 /* Database.swift */; };
+		F00D286BFF95976ADB77EA32 /* AttachmentCipherPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */; };
+		F2741111828906D99DE77DA2 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699C016BC27DAF6912CF5F61 /* APIClient.swift */; };
+		F3A69B66AB260E1870C10DB3 /* Environment.plist in Resources */ = {isa = PBXBuildFile; fileRef = D3C15430D2050E53C6139F71 /* Environment.plist */; };
+		F430BE213E36B2CFD7BADE3E /* SecureCodableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */; };
+		FCA4CE88794CC2BAF2724D79 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EEB65E83815B4A53ADD965 /* AppContainer.swift */; };
+		FF6EC67021E12C50CAF4A829 /* PhoenixRealtimeClientProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */; };
+		FF814D39FF277ACCE4708FF8 /* VoicePlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2DD108B2E4C5FD6277823640 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 499A6F6EB63085903A298FA8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE5410FDBA5BF9E0B6D828AF;
+			remoteInfo = Vostok;
+		};
+		8CB09DAB230D822391AD6707 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 499A6F6EB63085903A298FA8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE5410FDBA5BF9E0B6D828AF;
+			remoteInfo = Vostok;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		024E38072778DC83BD57B904 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		0376251AD90382C74D994D7A /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		051B5845B1C33662A63B5B1E /* AttachmentTypeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTypeResolver.swift; sourceTree = "<group>"; };
+		06125DD72EA7A193E1A1F425 /* VostokAPIClientProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAPIClientProtocol.swift; sourceTree = "<group>"; };
+		0695073329793126D7D80141 /* VostokNavBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokNavBar.swift; sourceTree = "<group>"; };
+		0B2419FD72D757CD67EE2A71 /* MediaCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCryptoTests.swift; sourceTree = "<group>"; };
+		0B3514F9FAF760D53EC1D97F /* PushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManager.swift; sourceTree = "<group>"; };
+		0C13E90CF5258235BA9A42B1 /* MediaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaViews.swift; sourceTree = "<group>"; };
+		0EBA3CBA6F0A2689373ACB56 /* RealtimeMessageEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeMessageEventTests.swift; sourceTree = "<group>"; };
+		1082F80E31DA1864477BB699 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		13B7F19302E3DE4524ED82AE /* VostokVoiceBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokVoiceBubble.swift; sourceTree = "<group>"; };
+		17C167E115FCE2DD192D98A8 /* VostokComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokComposer.swift; sourceTree = "<group>"; };
+		22B73F295E43BC04F36E2DF9 /* ChatListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListViewModel.swift; sourceTree = "<group>"; };
+		22CD7F2B5E91A185687B59C4 /* libsignal */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libsignal; path = ThirdParty/libsignal; sourceTree = SOURCE_ROOT; };
+		293FCFB34EEB5368519AF850 /* VostokMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokMessageBubble.swift; sourceTree = "<group>"; };
+		320CFC0D9628CD86BD3F7A37 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		3591ED98675C141B5F53687A /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		3959DCACA90F1C87EEC50900 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		46EC512411ED61F50A100BBA /* PhoenixRealtimeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoenixRealtimeClient.swift; sourceTree = "<group>"; };
+		4A83C488A72FCA2470A23D6E /* MessageComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageComposer.swift; sourceTree = "<group>"; };
+		4AD4F1A192B6F2B4C4C8128F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		4AFA0E88EE790C755630DAEF /* VostokAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAppDelegate.swift; sourceTree = "<group>"; };
+		4AFE0F36BA2666D1FB265E0C /* SignalCryptoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalCryptoProvider.swift; sourceTree = "<group>"; };
+		4B689C224F3BFEB2F647D9B7 /* VostokNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = VostokNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4DC37503D954DEA7A5C68347 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4EB5AFE5EECAB4881B674119 /* Environment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Environment.swift; sourceTree = "<group>"; };
+		503405F44D220A34026C035B /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
+		50492DE0E5E353D95F2BF944 /* VostokUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VostokUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		535F052CBF2F1C4FA8E8513A /* RecipientEnvelopeBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientEnvelopeBuilderTests.swift; sourceTree = "<group>"; };
+		545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoenixRealtimeClientProtocol.swift; sourceTree = "<group>"; };
+		54ED52862BFD7928ED8B51EE /* GRDBSQLCipher */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GRDBSQLCipher; path = ThirdParty/GRDBSQLCipher; sourceTree = SOURCE_ROOT; };
+		5597C37B87A0EF99E2630D7A /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
+		590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureCodableStore.swift; sourceTree = "<group>"; };
+		59204B84C0C04F7FBC8A886D /* RealtimeMessageEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeMessageEvent.swift; sourceTree = "<group>"; };
+		5F84CC698D47AB4F748D145C /* AppRouteParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteParser.swift; sourceTree = "<group>"; };
+		651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
+		699C016BC27DAF6912CF5F61 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		6D19414F7837420DE2F325DD /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
+		715B00CDC9C1CC3DE98F44AB /* AppRouteParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteParserTests.swift; sourceTree = "<group>"; };
+		720341F74671A8A12FF76A68 /* ContactListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListViewModel.swift; sourceTree = "<group>"; };
+		74368C34222A56EA59F854E7 /* ContainerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerEnvironment.swift; sourceTree = "<group>"; };
+		744719F4376649726A6CB6B2 /* VostokTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokTabBar.swift; sourceTree = "<group>"; };
+		7CB4F9AEE96DB8B381080784 /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
+		7F8808AD8E65990205D25BC2 /* ContactListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListView.swift; sourceTree = "<group>"; };
+		8529914A3CA3A3FAD198B70D /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		899681CAB4213A88B879D0F4 /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
+		899E4CEBDEEBAA543BA3C939 /* VostokAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAvatar.swift; sourceTree = "<group>"; };
+		8ADF126F7B74AA0A06003CDF /* VostokUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokUITests.swift; sourceTree = "<group>"; };
+		97EEB65E83815B4A53ADD965 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		984D540DCF21DBE9472E4DED /* CallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViews.swift; sourceTree = "<group>"; };
+		990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentCipherPayload.swift; sourceTree = "<group>"; };
+		994FF4D5C2B564DDA796D4E8 /* MediaTransferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTransferService.swift; sourceTree = "<group>"; };
+		9965ABF7956BDE38CFB26A57 /* Database.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Database.swift; sourceTree = "<group>"; };
+		99E34757A243F24BB871AF9C /* ChatListLocalStateStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListLocalStateStoreTests.swift; sourceTree = "<group>"; };
+		9DF5C5A25C2C9611960DDEFA /* VostokContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokContractTests.swift; sourceTree = "<group>"; };
+		9EFDBD4FC3937E55D0A9CE13 /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		A215625B00F291682C3255B8 /* VostokBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokBadge.swift; sourceTree = "<group>"; };
+		A89AAD4414093D1F1932DF55 /* MessageRepositoryOutboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepositoryOutboxTests.swift; sourceTree = "<group>"; };
+		A979F3AF98BF4B802FBF8097 /* RegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistrationView.swift; sourceTree = "<group>"; };
+		ADFF15C92BBE0C7F9F97A4A3 /* CallViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewModelTests.swift; sourceTree = "<group>"; };
+		AEF2966277D628A2AD12E568 /* APIContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIContracts.swift; sourceTree = "<group>"; };
+		B02ED9CFAD40D5DC050EAF1B /* Vostok.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Vostok.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B23DB1E67CBB34B926874948 /* RecipientEnvelopeBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientEnvelopeBuilder.swift; sourceTree = "<group>"; };
+		BD6C64D8F46034204FBE63EA /* CryptoProviderProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoProviderProtocol.swift; sourceTree = "<group>"; };
+		BE3E485AF68BF89F85EF106C /* GroupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViews.swift; sourceTree = "<group>"; };
+		C1969ED999B1CEF14D9FF92B /* ContactListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListViewModelTests.swift; sourceTree = "<group>"; };
+		C390D4F2FD51FC1D32173DC9 /* MediaViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaViewModel.swift; sourceTree = "<group>"; };
+		C7C801DEFE83A7E28BFF2B20 /* RealtimeCallEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeCallEvent.swift; sourceTree = "<group>"; };
+		C843D4078BBA27D0C0B410ED /* VostokTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VostokTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CA84C10E8CD165FC1FFD0875 /* VostokApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokApp.swift; sourceTree = "<group>"; };
+		CCCAF309CEDD2BE82AC8EF38 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		D04033B8F430ACDDB34B15E2 /* AttachmentTypeResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTypeResolverTests.swift; sourceTree = "<group>"; };
+		D2857C5741AF24E4AE67C753 /* Repositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repositories.swift; sourceTree = "<group>"; };
+		D3C15430D2050E53C6139F71 /* Environment.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Environment.plist; sourceTree = "<group>"; };
+		D7CDD9FCA066E044483F444C /* SignalSessionRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalSessionRuntime.swift; sourceTree = "<group>"; };
+		DAAADAE80EF42676C6ABA5A0 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		DB8FBA75F3484C094F1C8DBE /* KeychainSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainSessionStore.swift; sourceTree = "<group>"; };
+		DEF0711B1B314F91EF2CBF49 /* MediaCryptoBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCryptoBox.swift; sourceTree = "<group>"; };
+		E198484239A92A29E599AC68 /* VostokAttachmentBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAttachmentBubble.swift; sourceTree = "<group>"; };
+		E3DC9BC8EA3DE4FE27850FC0 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		E8C73EF6A892112F2B646E95 /* PushNotificationPayloadParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationPayloadParserTests.swift; sourceTree = "<group>"; };
+		EE039B708707FE946148B58F /* CallViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewModel.swift; sourceTree = "<group>"; };
+		EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundVideoRecorder.swift; sourceTree = "<group>"; };
+		F4ACF52010D346B459E53418 /* VostokListRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokListRow.swift; sourceTree = "<group>"; };
+		F4C55ADC00A290F2D62F6722 /* PhoenixRealtimeParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoenixRealtimeParsingTests.swift; sourceTree = "<group>"; };
+		F78CDAAEBB3AE07E05F75914 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		F891822C1CACF1B87C91A9D7 /* PushNotificationPayloadParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationPayloadParser.swift; sourceTree = "<group>"; };
+		F931D560B6D78CDDAF86D377 /* ChatListLocalStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListLocalStateStore.swift; sourceTree = "<group>"; };
+		FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePlaybackManager.swift; sourceTree = "<group>"; };
+		FFB95591A01C21FCCC2A5FA8 /* VostokButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokButton.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		EDC6A77055DE2F2E3CE49B15 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1C683A0245C38E1C29537FA /* GRDB in Frameworks */,
+				BAF0F04005F8DC8E8F00D3A1 /* libsignal in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		09808D2F2E8730AE267DF6BF /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				8529914A3CA3A3FAD198B70D /* AuthViewModel.swift */,
+				1082F80E31DA1864477BB699 /* LoginView.swift */,
+				A979F3AF98BF4B802FBF8097 /* RegistrationView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		0B0DC07FC5AAF7FC0DA54940 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				699C016BC27DAF6912CF5F61 /* APIClient.swift */,
+				AEF2966277D628A2AD12E568 /* APIContracts.swift */,
+				06125DD72EA7A193E1A1F425 /* VostokAPIClientProtocol.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		187521FC9FC688072BEB22F1 /* Groups */ = {
+			isa = PBXGroup;
+			children = (
+				7CB4F9AEE96DB8B381080784 /* GroupViewModel.swift */,
+				BE3E485AF68BF89F85EF106C /* GroupViews.swift */,
+			);
+			path = Groups;
+			sourceTree = "<group>";
+		};
+		225DEEAC064322AE81FD1FE8 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				899681CAB4213A88B879D0F4 /* Colors.swift */,
+				E3DC9BC8EA3DE4FE27850FC0 /* Theme.swift */,
+				5597C37B87A0EF99E2630D7A /* Typography.swift */,
+				9FD09AA842F0F4E0B8F39251 /* Components */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		2D03045A30CBC183BFA26DB4 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				9965ABF7956BDE38CFB26A57 /* Database.swift */,
+				D2857C5741AF24E4AE67C753 /* Repositories.swift */,
+				590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		36272E044D14DD88FC78527A /* VostokNotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				0376251AD90382C74D994D7A /* NotificationService.swift */,
+			);
+			path = VostokNotificationService;
+			sourceTree = "<group>";
+		};
+		49BCFB9C673906EF5328F746 /* VostokUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8ADF126F7B74AA0A06003CDF /* VostokUITests.swift */,
+			);
+			path = VostokUITests;
+			sourceTree = "<group>";
+		};
+		545384798C079921903C92A0 /* Media */ = {
+			isa = PBXGroup;
+			children = (
+				DEF0711B1B314F91EF2CBF49 /* MediaCryptoBox.swift */,
+				994FF4D5C2B564DDA796D4E8 /* MediaTransferService.swift */,
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
+		62E1B45A8169C63064E0A106 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				320CFC0D9628CD86BD3F7A37 /* Debug.xcconfig */,
+				DAAADAE80EF42676C6ABA5A0 /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		696ECECD6C4193941D1FBD61 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				97EEB65E83815B4A53ADD965 /* AppContainer.swift */,
+				5F84CC698D47AB4F748D145C /* AppRouteParser.swift */,
+				3591ED98675C141B5F53687A /* AppState.swift */,
+				74368C34222A56EA59F854E7 /* ContainerEnvironment.swift */,
+				4EB5AFE5EECAB4881B674119 /* Environment.swift */,
+				4DC37503D954DEA7A5C68347 /* RootView.swift */,
+				CA84C10E8CD165FC1FFD0875 /* VostokApp.swift */,
+				4AFA0E88EE790C755630DAEF /* VostokAppDelegate.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		6F3EE6D4F9BDF4113DE3F4F2 /* Conversation */ = {
+			isa = PBXGroup;
+			children = (
+				990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */,
+				051B5845B1C33662A63B5B1E /* AttachmentTypeResolver.swift */,
+				3959DCACA90F1C87EEC50900 /* ConversationView.swift */,
+				651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */,
+				024E38072778DC83BD57B904 /* MessageBubble.swift */,
+				4A83C488A72FCA2470A23D6E /* MessageComposer.swift */,
+				EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */,
+				FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */,
+				503405F44D220A34026C035B /* VoiceRecorder.swift */,
+			);
+			path = Conversation;
+			sourceTree = "<group>";
+		};
+		783549B9BAE64CF5ABCEC17F /* Media */ = {
+			isa = PBXGroup;
+			children = (
+				C390D4F2FD51FC1D32173DC9 /* MediaViewModel.swift */,
+				0C13E90CF5258235BA9A42B1 /* MediaViews.swift */,
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
+		813A4AF091B57BBE48B0409B /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				4AD4F1A192B6F2B4C4C8128F /* SettingsView.swift */,
+				CCCAF309CEDD2BE82AC8EF38 /* SettingsViewModel.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		8C1E767F684E71330314AC3C = {
+			isa = PBXGroup;
+			children = (
+				62E1B45A8169C63064E0A106 /* Config */,
+				DEAADE6497A1D42862517EA0 /* Packages */,
+				A0FB68031DF3593B63E8AD6A /* Vostok */,
+				36272E044D14DD88FC78527A /* VostokNotificationService */,
+				DE5E7F6A27DAC6A96B7003D2 /* VostokTests */,
+				49BCFB9C673906EF5328F746 /* VostokUITests */,
+				AFDA5AA8DCF027DC983049B6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9948634EFD3C329AA77FE0A7 /* ChatList */ = {
+			isa = PBXGroup;
+			children = (
+				F931D560B6D78CDDAF86D377 /* ChatListLocalStateStore.swift */,
+				9EFDBD4FC3937E55D0A9CE13 /* ChatListView.swift */,
+				22B73F295E43BC04F36E2DF9 /* ChatListViewModel.swift */,
+			);
+			path = ChatList;
+			sourceTree = "<group>";
+		};
+		9FD09AA842F0F4E0B8F39251 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				E198484239A92A29E599AC68 /* VostokAttachmentBubble.swift */,
+				899E4CEBDEEBAA543BA3C939 /* VostokAvatar.swift */,
+				A215625B00F291682C3255B8 /* VostokBadge.swift */,
+				FFB95591A01C21FCCC2A5FA8 /* VostokButton.swift */,
+				17C167E115FCE2DD192D98A8 /* VostokComposer.swift */,
+				F4ACF52010D346B459E53418 /* VostokListRow.swift */,
+				293FCFB34EEB5368519AF850 /* VostokMessageBubble.swift */,
+				0695073329793126D7D80141 /* VostokNavBar.swift */,
+				744719F4376649726A6CB6B2 /* VostokTabBar.swift */,
+				13B7F19302E3DE4524ED82AE /* VostokVoiceBubble.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		A0FB68031DF3593B63E8AD6A /* Vostok */ = {
+			isa = PBXGroup;
+			children = (
+				696ECECD6C4193941D1FBD61 /* App */,
+				BE4DD8B390DAB7F3189F78D2 /* Core */,
+				225DEEAC064322AE81FD1FE8 /* DesignSystem */,
+				D195E8D0931FE87120E62054 /* Features */,
+				B9AAC5E8224BC48D90508143 /* Resources */,
+			);
+			path = Vostok;
+			sourceTree = "<group>";
+		};
+		A1F07C6636D9FC60631DDD43 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				F78CDAAEBB3AE07E05F75914 /* ProfileView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		A7A5A062CC29E56B30EC4B06 /* Push */ = {
+			isa = PBXGroup;
+			children = (
+				0B3514F9FAF760D53EC1D97F /* PushManager.swift */,
+				F891822C1CACF1B87C91A9D7 /* PushNotificationPayloadParser.swift */,
+			);
+			path = Push;
+			sourceTree = "<group>";
+		};
+		AFDA5AA8DCF027DC983049B6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B02ED9CFAD40D5DC050EAF1B /* Vostok.app */,
+				4B689C224F3BFEB2F647D9B7 /* VostokNotificationService.appex */,
+				C843D4078BBA27D0C0B410ED /* VostokTests.xctest */,
+				50492DE0E5E353D95F2BF944 /* VostokUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B52C5F429987B66380E350A3 /* Calls */ = {
+			isa = PBXGroup;
+			children = (
+				EE039B708707FE946148B58F /* CallViewModel.swift */,
+				984D540DCF21DBE9472E4DED /* CallViews.swift */,
+			);
+			path = Calls;
+			sourceTree = "<group>";
+		};
+		B9AAC5E8224BC48D90508143 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D3C15430D2050E53C6139F71 /* Environment.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		BE4DD8B390DAB7F3189F78D2 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				C4A63BAF0EE500FF62C3A56F /* Crypto */,
+				545384798C079921903C92A0 /* Media */,
+				0B0DC07FC5AAF7FC0DA54940 /* Networking */,
+				A7A5A062CC29E56B30EC4B06 /* Push */,
+				CFCEA228C730D277776510BF /* Realtime */,
+				2D03045A30CBC183BFA26DB4 /* Storage */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		C4A63BAF0EE500FF62C3A56F /* Crypto */ = {
+			isa = PBXGroup;
+			children = (
+				BD6C64D8F46034204FBE63EA /* CryptoProviderProtocol.swift */,
+				DB8FBA75F3484C094F1C8DBE /* KeychainSessionStore.swift */,
+				B23DB1E67CBB34B926874948 /* RecipientEnvelopeBuilder.swift */,
+				4AFE0F36BA2666D1FB265E0C /* SignalCryptoProvider.swift */,
+				D7CDD9FCA066E044483F444C /* SignalSessionRuntime.swift */,
+			);
+			path = Crypto;
+			sourceTree = "<group>";
+		};
+		CFCEA228C730D277776510BF /* Realtime */ = {
+			isa = PBXGroup;
+			children = (
+				46EC512411ED61F50A100BBA /* PhoenixRealtimeClient.swift */,
+				545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */,
+				C7C801DEFE83A7E28BFF2B20 /* RealtimeCallEvent.swift */,
+				59204B84C0C04F7FBC8A886D /* RealtimeMessageEvent.swift */,
+			);
+			path = Realtime;
+			sourceTree = "<group>";
+		};
+		D195E8D0931FE87120E62054 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				09808D2F2E8730AE267DF6BF /* Auth */,
+				B52C5F429987B66380E350A3 /* Calls */,
+				9948634EFD3C329AA77FE0A7 /* ChatList */,
+				DC93924AEDC3AC19E39B25DD /* Contacts */,
+				6F3EE6D4F9BDF4113DE3F4F2 /* Conversation */,
+				187521FC9FC688072BEB22F1 /* Groups */,
+				783549B9BAE64CF5ABCEC17F /* Media */,
+				A1F07C6636D9FC60631DDD43 /* Profile */,
+				813A4AF091B57BBE48B0409B /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		DC93924AEDC3AC19E39B25DD /* Contacts */ = {
+			isa = PBXGroup;
+			children = (
+				7F8808AD8E65990205D25BC2 /* ContactListView.swift */,
+				720341F74671A8A12FF76A68 /* ContactListViewModel.swift */,
+			);
+			path = Contacts;
+			sourceTree = "<group>";
+		};
+		DE5E7F6A27DAC6A96B7003D2 /* VostokTests */ = {
+			isa = PBXGroup;
+			children = (
+				715B00CDC9C1CC3DE98F44AB /* AppRouteParserTests.swift */,
+				D04033B8F430ACDDB34B15E2 /* AttachmentTypeResolverTests.swift */,
+				ADFF15C92BBE0C7F9F97A4A3 /* CallViewModelTests.swift */,
+				99E34757A243F24BB871AF9C /* ChatListLocalStateStoreTests.swift */,
+				C1969ED999B1CEF14D9FF92B /* ContactListViewModelTests.swift */,
+				0B2419FD72D757CD67EE2A71 /* MediaCryptoTests.swift */,
+				A89AAD4414093D1F1932DF55 /* MessageRepositoryOutboxTests.swift */,
+				F4C55ADC00A290F2D62F6722 /* PhoenixRealtimeParsingTests.swift */,
+				E8C73EF6A892112F2B646E95 /* PushNotificationPayloadParserTests.swift */,
+				0EBA3CBA6F0A2689373ACB56 /* RealtimeMessageEventTests.swift */,
+				535F052CBF2F1C4FA8E8513A /* RecipientEnvelopeBuilderTests.swift */,
+				6D19414F7837420DE2F325DD /* SettingsViewModelTests.swift */,
+				9DF5C5A25C2C9611960DDEFA /* VostokContractTests.swift */,
+			);
+			path = VostokTests;
+			sourceTree = "<group>";
+		};
+		DEAADE6497A1D42862517EA0 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				54ED52862BFD7928ED8B51EE /* GRDBSQLCipher */,
+				22CD7F2B5E91A185687B59C4 /* libsignal */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		19860B59C0A11A5358411169 /* VostokUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CA624E72AB0A6F87DD2BD8BA /* Build configuration list for PBXNativeTarget "VostokUITests" */;
+			buildPhases = (
+				1B5C1B6DD58BC7F0027BDAB1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F7538D852A28180CA7A6D5DD /* PBXTargetDependency */,
+			);
+			name = VostokUITests;
+			packageProductDependencies = (
+			);
+			productName = VostokUITests;
+			productReference = 50492DE0E5E353D95F2BF944 /* VostokUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		562C63466CE1E50044A0D39D /* VostokNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5F4193D5E3B3A57CA73B750F /* Build configuration list for PBXNativeTarget "VostokNotificationService" */;
+			buildPhases = (
+				69B82C70CF005B4BAD1BEE4F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VostokNotificationService;
+			packageProductDependencies = (
+			);
+			productName = VostokNotificationService;
+			productReference = 4B689C224F3BFEB2F647D9B7 /* VostokNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AE5410FDBA5BF9E0B6D828AF /* Vostok */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 332B860169E8E9981CB1D3ED /* Build configuration list for PBXNativeTarget "Vostok" */;
+			buildPhases = (
+				145415AF6F2C00DB67ECBF41 /* Sources */,
+				215C360A8754C60F5D0693DE /* Resources */,
+				EDC6A77055DE2F2E3CE49B15 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Vostok;
+			packageProductDependencies = (
+				D6FEF7407AA2D10524BE9E66 /* GRDB */,
+				F2B6994083A23C727569B0F0 /* libsignal */,
+			);
+			productName = Vostok;
+			productReference = B02ED9CFAD40D5DC050EAF1B /* Vostok.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F120B2649D084F00C7FE55B3 /* VostokTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 41EFB9B29C8CB805F658A0D2 /* Build configuration list for PBXNativeTarget "VostokTests" */;
+			buildPhases = (
+				3C61C0044EDC42B47AB5CBFB /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				56273B41BFD26B0F89C31B31 /* PBXTargetDependency */,
+			);
+			name = VostokTests;
+			packageProductDependencies = (
+			);
+			productName = VostokTests;
+			productReference = C843D4078BBA27D0C0B410ED /* VostokTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		499A6F6EB63085903A298FA8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					19860B59C0A11A5358411169 = {
+						TestTargetID = AE5410FDBA5BF9E0B6D828AF;
+					};
+					562C63466CE1E50044A0D39D = {
+						ProvisioningStyle = Automatic;
+					};
+					AE5410FDBA5BF9E0B6D828AF = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 00C4031740C3AEEC022069A0 /* Build configuration list for PBXProject "Vostok" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 8C1E767F684E71330314AC3C;
+			packageReferences = (
+				D01EB912707DF1696D9F507A /* XCLocalSwiftPackageReference "ThirdParty/GRDBSQLCipher" */,
+				05D5663451F887282EA02A1A /* XCLocalSwiftPackageReference "ThirdParty/libsignal" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AE5410FDBA5BF9E0B6D828AF /* Vostok */,
+				562C63466CE1E50044A0D39D /* VostokNotificationService */,
+				F120B2649D084F00C7FE55B3 /* VostokTests */,
+				19860B59C0A11A5358411169 /* VostokUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		215C360A8754C60F5D0693DE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F3A69B66AB260E1870C10DB3 /* Environment.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		145415AF6F2C00DB67ECBF41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F2741111828906D99DE77DA2 /* APIClient.swift in Sources */,
+				E3D9A0DE257E66C60438307E /* APIContracts.swift in Sources */,
+				FCA4CE88794CC2BAF2724D79 /* AppContainer.swift in Sources */,
+				00F6DC62237CFF2A65A796F8 /* AppRouteParser.swift in Sources */,
+				D315BDCC036510CF69947494 /* AppState.swift in Sources */,
+				F00D286BFF95976ADB77EA32 /* AttachmentCipherPayload.swift in Sources */,
+				DDDE66FC82B7CB48BBBF4C41 /* AttachmentTypeResolver.swift in Sources */,
+				4C87CF28C533A0F617AC2435 /* AuthViewModel.swift in Sources */,
+				CC53A93910F2EDD97EF92C3E /* CallViewModel.swift in Sources */,
+				BCE08915792799FC4838B19B /* CallViews.swift in Sources */,
+				989F6EA013F27A05549A628C /* ChatListLocalStateStore.swift in Sources */,
+				240E6EDF869178718360AF8E /* ChatListView.swift in Sources */,
+				D406AC01EA047E94224F2C94 /* ChatListViewModel.swift in Sources */,
+				4DB44D015A62185A59467FA6 /* Colors.swift in Sources */,
+				C586BFD315504D9572FBD47E /* ContactListView.swift in Sources */,
+				6C6539CF0EE05987DF85EF52 /* ContactListViewModel.swift in Sources */,
+				4A52A9F0FEB586F2F1114DEB /* ContainerEnvironment.swift in Sources */,
+				D99FC11E5B79A065D53EE202 /* ConversationView.swift in Sources */,
+				A3D3584387122E1054C4C893 /* ConversationViewModel.swift in Sources */,
+				C7BC018F2349DBF0A241D1A2 /* CryptoProviderProtocol.swift in Sources */,
+				EEB1803F4606CB97FD56709F /* Database.swift in Sources */,
+				CEE2CB23BB04D03D42F70E39 /* Environment.swift in Sources */,
+				9ACB9A78983BD0ABAA959218 /* GroupViewModel.swift in Sources */,
+				845A0D0D7E014CD8FF427481 /* GroupViews.swift in Sources */,
+				E9BB7FA46B020DA46C2ED02D /* KeychainSessionStore.swift in Sources */,
+				45EA6406C600DF11A5F2B300 /* LoginView.swift in Sources */,
+				B34A621DF19E92AD692EDA2B /* MediaCryptoBox.swift in Sources */,
+				1921FBBE5FFB75B20710DAE1 /* MediaTransferService.swift in Sources */,
+				4F4B03CB882DADDE129678D5 /* MediaViewModel.swift in Sources */,
+				2E6770C8D4929885A2BFD011 /* MediaViews.swift in Sources */,
+				727638B618935A8BE27A6E1E /* MessageBubble.swift in Sources */,
+				AF6BB171B5BDBF2B39C83BDE /* MessageComposer.swift in Sources */,
+				5B308689934398D310DE2C2E /* PhoenixRealtimeClient.swift in Sources */,
+				FF6EC67021E12C50CAF4A829 /* PhoenixRealtimeClientProtocol.swift in Sources */,
+				3918ED612711C9B20FEB75D0 /* ProfileView.swift in Sources */,
+				8F677C92DF050DBF97CCB3CF /* PushManager.swift in Sources */,
+				87EF12156EBC399589F2DD77 /* PushNotificationPayloadParser.swift in Sources */,
+				5227FA9D5409BABB7C684814 /* RealtimeCallEvent.swift in Sources */,
+				E674323FEDEA56229CF05909 /* RealtimeMessageEvent.swift in Sources */,
+				A74A2C312D0E81A77513B365 /* RecipientEnvelopeBuilder.swift in Sources */,
+				9EEE0BE22DDA05FEEBA5B421 /* RegistrationView.swift in Sources */,
+				9DF738B4E3E8D9BB1F65055E /* Repositories.swift in Sources */,
+				2C312A4D1A6A24A4316B1746 /* RootView.swift in Sources */,
+				C22D99EA526965AD9CAA90DC /* RoundVideoRecorder.swift in Sources */,
+				F430BE213E36B2CFD7BADE3E /* SecureCodableStore.swift in Sources */,
+				1356D9B37B941D52E95CE5DD /* SettingsView.swift in Sources */,
+				7BC55AD29E580E2492FD8158 /* SettingsViewModel.swift in Sources */,
+				CE88AB2922313C6AB37F682B /* SignalCryptoProvider.swift in Sources */,
+				8BBAF5B60DF39808B1ECA68F /* SignalSessionRuntime.swift in Sources */,
+				57AF06D02D9A91EC71725289 /* Theme.swift in Sources */,
+				177C8E63DE34691881989B24 /* Typography.swift in Sources */,
+				FF814D39FF277ACCE4708FF8 /* VoicePlaybackManager.swift in Sources */,
+				723665C15F969B3B265A0FCA /* VoiceRecorder.swift in Sources */,
+				097F5BCA844F20FF501BAE82 /* VostokAPIClientProtocol.swift in Sources */,
+				05710F19285A55ED3155A1AD /* VostokApp.swift in Sources */,
+				C45F32E9A7CDDC1585B4BB76 /* VostokAppDelegate.swift in Sources */,
+				D9154960F3739B22351BBAC9 /* VostokAttachmentBubble.swift in Sources */,
+				730CC36FCEC728A76EB32BC0 /* VostokAvatar.swift in Sources */,
+				6243CF245D5A568AFCF331FF /* VostokBadge.swift in Sources */,
+				1C6D8B1B1076297AC5AD3DCE /* VostokButton.swift in Sources */,
+				83076C0AC52F3ADDE9191EB6 /* VostokComposer.swift in Sources */,
+				A63C82B083CBF15E46B5D641 /* VostokListRow.swift in Sources */,
+				C987EE1FB71CB61070D90C22 /* VostokMessageBubble.swift in Sources */,
+				3D7C5FC555D16DE7F8C0FEF7 /* VostokNavBar.swift in Sources */,
+				DDC065059198CA98E469F132 /* VostokTabBar.swift in Sources */,
+				AA7B34E05EDAD2D121991045 /* VostokVoiceBubble.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1B5C1B6DD58BC7F0027BDAB1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CD28C34CAAF9395262B51D15 /* VostokUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3C61C0044EDC42B47AB5CBFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				43D1FAEAF7BAAD7F2B8B3051 /* AppRouteParserTests.swift in Sources */,
+				8B60A92F68241FC01CFCF28E /* AttachmentTypeResolverTests.swift in Sources */,
+				37DC41CF8B1EEB6AD8D383C7 /* CallViewModelTests.swift in Sources */,
+				ABC71DBF3969B14939E28FFF /* ChatListLocalStateStoreTests.swift in Sources */,
+				EB5CBA3A9E30ACCD4C95A81F /* ContactListViewModelTests.swift in Sources */,
+				58AE170D0ACAD9B31EFE9A8E /* MediaCryptoTests.swift in Sources */,
+				3EF5446B4CAB63EDC75681AF /* MessageRepositoryOutboxTests.swift in Sources */,
+				4F9C68F37820A04BE91B88CC /* PhoenixRealtimeParsingTests.swift in Sources */,
+				424CEFBD423EC9C3112744EC /* PushNotificationPayloadParserTests.swift in Sources */,
+				84C828F0151EB53AE73E0920 /* RealtimeMessageEventTests.swift in Sources */,
+				6460B6D38CAB58FB91FDC0D0 /* RecipientEnvelopeBuilderTests.swift in Sources */,
+				67BF134369C3DDDED18CED81 /* SettingsViewModelTests.swift in Sources */,
+				312D690E3C5A3AA9718DE008 /* VostokContractTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		69B82C70CF005B4BAD1BEE4F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC432C7DB4DF862C84CD0091 /* NotificationService.swift in Sources */,
+				69B3EB76DAF6D6FBC5236F7B /* PushNotificationPayloadParser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		56273B41BFD26B0F89C31B31 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE5410FDBA5BF9E0B6D828AF /* Vostok */;
+			targetProxy = 8CB09DAB230D822391AD6707 /* PBXContainerItemProxy */;
+		};
+		F7538D852A28180CA7A6D5DD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE5410FDBA5BF9E0B6D828AF /* Vostok */;
+			targetProxy = 2DD108B2E4C5FD6277823640 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		07D9993C6BB08EFFB4090517 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios.tests;
+				PRODUCT_NAME = VostokTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vostok.app/Vostok";
+			};
+			name = Release;
+		};
+		4725BD913E55B60DF883E380 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = VostokNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "chat.vostok.ios.notification-service";
+				PRODUCT_NAME = VostokNotificationService;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		56A22CEF9C421501142793E5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6AB4563F67D1AB17F688613F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = VostokNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "chat.vostok.ios.notification-service";
+				PRODUCT_NAME = VostokNotificationService;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		86B05F505D747A339E51037A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios.uitests;
+				PRODUCT_NAME = VostokUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Vostok;
+			};
+			name = Debug;
+		};
+		90F4A4D6C6EE3F5D95609C1A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		9E305EBCD55245A0C1E35516 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DAAADAE80EF42676C6ABA5A0 /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Vostok/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios;
+				PRODUCT_NAME = Vostok;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		BA2E32C66E473B0FA5CE9FFE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 320CFC0D9628CD86BD3F7A37 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Vostok/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios;
+				PRODUCT_NAME = Vostok;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D5CE8666939A60C17CD35A3D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios.tests;
+				PRODUCT_NAME = VostokTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vostok.app/Vostok";
+			};
+			name = Debug;
+		};
+		ED60CD14CEA2BF9A77D193AC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios.uitests;
+				PRODUCT_NAME = VostokUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Vostok;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00C4031740C3AEEC022069A0 /* Build configuration list for PBXProject "Vostok" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				56A22CEF9C421501142793E5 /* Debug */,
+				90F4A4D6C6EE3F5D95609C1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		332B860169E8E9981CB1D3ED /* Build configuration list for PBXNativeTarget "Vostok" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BA2E32C66E473B0FA5CE9FFE /* Debug */,
+				9E305EBCD55245A0C1E35516 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		41EFB9B29C8CB805F658A0D2 /* Build configuration list for PBXNativeTarget "VostokTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5CE8666939A60C17CD35A3D /* Debug */,
+				07D9993C6BB08EFFB4090517 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5F4193D5E3B3A57CA73B750F /* Build configuration list for PBXNativeTarget "VostokNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4725BD913E55B60DF883E380 /* Debug */,
+				6AB4563F67D1AB17F688613F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CA624E72AB0A6F87DD2BD8BA /* Build configuration list for PBXNativeTarget "VostokUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				86B05F505D747A339E51037A /* Debug */,
+				ED60CD14CEA2BF9A77D193AC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		05D5663451F887282EA02A1A /* XCLocalSwiftPackageReference "ThirdParty/libsignal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ThirdParty/libsignal;
+		};
+		D01EB912707DF1696D9F507A /* XCLocalSwiftPackageReference "ThirdParty/GRDBSQLCipher" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ThirdParty/GRDBSQLCipher;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D6FEF7407AA2D10524BE9E66 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GRDB;
+		};
+		F2B6994083A23C727569B0F0 /* libsignal */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = libsignal;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 499A6F6EB63085903A298FA8 /* Project object */;
+}

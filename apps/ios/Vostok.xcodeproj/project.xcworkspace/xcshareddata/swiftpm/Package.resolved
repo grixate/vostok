@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "swift-sqlcipher",
+        "repositoryURL": "https://github.com/skiptools/swift-sqlcipher.git",
+        "state": {
+          "branch": null,
+          "revision": "777247141ffffbff08d725504dff8e672d6e41fb",
+          "version": "1.7.1"
+        }
+      }
+    ]
+  },
+  "version": 1
+}

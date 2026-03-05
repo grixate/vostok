@@ -1,0 +1,116 @@
+name: Vostok
+
+options:
+  minimumXcodeGenVersion: 2.38.0
+  xcodeVersion: "15.4"
+  objectVersion: 56
+  deploymentTarget:
+    iOS: "16.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  GRDBSQLCipher:
+    path: ThirdParty/GRDBSQLCipher
+  libsignal:
+    path: ThirdParty/libsignal
+
+targets:
+  Vostok:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Release: Config/Release.xcconfig
+    sources:
+      - path: Vostok
+        excludes:
+          - Resources/Info.plist
+    resources:
+      - path: Vostok/Resources
+        includes:
+          - Environment.plist
+    dependencies:
+      - package: GRDBSQLCipher
+        product: GRDB
+      - package: libsignal
+        product: libsignal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios
+        PRODUCT_NAME: Vostok
+        INFOPLIST_FILE: Vostok/Resources/Info.plist
+        SWIFT_VERSION: 5.10
+        MARKETING_VERSION: 0.9.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+
+  VostokNotificationService:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VostokNotificationService
+        excludes:
+          - Info.plist
+      - path: Vostok/Core/Push
+        includes:
+          - PushNotificationPayloadParser.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios.notification-service
+        PRODUCT_NAME: VostokNotificationService
+        INFOPLIST_FILE: VostokNotificationService/Info.plist
+        SWIFT_VERSION: 5.10
+        MARKETING_VERSION: 0.9.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+
+  VostokTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VostokTests
+    dependencies:
+      - target: Vostok
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios.tests
+        PRODUCT_NAME: VostokTests
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
+
+  VostokUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VostokUITests
+    dependencies:
+      - target: Vostok
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios.uitests
+        PRODUCT_NAME: VostokUITests
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Vostok
+
+schemes:
+  Vostok:
+    build:
+      targets:
+        Vostok: all
+        VostokNotificationService: [run, archive]
+        VostokTests: [test]
+        VostokUITests: [test]
+    test:
+      targets:
+        - name: VostokTests
+        - name: VostokUITests
+      gatherCoverageData: true

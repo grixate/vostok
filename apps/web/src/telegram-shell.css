@@ -1,0 +1,902 @@
+/* ─── Telegram Shell — Design Tokens
+   Source: Figma Telegram iOS UI Kit (Community), node 6016:11367
+   Accent:         #008BFF  (Figma: colors/link)
+   Label:          #000000
+   Label 2:        rgba(60,60,67, 0.60)
+   Label 3:        rgba(60,60,67, 0.30)
+   Fill:           rgba(120,120,128, 0.12)
+   Separator:      #E6E6E6  (vibrant) / #C6C6C8 (opaque)
+   BG Primary:     #FFFFFF
+   BG Secondary:   #F2F2F7
+   Green:          #34C759  (online indicator)
+   Story ring:     #00C770  (new story)
+   Row height:     78px     (Figma-verified)
+   Avatar list:    62px     (Figma-verified)
+   Avatar header:  36px
+   Sidebar width:  72px
+   Panel width:    320px
+   ─────────────────────────────────────────── */
+
+.tgs-shell {
+  --tgs-blue:     #008BFF;
+  --tgs-bg:       #FFFFFF;
+  --tgs-bg2:      #F2F2F7;
+  --tgs-bg3:      #F9F9F9;
+  --tgs-label:    #000000;
+  --tgs-label2:   rgba(60, 60, 67, 0.60);
+  --tgs-label3:   rgba(60, 60, 67, 0.30);
+  --tgs-fill:     rgba(120, 120, 128, 0.12);
+  --tgs-sep:      #E6E6E6;
+  --tgs-sep2:     #C6C6C8;
+  --tgs-green:    #34C759;
+  --tgs-story:    #00C770;
+  --tgs-premium:  #FFB800;
+  --tgs-font:     -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--tgs-bg2);
+  font-family: var(--tgs-font);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ─── Sidebar ──────────────────────────────────────────────────────────────── */
+
+.tgs-sidebar {
+  width: 72px;
+  flex-shrink: 0;
+  background: var(--tgs-bg2);
+  border-right: 0.5px solid var(--tgs-sep);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.tgs-sidebar-user {
+  padding: 16px 0 8px;
+}
+
+.tgs-sidebar-user-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #007AFF, #5856D6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tgs-sidebar-user-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.38);
+}
+
+.tgs-sidebar-spacer {
+  flex: 1;
+}
+
+.tgs-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tgs-sidebar-tab {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--tgs-label2);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tgs-sidebar-tab:hover {
+  background: rgba(60, 60, 67, 0.06);
+}
+
+.tgs-sidebar-tab--active {
+  background: rgba(0, 139, 255, 0.10);
+  color: var(--tgs-blue);
+}
+
+.tgs-sidebar-tab--active:hover {
+  background: rgba(0, 139, 255, 0.14);
+}
+
+.tgs-sidebar-tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tgs-sidebar-tab-label {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+
+.tgs-sidebar-search-btn {
+  width: 56px;
+  height: 44px;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tgs-label2);
+  margin-top: 8px;
+  transition: background 0.12s ease;
+}
+
+.tgs-sidebar-search-btn:hover {
+  background: rgba(60, 60, 67, 0.06);
+}
+
+/* ─── Chat List Panel ──────────────────────────────────────────────────────── */
+
+.tgs-panel {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--tgs-bg);
+  border-right: 0.5px solid var(--tgs-sep);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tgs-panel-header {
+  padding: 12px 12px 0;
+  background: var(--tgs-bg);
+  flex-shrink: 0;
+}
+
+.tgs-panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.tgs-panel-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-family: var(--tgs-font);
+  color: var(--tgs-blue);
+  font-weight: 400;
+  padding: 0;
+  transition: opacity 0.1s;
+}
+
+.tgs-panel-edit-btn:hover {
+  opacity: 0.7;
+}
+
+.tgs-panel-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.43px;
+  color: var(--tgs-label);
+}
+
+.tgs-panel-compose-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--tgs-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: opacity 0.1s;
+}
+
+.tgs-panel-compose-btn:hover {
+  opacity: 0.7;
+}
+
+/* Search bar */
+
+.tgs-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--tgs-fill);
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  cursor: text;
+}
+
+.tgs-search-bar-icon {
+  color: var(--tgs-label2);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tgs-search-bar-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  font-size: 15px;
+  font-family: var(--tgs-font);
+  color: var(--tgs-label);
+  outline: none;
+  letter-spacing: -0.23px;
+  -webkit-appearance: none;
+}
+
+.tgs-search-bar-input::placeholder {
+  color: var(--tgs-label2);
+}
+
+/* Filter tabs (segmented control) */
+
+.tgs-filter-bar {
+  display: flex;
+  gap: 0;
+  background: var(--tgs-fill);
+  border-radius: 9px;
+  padding: 2px;
+  margin-bottom: 2px;
+}
+
+.tgs-filter-btn {
+  flex: 1;
+  padding: 5px 0;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--tgs-font);
+  font-weight: 500;
+  letter-spacing: -0.08px;
+  color: var(--tgs-label);
+  transition: all 0.15s ease;
+}
+
+.tgs-filter-btn--active {
+  background: var(--tgs-bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* Figma: inactive filter tabs show a small count badge ("Channels 3") */
+.tgs-filter-btn-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 100px;
+  background: var(--tgs-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Chat list scroll area */
+
+.tgs-chat-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.tgs-chat-list-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+
+.tgs-chat-list-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tgs-chat-list-scroll::-webkit-scrollbar-thumb {
+  background: var(--tgs-label3);
+  border-radius: 2px;
+}
+
+.tgs-pinned-section {
+  border-bottom: 0.5px solid var(--tgs-sep);
+}
+
+/* ─── Avatar ───────────────────────────────────────────────────────────────── */
+
+.tgs-avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tgs-avatar-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.tgs-avatar-round {
+  border-radius: 50%;
+}
+
+.tgs-avatar-square {
+  border-radius: 28%;
+}
+
+/* When a story ring is present, shrink face inward to reveal the ring */
+.tgs-avatar-face--ring {
+  inset: 4px;
+}
+
+.tgs-story-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tgs-story-ring--new {
+  border: 2px solid var(--tgs-story);
+}
+
+.tgs-story-ring--seen {
+  border: 2px dashed var(--tgs-label3);
+}
+
+.tgs-online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 15px;   /* scaled for 62px avatar: ~24% of diameter */
+  height: 15px;
+  border-radius: 50%;
+  background: var(--tgs-green);
+  border: 2.5px solid var(--tgs-bg);
+  z-index: 1;
+}
+
+/* ─── Unread Badge ─────────────────────────────────────────────────────────── */
+
+.tgs-badge {
+  border-radius: 100px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.08px;
+  flex-shrink: 0;
+}
+
+.tgs-badge--active {
+  background: var(--tgs-blue);
+  color: #fff;
+}
+
+.tgs-badge--muted {
+  background: var(--tgs-fill);
+  color: var(--tgs-label2);
+}
+
+/* ─── Chat Row ─────────────────────────────────────────────────────────────── */
+
+.tgs-chat-row {
+  display: flex;
+  align-items: center;
+  height: 78px;           /* Figma: Row height = 78px */
+  padding: 0 16px 0 10px; /* Figma: pl-[10px] pr-[16px] */
+  cursor: pointer;
+  background: var(--tgs-bg);
+  border-left: 3px solid transparent;
+  transition: background 0.1s ease;
+  outline: none;
+}
+
+.tgs-chat-row:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.tgs-chat-row--selected {
+  background: rgba(0, 139, 255, 0.08);
+  border-left-color: var(--tgs-blue);
+}
+
+.tgs-chat-row--selected:hover {
+  background: rgba(0, 139, 255, 0.10);
+}
+
+.tgs-chat-row--pinned {
+  background: var(--tgs-bg3);
+}
+
+.tgs-chat-row--pinned:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.tgs-chat-row-avatar {
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+/* Body with hairline separator */
+.tgs-chat-row-body {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  border-top: 0.5px solid var(--tgs-sep);
+}
+
+/* No separator on the very first row of each section */
+.tgs-chat-row-body--first {
+  border-top: none;
+}
+
+/* Title row */
+.tgs-chat-row-title-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tgs-chat-row-name {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.43px;
+  color: var(--tgs-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tgs-chat-row-name-meta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  color: var(--tgs-label3);
+}
+
+.tgs-chat-row-muted-icon {
+  display: flex;
+  align-items: center;
+}
+
+.tgs-premium-badge {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #FFB800, #FF6B00);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: white;
+  line-height: 1;
+}
+
+.tgs-chat-row-time {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tgs-label2);
+  letter-spacing: -0.08px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+/* Preview row */
+.tgs-chat-row-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tgs-chat-row-preview-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  letter-spacing: -0.23px;
+  color: var(--tgs-label2);
+}
+
+.tgs-chat-row-sender {
+  color: var(--tgs-label);
+  font-weight: 400;
+}
+
+.tgs-chat-row-preview {
+  color: var(--tgs-label2);
+}
+
+.tgs-chat-row-trailing {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tgs-pin-icon {
+  display: flex;
+  align-items: center;
+  color: var(--tgs-label3);
+}
+
+.tgs-open-btn {
+  background: var(--tgs-blue);
+  border-radius: 100px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.2px;
+}
+
+/* ─── Conversation Panel ───────────────────────────────────────────────────── */
+
+.tgs-conv {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--tgs-bg2);
+  min-width: 0;
+}
+
+.tgs-conv-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--tgs-bg2);
+}
+
+.tgs-conv-empty-icon {
+  font-size: 56px;
+  line-height: 1;
+}
+
+.tgs-conv-empty-text {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--tgs-label2);
+  letter-spacing: -0.3px;
+}
+
+/* Conversation header */
+
+.tgs-conv-header {
+  height: 56px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border-bottom: 0.5px solid var(--tgs-sep);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+}
+
+.tgs-conv-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tgs-conv-header-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.tgs-conv-header-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tgs-conv-header-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  color: var(--tgs-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tgs-conv-header-status {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tgs-label2);
+  letter-spacing: -0.08px;
+}
+
+.tgs-conv-header-status--online {
+  color: var(--tgs-green);
+}
+
+.tgs-conv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tgs-conv-header-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tgs-blue);
+  transition: background 0.12s ease;
+}
+
+.tgs-conv-header-btn:last-child {
+  color: var(--tgs-label2);
+}
+
+.tgs-conv-header-btn:hover {
+  background: var(--tgs-fill);
+}
+
+/* Messages area */
+
+.tgs-conv-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+  /*
+   * Figma: Telegram iOS UI Kit uses a doodle/illustration wallpaper
+   * (cute animals on a teal/sage background). We approximate with a
+   * tinted dot-grid + soft gradient. Replace the background-image with
+   * url(...) for full-fidelity wallpaper.
+   */
+  background-color: #dde8d0;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.45) 1px, transparent 1px),
+    radial-gradient(ellipse at 10% 90%, rgba(0, 139, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 10%, rgba(0, 199, 112, 0.08) 0%, transparent 50%);
+  background-size: 28px 28px, 100% 100%, 100% 100%;
+}
+
+.tgs-conv-messages::-webkit-scrollbar {
+  width: 3px;
+}
+
+.tgs-conv-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tgs-conv-messages::-webkit-scrollbar-thumb {
+  background: var(--tgs-label3);
+  border-radius: 2px;
+}
+
+/* Date separator */
+
+.tgs-date-sep {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 14px;
+}
+
+.tgs-date-sep-label {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 100px;
+  padding: 3px 12px;
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.60);
+  letter-spacing: -0.08px;
+}
+
+/* Message bubbles */
+
+.tgs-msg-row {
+  display: flex;
+  padding: 2px 16px;
+}
+
+.tgs-msg-row--me {
+  justify-content: flex-end;
+}
+
+.tgs-msg-row--them {
+  justify-content: flex-start;
+}
+
+.tgs-msg-bubble {
+  max-width: 62%;
+  padding: 8px 12px 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Figma: outgoing bubbles on the teal wallpaper are light green, not blue */
+.tgs-msg-bubble--me {
+  background: #c8ffa3;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.tgs-msg-bubble--them {
+  background: var(--tgs-bg);
+  border-radius: 18px 18px 18px 4px;
+}
+
+.tgs-msg-text {
+  font-size: 15px;
+  letter-spacing: -0.23px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.tgs-msg-bubble--me .tgs-msg-text {
+  color: var(--tgs-label);
+}
+
+.tgs-msg-bubble--them .tgs-msg-text {
+  color: var(--tgs-label);
+}
+
+.tgs-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.tgs-msg-time {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.tgs-msg-time--me {
+  color: rgba(0, 0, 0, 0.40);
+}
+
+.tgs-msg-time--them {
+  color: var(--tgs-label2);
+}
+
+.tgs-msg-check {
+  display: flex;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.40);
+}
+
+/* ─── Input Bar ────────────────────────────────────────────────────────────── */
+
+.tgs-input-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border-top: 0.5px solid var(--tgs-sep);
+}
+
+.tgs-input-bar-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--tgs-label2);
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tgs-input-bar-btn:hover {
+  background: var(--tgs-fill);
+  color: var(--tgs-label);
+}
+
+.tgs-input-bar-field {
+  flex: 1;
+  background: var(--tgs-bg);
+  border-radius: 20px;
+  border: 0.5px solid var(--tgs-sep);
+  display: flex;
+  align-items: center;
+  padding: 8px 8px 8px 14px;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  min-height: 38px;
+}
+
+.tgs-input-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  font-family: var(--tgs-font);
+  color: var(--tgs-label);
+  background: transparent;
+  letter-spacing: -0.23px;
+  user-select: text;
+}
+
+.tgs-input-bar-input::placeholder {
+  color: var(--tgs-label2);
+}
+
+.tgs-input-bar-send {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--tgs-blue);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 139, 255, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tgs-input-bar-send:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 139, 255, 0.45);
+}
+
+.tgs-input-bar-send:active {
+  transform: scale(0.96);
+}
