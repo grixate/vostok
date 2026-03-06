@@ -16,6 +16,7 @@ defmodule VostokServer.Identity.User do
     field :username, :string
     field :identity_public_key, :binary
     field :settings_encrypted, :binary
+    field :is_admin, :boolean, default: false
 
     has_many :devices, VostokServer.Identity.Device
     has_many :invites, VostokServer.Identity.Invite, foreign_key: :creator_user_id
@@ -25,7 +26,7 @@ defmodule VostokServer.Identity.User do
 
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:username, :identity_public_key, :settings_encrypted])
+    |> cast(attrs, [:username, :identity_public_key, :settings_encrypted, :is_admin])
     |> validate_required([:username, :identity_public_key])
     |> validate_length(:username, min: 3, max: 32)
     |> unsafe_validate_unique(:username, VostokServer.Repo)

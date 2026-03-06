@@ -11,8 +11,10 @@ defmodule VostokServer.Identity.Invite do
 
   schema "invites" do
     field :token_hash, :binary
+    field :label, :string
     field :expires_at, :utc_datetime_usec
     field :used_at, :utc_datetime_usec
+    field :revoked_at, :utc_datetime_usec
 
     belongs_to :creator_user, VostokServer.Identity.User
 
@@ -21,7 +23,7 @@ defmodule VostokServer.Identity.Invite do
 
   def changeset(invite, attrs) do
     invite
-    |> cast(attrs, [:token_hash, :expires_at, :used_at])
+    |> cast(attrs, [:token_hash, :label, :expires_at, :used_at, :revoked_at])
     |> validate_required([:token_hash, :expires_at])
   end
 end

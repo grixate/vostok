@@ -18,7 +18,7 @@ export type LinkDevicePayload = {
 }
 
 export type MeResponse = {
-  user: { id: string; username: string }
+  user: { id: string; username: string; is_admin?: boolean }
   device: {
     id: string
     device_name: string
@@ -1121,6 +1121,61 @@ export async function rotateCallKeys(
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(payload)
+  })
+}
+
+// ─── Invite API ─────────────────────────────────────────────────────────────
+
+export type InviteValidateResponse =
+  | { valid: true; server_name: string }
+  | { valid: false; reason: 'expired' | 'used' | 'revoked' | 'not_found' }
+
+export type InviteSummary = {
+  id: string
+  label: string | null
+  status: 'pending' | 'used' | 'expired' | 'revoked'
+  expires_at: string | null
+  created_at: string
+}
+
+export type CreateInviteResponse = {
+  token: string
+  link: string
+  expires_at: string | null
+  label: string | null
+}
+
+export async function validateInviteToken(token: string): Promise<InviteValidateResponse> {
+  return apiRequest<InviteValidateResponse>(`/invites/${encodeURIComponent(token)}/validate`, {
+    method: 'GET'
+  })
+}
+
+export async function createInvite(
+  sessionToken: string,
+  params: { label?: string; expires_in?: '24h' | '7d' | '30d' | null }
+): Promise<CreateInviteResponse> {
+  return apiRequest<CreateInviteResponse>('/admin/invites', {
+    method: 'POST',
+    headers: authHeader(sessionToken),
+    body: JSON.stringify(params)
+  })
+}
+
+export async function listInvites(sessionToken: string): Promise<{ invites: InviteSummary[] }> {
+  return apiRequest<{ invites: InviteSummary[] }>('/admin/invites', {
+    method: 'GET',
+    headers: authHeader(sessionToken)
+  })
+}
+
+export async function revokeInvite(
+  sessionToken: string,
+  inviteId: string
+): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>(`/admin/invites/${encodeURIComponent(inviteId)}/revoke`, {
+    method: 'POST',
+    headers: authHeader(sessionToken)
   })
 }
 

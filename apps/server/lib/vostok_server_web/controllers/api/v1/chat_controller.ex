@@ -13,7 +13,8 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     json(conn, %{
       user: %{
         id: current_user.id,
-        username: current_user.username
+        username: current_user.username,
+        is_admin: current_user.is_admin
       },
       device: %{
         id: current_device.id,

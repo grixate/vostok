@@ -31,7 +31,12 @@ defmodule VostokServer.Identity do
 
       Multi.new()
       |> Multi.run(:invite, fn repo, _changes -> validate_invite(repo, normalized, now) end)
-      |> Multi.insert(:user, User.changeset(%User{}, user_attrs(normalized)))
+      |> Multi.run(:is_first_user, fn repo, _changes ->
+        {:ok, repo.aggregate(User, :count, :id) == 0}
+      end)
+      |> Multi.insert(:user, fn %{is_first_user: is_first} ->
+        User.changeset(%User{}, Map.put(user_attrs(normalized), :is_admin, is_first))
+      end)
       |> Multi.run(:device, fn repo, %{user: user} ->
         user
         |> Ecto.build_assoc(:devices)
@@ -240,6 +245,112 @@ defmodule VostokServer.Identity do
     end
   end
 
+  def create_invite(%User{} = creator, params) do
+    raw_token = :crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false)
+    token_hash = :crypto.hash(:sha256, raw_token)
+    now = DateTime.utc_now()
+
+    expires_at =
+      case Map.get(params, "expires_in") do
+        "24h" -> DateTime.add(now, 86_400, :second)
+        "30d" -> DateTime.add(now, 30 * 86_400, :second)
+        _ -> DateTime.add(now, 7 * 86_400, :second)
+      end
+
+    invite_attrs = %{
+      token_hash: token_hash,
+      label: blank_to_nil(Map.get(params, "label")),
+      expires_at: expires_at
+    }
+
+    creator
+    |> Ecto.build_assoc(:invites)
+    |> Invite.changeset(invite_attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, invite} ->
+        base_url = Application.get_env(:vostok_server, :base_url, "")
+        link = if base_url != "", do: "#{base_url}/join/#{raw_token}", else: nil
+        {:ok, Map.merge(present_invite_summary(invite, now), %{token: raw_token, link: link})}
+
+      {:error, _changeset} ->
+        {:error, {:validation, "Failed to create invite."}}
+    end
+  end
+
+  def list_invites do
+    now = DateTime.utc_now()
+
+    from(invite in Invite, order_by: [desc: invite.inserted_at])
+    |> Repo.all()
+    |> Enum.map(&present_invite_summary(&1, now))
+  end
+
+  def revoke_invite(invite_id) when is_binary(invite_id) do
+    now = DateTime.utc_now()
+
+    case Repo.get(Invite, invite_id) do
+      nil ->
+        {:error, {:not_found, "Invite not found."}}
+
+      %Invite{revoked_at: revoked_at} when not is_nil(revoked_at) ->
+        {:error, {:validation, "Invite is already revoked."}}
+
+      %Invite{} = invite ->
+        invite
+        |> Invite.changeset(%{revoked_at: now})
+        |> Repo.update()
+        |> case do
+          {:ok, updated} -> {:ok, present_invite_summary(updated, now)}
+          {:error, _} -> {:error, {:validation, "Failed to revoke invite."}}
+        end
+    end
+  end
+
+  def validate_invite_token(token) when is_binary(token) do
+    token_hash = :crypto.hash(:sha256, token)
+    now = DateTime.utc_now()
+
+    case Repo.get_by(Invite, token_hash: token_hash) do
+      nil ->
+        {:error, {:invalid_invite, "The invite token is invalid."}}
+
+      %Invite{revoked_at: revoked_at} when not is_nil(revoked_at) ->
+        {:error, {:invite_revoked, "This invite has been revoked."}}
+
+      %Invite{used_at: used_at} when not is_nil(used_at) ->
+        {:error, {:invite_used, "This invite has already been used."}}
+
+      %Invite{expires_at: expires_at} when expires_at <= now ->
+        {:error, {:invite_expired, "This invite has expired."}}
+
+      %Invite{} = invite ->
+        {:ok, invite}
+    end
+  end
+
+  defp present_invite_summary(%Invite{} = invite, now) do
+    %{
+      id: invite.id,
+      label: invite.label,
+      status: invite_status(invite, now),
+      created_at: DateTime.to_iso8601(invite.inserted_at),
+      expires_at: invite.expires_at && DateTime.to_iso8601(invite.expires_at),
+      used_at: invite.used_at && DateTime.to_iso8601(invite.used_at),
+      revoked_at: invite.revoked_at && DateTime.to_iso8601(invite.revoked_at)
+    }
+  end
+
+  defp invite_status(%Invite{revoked_at: revoked_at}, _now) when not is_nil(revoked_at),
+    do: "revoked"
+
+  defp invite_status(%Invite{used_at: used_at}, _now) when not is_nil(used_at), do: "used"
+
+  defp invite_status(%Invite{expires_at: expires_at}, now) when expires_at <= now,
+    do: "expired"
+
+  defp invite_status(%Invite{}, _now), do: "pending"
+
   defp normalize_registration(attrs) do
     with {:ok, username} <- fetch_trimmed(attrs, "username"),
          {:ok, device_name} <- fetch_trimmed(attrs, "device_name"),
@@ -313,7 +424,7 @@ defmodule VostokServer.Identity do
           from(invite in Invite,
             where:
               invite.token_hash == ^token_hash and is_nil(invite.used_at) and
-                invite.expires_at > ^now
+                is_nil(invite.revoked_at) and invite.expires_at > ^now
           )
           |> repo.one()
 

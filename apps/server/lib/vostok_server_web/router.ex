@@ -24,6 +24,7 @@ defmodule VostokServerWeb.Router do
     post "/register", RegistrationController, :create
     post "/auth/challenge", AuthController, :challenge
     post "/auth/verify", AuthController, :verify
+    get "/invites/:token/validate", InviteController, :validate
   end
 
   scope "/api/v1", VostokServerWeb.Api.V1, as: :api_v1 do
@@ -65,6 +66,9 @@ defmodule VostokServerWeb.Router do
     post "/media/uploads/:id/complete", MediaController, :complete_upload
     get "/media/:id", MediaController, :show
     post "/media/link-metadata", MediaController, :link_metadata
+    post "/admin/invites", InviteController, :create
+    get "/admin/invites", InviteController, :index
+    post "/admin/invites/:invite_id/revoke", InviteController, :revoke
     get "/admin/overview", AdminController, :overview
     get "/admin/federation/peers", AdminController, :federation_peers
     post "/admin/federation/peers", AdminController, :create_federation_peer
