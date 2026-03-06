@@ -163,6 +163,58 @@ defmodule VostokServerWeb.DeviceLinkTest do
            end)
   end
 
+  test "device push token registration persists provider metadata", %{conn: conn} do
+    material = build_device_material()
+
+    register_conn =
+      post(conn, "/api/v1/register", %{
+        username: "push-user",
+        device_name: "Primary Browser",
+        device_identity_public_key: material.identity_public_key,
+        device_encryption_public_key: material.encryption_public_key,
+        signed_prekey: material.signed_prekey,
+        signed_prekey_signature: material.signed_prekey_signature,
+        one_time_prekeys: [material.one_time_prekey]
+      })
+
+    assert %{
+             "device" => %{"id" => device_id},
+             "session" => %{"token" => token}
+           } = json_response(register_conn, 201)
+
+    push_token = "fcm-token-123"
+
+    push_token_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/devices/push-token", %{
+        push_provider: "fcm",
+        push_token: push_token
+      })
+
+    assert %{
+             "device" => %{
+               "id" => ^device_id,
+               "push_provider" => "fcm",
+               "push_token_updated_at" => push_token_updated_at
+             }
+           } = json_response(push_token_conn, 200)
+
+    assert is_binary(push_token_updated_at)
+
+    devices_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/devices")
+
+    assert %{"devices" => devices} = json_response(devices_conn, 200)
+
+    assert Enum.any?(devices, fn device ->
+             device["id"] == device_id and device["push_provider"] == "fcm" and
+               device["push_token_updated_at"] == push_token_updated_at
+           end)
+  end
+
   defp build_device_material do
     {identity_public_key_raw, identity_private_key_raw} = :crypto.generate_key(:eddsa, :ed25519)
     signed_prekey_raw = :crypto.strong_rand_bytes(65)

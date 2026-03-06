@@ -92,6 +92,15 @@ final class APIClient: VostokAPIClientProtocol {
         try await authed(path: "/api/v1/chats/\(chatID)/messages", method: "GET", token: token)
     }
 
+    func markChatRead(token: String, chatID: String, lastReadMessageID: String?) async throws -> ChatReadStateResponse {
+        try await authed(
+            path: "/api/v1/chats/\(chatID)/read",
+            method: "POST",
+            token: token,
+            body: MarkChatReadRequest(lastReadMessageID: lastReadMessageID)
+        )
+    }
+
     func createMessage(token: String, chatID: String, request: CreateMessageRequest) async throws -> MessageResponse {
         try await authed(path: "/api/v1/chats/\(chatID)/messages", method: "POST", token: token, body: request)
     }

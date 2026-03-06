@@ -20,4 +20,22 @@ final class RealtimeMessageEventTests: XCTestCase {
         XCTAssertEqual(parsed?.chatID, "chat-2")
         XCTAssertNil(parsed?.messageID)
     }
+
+    func testChatReadNotificationRoundTripWithMessageID() {
+        let input = RealtimeChatReadEvent(chatID: "chat-3", messageID: "msg-4")
+        let notification = Notification(name: .vostokChatReadEvent, object: nil, userInfo: input.userInfo)
+        let parsed = RealtimeChatReadEvent(notification: notification)
+
+        XCTAssertEqual(parsed?.chatID, "chat-3")
+        XCTAssertEqual(parsed?.messageID, "msg-4")
+    }
+
+    func testChatReadNotificationRoundTripWithoutMessageID() {
+        let input = RealtimeChatReadEvent(chatID: "chat-4", messageID: nil)
+        let notification = Notification(name: .vostokChatReadEvent, object: nil, userInfo: input.userInfo)
+        let parsed = RealtimeChatReadEvent(notification: notification)
+
+        XCTAssertEqual(parsed?.chatID, "chat-4")
+        XCTAssertNil(parsed?.messageID)
+    }
 }

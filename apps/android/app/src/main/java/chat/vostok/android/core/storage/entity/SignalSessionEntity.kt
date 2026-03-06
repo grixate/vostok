@@ -13,5 +13,8 @@ data class SignalSessionEntity(
     val peerDeviceId: String,
     val sessionId: String,
     val status: String,
+    val signalAddressName: String,
+    val signalAddressDeviceId: Int,
+    val sessionRecord: String?,
     val updatedAt: String
 )

@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 fun ContactListScreen(
     paddingValues: PaddingValues,
     viewModel: ContactListViewModel,
-    onOpenConversation: (String) -> Unit,
+    onOpenConversation: (String, String?) -> Unit,
     onOpenCreateGroup: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -81,7 +81,9 @@ fun ContactListScreen(
                         scope.launch {
                             runCatching {
                                 viewModel.openOrCreateDirect(item.username)
-                            }.onSuccess(onOpenConversation)
+                            }.onSuccess { chatId ->
+                                onOpenConversation(chatId, item.username)
+                            }
                         }
                     }
                 )

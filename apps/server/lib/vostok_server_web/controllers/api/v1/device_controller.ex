@@ -58,6 +58,23 @@ defmodule VostokServerWeb.Api.V1.DeviceController do
     end
   end
 
+  def push_token(conn, params) do
+    case Identity.update_push_token(
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id,
+           params
+         ) do
+      {:ok, device} ->
+        json(conn, %{device: device})
+
+      {:error, {kind, field, message}} ->
+        render_error(conn, status_for(kind), kind, "#{field} #{message}")
+
+      {:error, {kind, message}} ->
+        render_error(conn, status_for(kind), kind, message)
+    end
+  end
+
   defp status_for(:not_found), do: :not_found
   defp status_for(:validation), do: :unprocessable_entity
   defp status_for(:unauthorized), do: :unauthorized

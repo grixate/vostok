@@ -271,6 +271,7 @@ struct ConversationView: View {
                                 await viewModel.edit(
                                     token: session.token,
                                     chatID: chat.id,
+                                    chatType: chat.type,
                                     message: message,
                                     deviceID: session.deviceID,
                                     updatedText: editDraft
@@ -343,7 +344,12 @@ struct ConversationView: View {
         }
         .task {
             if case let .authenticated(session) = appState.sessionState {
-                await viewModel.load(token: session.token, chatID: chat.id)
+                await viewModel.load(
+                    token: session.token,
+                    chatID: chat.id,
+                    chatType: chat.type,
+                    deviceID: session.deviceID
+                )
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .vostokMessageEvent)) { notification in
@@ -355,7 +361,12 @@ struct ConversationView: View {
             }
 
             Task {
-                await viewModel.load(token: session.token, chatID: chat.id)
+                await viewModel.load(
+                    token: session.token,
+                    chatID: chat.id,
+                    chatType: chat.type,
+                    deviceID: session.deviceID
+                )
             }
         }
     }
@@ -567,7 +578,12 @@ struct ConversationView: View {
         if viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             await toggleVoiceRecording()
         } else {
-            await viewModel.send(token: session.token, chatID: chat.id, deviceID: session.deviceID)
+            await viewModel.send(
+                token: session.token,
+                chatID: chat.id,
+                chatType: chat.type,
+                deviceID: session.deviceID
+            )
         }
     }
 
@@ -593,6 +609,7 @@ struct ConversationView: View {
             await viewModel.uploadAttachmentAndSend(
                 token: session.token,
                 chatID: chat.id,
+                chatType: chat.type,
                 deviceID: session.deviceID,
                 filename: "voice-\(Int(Date().timeIntervalSince1970)).m4a",
                 contentType: "audio/mp4",
@@ -613,6 +630,7 @@ struct ConversationView: View {
             await viewModel.uploadAttachmentAndSend(
                 token: session.token,
                 chatID: chat.id,
+                chatType: chat.type,
                 deviceID: session.deviceID,
                 filename: filename,
                 contentType: contentType,

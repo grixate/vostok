@@ -17,7 +17,7 @@ struct VostokComposer: View {
                     .font(.system(size: 22, weight: .regular))
                     .foregroundStyle(VostokColors.controlPrimary)
             }
-            .frame(width: 42, height: 42)
+            .frame(width: 44, height: 44)
             .background(glassCircleBackground)
             .clipShape(Circle())
             .accessibilityLabel("Attach")
@@ -33,6 +33,12 @@ struct VostokComposer: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 17, weight: .regular))
                         .lineLimit(1...8)
+                        .submitLabel(.send)
+                        .onSubmit {
+                            if isSendMode {
+                                onSend()
+                            }
+                        }
                         .focused($isFocused)
                         .accessibilityLabel("Message")
                         .accessibilityHint("Type your message")
@@ -48,7 +54,7 @@ struct VostokComposer: View {
                                 Image(systemName: "paperplane.fill")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundStyle(.black.opacity(0.95))
-                                    .frame(width: 36, height: 36)
+                                    .frame(width: 44, height: 44)
                                     .background(VostokColors.accent, in: Circle())
                             }
                             .buttonStyle(.plain)
@@ -62,7 +68,7 @@ struct VostokComposer: View {
                 .padding(.top, 6)
                 .padding(.bottom, 6)
             }
-            .frame(minHeight: 42)
+            .frame(minHeight: 44)
             .background(glassFieldBackground)
             .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
 
@@ -72,7 +78,7 @@ struct VostokComposer: View {
                         .font(.system(size: 20, weight: .regular))
                         .foregroundStyle(VostokColors.controlPrimary)
                 }
-                .frame(width: 42, height: 42)
+                .frame(width: 44, height: 44)
                 .background(glassCircleBackground)
                 .clipShape(Circle())
                 .accessibilityLabel("Record voice message")
@@ -142,7 +148,7 @@ struct VostokComposer: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(VostokColors.labelSecondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cancel reply")

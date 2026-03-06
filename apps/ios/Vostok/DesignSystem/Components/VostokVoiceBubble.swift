@@ -50,7 +50,7 @@ struct VostokVoiceBubble: View {
             } label: {
                 Circle()
                     .fill(VostokColors.accent)
-                    .frame(width: 42, height: 42)
+                    .frame(width: 44, height: 44)
                     .overlay {
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 14, weight: .semibold))

@@ -180,6 +180,29 @@ defmodule VostokServer.Identity do
     end
   end
 
+  def update_push_token(user_id, current_device_id, attrs)
+      when is_binary(user_id) and is_binary(current_device_id) and is_map(attrs) do
+    with %Device{} = current_device <- Repo.get(Device, current_device_id),
+         :ok <- ensure_device_owner(current_device, user_id),
+         {:ok, normalized} <- normalize_push_token(attrs),
+         {:ok, updated_device} <-
+           current_device
+           |> Device.changeset(%{
+             push_provider: normalized.push_provider,
+             push_token: normalized.push_token,
+             push_token_updated_at: DateTime.utc_now()
+           })
+           |> Repo.update() do
+      {:ok, present_device_summary(updated_device, current_device_id)}
+    else
+      nil ->
+        {:error, {:not_found, "Device not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   def publish_device_prekeys(device_id, attrs) when is_binary(device_id) and is_map(attrs) do
     with %Device{revoked_at: nil} = device <- Repo.get(Device, device_id),
          {:ok, normalized} <- normalize_prekey_publication(attrs),
@@ -497,9 +520,31 @@ defmodule VostokServer.Identity do
       revoked_at: device.revoked_at && DateTime.to_iso8601(device.revoked_at),
       last_active_at: device.last_active_at && DateTime.to_iso8601(device.last_active_at),
       inserted_at: device.inserted_at && DateTime.to_iso8601(device.inserted_at),
-      one_time_prekey_count: active_prekey_count(device.id)
+      one_time_prekey_count: active_prekey_count(device.id),
+      push_provider: device.push_provider,
+      push_token_updated_at:
+        device.push_token_updated_at && DateTime.to_iso8601(device.push_token_updated_at)
     }
   end
+
+  defp normalize_push_token(attrs) when is_map(attrs) do
+    with {:ok, push_provider} <- fetch_trimmed(attrs, "push_provider"),
+         {:ok, push_token} <- fetch_trimmed(attrs, "push_token"),
+         :ok <- ensure_push_provider(push_provider),
+         :ok <- ensure_push_token_length(push_token) do
+      {:ok, %{push_provider: push_provider, push_token: push_token}}
+    end
+  end
+
+  defp ensure_push_provider(provider) when provider in ["fcm", "unifiedpush"], do: :ok
+
+  defp ensure_push_provider(_provider),
+    do: {:error, {:validation, "push_provider", "push_provider must be one of: fcm, unifiedpush."}}
+
+  defp ensure_push_token_length(token) when is_binary(token) and byte_size(token) <= 2048, do: :ok
+
+  defp ensure_push_token_length(_token),
+    do: {:error, {:validation, "push_token", "push_token must be a non-empty string up to 2048 bytes."}}
 
   defp ensure_device_owner(%Device{user_id: user_id}, user_id), do: :ok
 

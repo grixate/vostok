@@ -28,6 +28,9 @@ class AppState(initialSession: StoredSession?) {
 
     val session: StateFlow<AppSessionState> = _session.asStateFlow()
 
+    private val _pendingOpenChatId = MutableStateFlow<String?>(null)
+    val pendingOpenChatId: StateFlow<String?> = _pendingOpenChatId.asStateFlow()
+
     fun setSession(value: StoredSession?) {
         _session.value = AppSessionState(
             token = value?.token,
@@ -36,5 +39,13 @@ class AppState(initialSession: StoredSession?) {
             username = value?.username,
             expiresAt = value?.expiresAt
         )
+    }
+
+    fun requestOpenChat(chatId: String?) {
+        _pendingOpenChatId.value = chatId?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    fun consumeOpenChatRequest() {
+        _pendingOpenChatId.value = null
     }
 }

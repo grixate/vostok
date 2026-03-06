@@ -8,6 +8,7 @@ protocol ChatRepository {
 
 protocol MessageRepository {
     func fetchMessages(token: String, chatID: String) async throws -> [MessageDTO]
+    func markChatRead(token: String, chatID: String, lastReadMessageID: String?) async throws
     func sendMessage(token: String, chatID: String, request: CreateMessageRequest) async throws -> MessageDTO
     func editMessage(token: String, chatID: String, messageID: String, request: EditMessageRequest) async throws -> MessageDTO
     func deleteMessage(token: String, chatID: String, messageID: String) async throws -> MessageDTO
@@ -136,6 +137,10 @@ actor InMemoryMessageRepository: MessageRepository {
         } catch {
             throw error
         }
+    }
+
+    func markChatRead(token: String, chatID: String, lastReadMessageID: String?) async throws {
+        _ = try await apiClient.markChatRead(token: token, chatID: chatID, lastReadMessageID: lastReadMessageID)
     }
 
     func editMessage(token: String, chatID: String, messageID: String, request: EditMessageRequest) async throws -> MessageDTO {

@@ -66,6 +66,7 @@ struct VostokMessageBubble: View {
                 .foregroundStyle(VostokColors.labelPrimary)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: 290, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
             if !reactions.isEmpty {
                 HStack(spacing: 4) {

@@ -225,6 +225,21 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     end
   end
 
+  def mark_read(conn, %{"chat_id" => chat_id} = params) do
+    case Messaging.mark_chat_read(
+           chat_id,
+           conn.assigns.current_user.id,
+           conn.assigns.current_device.id,
+           params
+         ) do
+      {:ok, read_state} ->
+        json(conn, %{read_state: read_state})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   def create_message(conn, %{"chat_id" => chat_id} = params) do
     case Messaging.create_message(
            chat_id,

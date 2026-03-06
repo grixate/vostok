@@ -19,18 +19,17 @@ class AuthRepository(
 
     suspend fun register(username: String, deviceName: String): StoredSession {
         val identityKey = keyManager.publicKeyBase64()
-        val (signedPrekey, signedPrekeySignature) = keyManager.signedPrekeyMaterial()
-        val oneTimePrekeys = keyManager.oneTimePrekeys(64)
+        val signalMaterial = keyManager.prepareSignalPrekeyMaterial(oneTimeCount = 64)
 
         val registration = apiClient.register(
             RegisterRequest(
                 username = username.trim(),
                 deviceName = deviceName.trim(),
                 deviceIdentityPublicKey = identityKey,
-                encryptionPublicKey = identityKey,
-                signedPrekey = signedPrekey,
-                signedPrekeySignature = signedPrekeySignature,
-                oneTimePrekeys = oneTimePrekeys
+                encryptionPublicKey = signalMaterial.encryptionPublicKey,
+                signedPrekey = signalMaterial.signedPrekey,
+                signedPrekeySignature = signalMaterial.signedPrekeySignature,
+                oneTimePrekeys = signalMaterial.oneTimePrekeys
             )
         )
 
@@ -38,9 +37,9 @@ class AuthRepository(
 
         apiClient.publishPrekeys(
             PublishPrekeysRequest(
-                signedPrekey = signedPrekey,
-                signedPrekeySignature = signedPrekeySignature,
-                oneTimePrekeys = oneTimePrekeys,
+                signedPrekey = signalMaterial.signedPrekey,
+                signedPrekeySignature = signalMaterial.signedPrekeySignature,
+                oneTimePrekeys = signalMaterial.oneTimePrekeys,
                 replaceOneTimePrekeys = true
             )
         )
@@ -72,6 +71,19 @@ class AuthRepository(
             username = me.user.username
         )
         sessionStore.save(stored)
+
+        runCatching {
+            val signalMaterial = keyManager.prepareSignalPrekeyMaterial(oneTimeCount = 64)
+            apiClient.publishPrekeys(
+                PublishPrekeysRequest(
+                    signedPrekey = signalMaterial.signedPrekey,
+                    signedPrekeySignature = signalMaterial.signedPrekeySignature,
+                    oneTimePrekeys = signalMaterial.oneTimePrekeys,
+                    replaceOneTimePrekeys = true
+                )
+            )
+        }
+
         return stored
     }
 

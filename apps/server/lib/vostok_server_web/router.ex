@@ -32,6 +32,7 @@ defmodule VostokServerWeb.Router do
     post "/devices/link", DeviceController, :link
     get "/devices", DeviceController, :index
     post "/devices/:device_id/revoke", DeviceController, :revoke
+    post "/devices/push-token", DeviceController, :push_token
     post "/devices/prekeys", PrekeyController, :publish
     get "/users/:username/devices/prekeys", PrekeyController, :show
     get "/me", ChatController, :me
@@ -54,6 +55,7 @@ defmodule VostokServerWeb.Router do
 
     get "/chats/:chat_id/recipient-devices", ChatController, :recipient_devices
     get "/chats/:chat_id/messages", ChatController, :messages
+    post "/chats/:chat_id/read", ChatController, :mark_read
     post "/chats/:chat_id/messages", ChatController, :create_message
     patch "/chats/:chat_id/messages/:message_id", ChatController, :update_message
     post "/chats/:chat_id/messages/:message_id/delete", ChatController, :delete_message

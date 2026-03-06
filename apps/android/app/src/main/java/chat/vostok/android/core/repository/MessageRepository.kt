@@ -12,14 +12,9 @@ import chat.vostok.android.core.storage.entity.PendingOutboxEntity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 class MessageRepository(
     private val apiClient: ApiClient,
@@ -27,11 +22,11 @@ class MessageRepository(
     private val pendingOutboxDao: PendingOutboxDao,
     private val sessionRuntime: SignalSessionRuntime
 ) {
-    private val secureRandom = SecureRandom()
+    private val decryptedCiphertextByMessageId = linkedMapOf<String, String>()
 
     suspend fun messages(chatId: String): List<MessageDto> {
         return runCatching {
-            val remote = apiClient.messages(chatId).messages
+            val remote = apiClient.messages(chatId).messages.map { decryptMessageIfNeeded(chatId, it) }
             messageDao.upsert(remote.map { it.toEntity() })
             remote
         }.getOrElse {
@@ -46,13 +41,19 @@ class MessageRepository(
         if (!messageId.isNullOrBlank()) {
             // Hint retained for future targeted fetch support.
         }
-        val remote = runCatching { apiClient.messages(chatId).messages }.getOrNull()
+        val remote = runCatching {
+            apiClient.messages(chatId).messages.map { decryptMessageIfNeeded(chatId, it) }
+        }.getOrNull()
         if (remote != null) {
             messageDao.upsert(remote.map { it.toEntity() })
             return remote
         }
 
         return messageDao.byChat(chatId).map { it.toMessageDto() }
+    }
+
+    suspend fun markChatRead(chatId: String, lastReadMessageId: String? = null) {
+        apiClient.markChatRead(chatId = chatId, lastReadMessageId = lastReadMessageId)
     }
 
     suspend fun sendTextMessage(
@@ -105,25 +106,16 @@ class MessageRepository(
         contentType: String,
         recipientDeviceIds: List<String>
     ): MessageDto {
-        val clientId = UUID.randomUUID().toString()
-        val payload = JSONObject()
-            .put("upload_id", uploadId)
-            .put("filename", filename)
-            .put("content_type", contentType)
-            .put("kind", "media_reference")
-            .toString()
-
-        val request = buildMessageRequest(
+        return sendMediaReferenceMessage(
             chatId = chatId,
-            payloadText = payload,
-            clientId = clientId,
+            uploadId = uploadId,
+            filename = filename,
+            contentType = contentType,
+            kind = "media_reference",
+            messageKind = "media",
             recipientDeviceIds = recipientDeviceIds,
-            messageKind = "file"
+            extras = null
         )
-
-        val sent = apiClient.createMessage(chatId, request).message
-        messageDao.upsert(listOf(sent.toEntity()))
-        return sent
     }
 
     suspend fun sendVoiceNoteMessage(
@@ -131,24 +123,18 @@ class MessageRepository(
         durationSeconds: Int,
         recipientDeviceIds: List<String>
     ): MessageDto {
-        val clientId = UUID.randomUUID().toString()
-        val payload = JSONObject()
-            .put("kind", "voice_note")
-            .put("duration_seconds", durationSeconds)
-            .put("waveform", "AAECAwQFBgcICQ==")
-            .toString()
-
-        val request = buildMessageRequest(
+        return sendMediaReferenceMessage(
             chatId = chatId,
-            payloadText = payload,
-            clientId = clientId,
+            uploadId = "",
+            filename = "voice-note.m4a",
+            contentType = "audio/mp4",
+            kind = "voice_note",
+            messageKind = "media",
             recipientDeviceIds = recipientDeviceIds,
-            messageKind = "voice"
+            extras = JSONObject()
+                .put("duration_seconds", durationSeconds)
+                .put("waveform", "AAECAwQFBgcICQ==")
         )
-
-        val sent = apiClient.createMessage(chatId, request).message
-        messageDao.upsert(listOf(sent.toEntity()))
-        return sent
     }
 
     suspend fun sendRoundVideoMessage(
@@ -156,24 +142,61 @@ class MessageRepository(
         durationSeconds: Int,
         recipientDeviceIds: List<String>
     ): MessageDto {
-        val clientId = UUID.randomUUID().toString()
-        val payload = JSONObject()
-            .put("kind", "round_video")
-            .put("duration_seconds", durationSeconds)
-            .put("resolution", "480x480")
-            .toString()
-
-        val request = buildMessageRequest(
+        return sendMediaReferenceMessage(
             chatId = chatId,
-            payloadText = payload,
-            clientId = clientId,
+            uploadId = "",
+            filename = "round-video.mp4",
+            contentType = "video/mp4",
+            kind = "round_video",
+            messageKind = "media",
             recipientDeviceIds = recipientDeviceIds,
-            messageKind = "video_round"
+            extras = JSONObject()
+                .put("duration_seconds", durationSeconds)
+                .put("resolution", "480x480")
         )
+    }
 
-        val sent = apiClient.createMessage(chatId, request).message
-        messageDao.upsert(listOf(sent.toEntity()))
-        return sent
+    suspend fun sendVoiceNoteUploadMessage(
+        chatId: String,
+        uploadId: String,
+        filename: String,
+        contentType: String,
+        durationSeconds: Int,
+        recipientDeviceIds: List<String>
+    ): MessageDto {
+        return sendMediaReferenceMessage(
+            chatId = chatId,
+            uploadId = uploadId,
+            filename = filename,
+            contentType = contentType,
+            kind = "voice_note",
+            messageKind = "media",
+            recipientDeviceIds = recipientDeviceIds,
+            extras = JSONObject()
+                .put("duration_seconds", durationSeconds)
+        )
+    }
+
+    suspend fun sendRoundVideoUploadMessage(
+        chatId: String,
+        uploadId: String,
+        filename: String,
+        contentType: String,
+        durationSeconds: Int,
+        recipientDeviceIds: List<String>
+    ): MessageDto {
+        return sendMediaReferenceMessage(
+            chatId = chatId,
+            uploadId = uploadId,
+            filename = filename,
+            contentType = contentType,
+            kind = "round_video",
+            messageKind = "media",
+            recipientDeviceIds = recipientDeviceIds,
+            extras = JSONObject()
+                .put("duration_seconds", durationSeconds)
+                .put("resolution", "480x480")
+        )
     }
 
     suspend fun editTextMessage(
@@ -231,32 +254,89 @@ class MessageRepository(
             String(bytes, StandardCharsets.UTF_8)
         }.getOrDefault(encoded)
 
-        if (message.messageKind == "file") {
-            return runCatching {
-                val json = JSONObject(decoded)
-                val fileName = json.optString("filename").ifBlank { "attachment" }
-                val uploadId = json.optString("upload_id").ifBlank { "-" }
-                "Attachment: $fileName [$uploadId]"
-            }.getOrDefault(decoded)
+        return runCatching {
+            val json = JSONObject(decoded)
+            when (json.optString("kind")) {
+                "media_reference" -> {
+                    val fileName = json.optString("filename").ifBlank { "attachment" }
+                    val uploadId = json.optString("upload_id").ifBlank { "-" }
+                    "Attachment: $fileName [$uploadId]"
+                }
+
+                "voice_note" -> {
+                    val duration = json.optInt("duration_seconds", 0)
+                    val uploadId = json.optString("upload_id").takeIf { it.isNotBlank() }
+                    if (uploadId != null) "Voice message (${duration}s) [$uploadId]"
+                    else "Voice message (${duration}s)"
+                }
+
+                "round_video" -> {
+                    val duration = json.optInt("duration_seconds", 0)
+                    val uploadId = json.optString("upload_id").takeIf { it.isNotBlank() }
+                    if (uploadId != null) "Round video (${duration}s) [$uploadId]"
+                    else "Round video (${duration}s)"
+                }
+
+                else -> decoded
+            }
+        }.getOrDefault(decoded)
+    }
+
+    private suspend fun sendMediaReferenceMessage(
+        chatId: String,
+        uploadId: String,
+        filename: String,
+        contentType: String,
+        kind: String,
+        messageKind: String,
+        recipientDeviceIds: List<String>,
+        extras: JSONObject?
+    ): MessageDto {
+        val clientId = UUID.randomUUID().toString()
+        val payload = JSONObject()
+            .put("upload_id", uploadId)
+            .put("filename", filename)
+            .put("content_type", contentType)
+            .put("kind", kind)
+
+        extras?.keys()?.forEach { key ->
+            payload.put(key, extras.opt(key))
         }
 
-        if (message.messageKind == "voice") {
-            return runCatching {
-                val json = JSONObject(decoded)
-                val duration = json.optInt("duration_seconds", 0)
-                "Voice message (${duration}s)"
-            }.getOrDefault("Voice message")
+        val request = buildMessageRequest(
+            chatId = chatId,
+            payloadText = payload.toString(),
+            clientId = clientId,
+            recipientDeviceIds = recipientDeviceIds,
+            messageKind = messageKind
+        )
+
+        val sent = apiClient.createMessage(chatId, request).message
+        val normalized = decryptMessageIfNeeded(chatId, sent)
+        messageDao.upsert(listOf(normalized.toEntity()))
+        return normalized
+    }
+
+    private suspend fun decryptMessageIfNeeded(chatId: String, message: MessageDto): MessageDto {
+        if (!message.recipientEnvelope.isNullOrBlank()) {
+            val cached = decryptedCiphertextByMessageId[message.id]
+            if (!cached.isNullOrBlank()) {
+                return message.copy(ciphertext = cached)
+            }
+
+            val decrypted = sessionRuntime.decryptRecipientEnvelope(
+                chatId = chatId,
+                peerDeviceId = message.senderDeviceId,
+                recipientEnvelopeBase64 = message.recipientEnvelope
+            )
+            if (decrypted != null) {
+                val encoded = Base64.getEncoder().encodeToString(decrypted)
+                decryptedCiphertextByMessageId[message.id] = encoded
+                return message.copy(ciphertext = encoded)
+            }
         }
 
-        if (message.messageKind == "video_round") {
-            return runCatching {
-                val json = JSONObject(decoded)
-                val duration = json.optInt("duration_seconds", 0)
-                "Round video (${duration}s)"
-            }.getOrDefault("Round video")
-        }
-
-        return decoded
+        return message
     }
 
     private suspend fun buildTextRequest(
@@ -291,7 +371,12 @@ class MessageRepository(
         val establishedSessionIds = sessionByDevice.values.distinct().sorted()
         val ciphertextBase64 =
             Base64.getEncoder().encodeToString(payloadText.toByteArray(StandardCharsets.UTF_8))
-        val recipientEnvelopes = buildRecipientEnvelopes(resolvedRecipientDeviceIds, ciphertextBase64, sessionByDevice)
+        val recipientEnvelopes = buildRecipientEnvelopes(
+            chatId = chatId,
+            payloadPlaintext = payloadText.toByteArray(StandardCharsets.UTF_8),
+            recipientDeviceIds = resolvedRecipientDeviceIds,
+            sessionByDevice = sessionByDevice
+        )
 
         return CreateMessageRequest(
             clientId = clientId,
@@ -318,7 +403,12 @@ class MessageRepository(
         val sessionByDevice = sessionRuntime.ensureSessionMap(chatId, resolvedRecipientDeviceIds)
         val establishedSessionIds = sessionByDevice.values.distinct().sorted()
         val ciphertextBase64 = Base64.getEncoder().encodeToString(text.toByteArray(StandardCharsets.UTF_8))
-        val recipientEnvelopes = buildRecipientEnvelopes(resolvedRecipientDeviceIds, ciphertextBase64, sessionByDevice)
+        val recipientEnvelopes = buildRecipientEnvelopes(
+            chatId = chatId,
+            payloadPlaintext = text.toByteArray(StandardCharsets.UTF_8),
+            recipientDeviceIds = resolvedRecipientDeviceIds,
+            sessionByDevice = sessionByDevice
+        )
 
         return UpdateMessageRequest(
             clientId = null,
@@ -341,7 +431,7 @@ class MessageRepository(
             sessionJson.put(deviceId, sessionId)
         }
         val headerJson = JSONObject()
-            .put("algorithm", "signal-session-envelope-v1")
+            .put("algorithm", "signal-session-envelope-v3")
             .put("chat_id", chatId)
             .put("recipient_count", recipientDeviceIds.size)
             .put("session_ids", JSONArray(sessionByDevice.values.toList()))
@@ -350,73 +440,37 @@ class MessageRepository(
         return Base64.getEncoder().encodeToString(headerJson.toString().toByteArray(StandardCharsets.UTF_8))
     }
 
-    private fun buildRecipientEnvelopes(
+    private suspend fun buildRecipientEnvelopes(
+        chatId: String,
+        payloadPlaintext: ByteArray,
         recipientDeviceIds: List<String>,
-        ciphertext: String,
         sessionByDevice: Map<String, String>
     ): Map<String, String> {
-        return recipientDeviceIds.associateWith { deviceId ->
+        val envelopes = linkedMapOf<String, String>()
+
+        for (deviceId in recipientDeviceIds) {
             val stableSessionHint = sessionByDevice[deviceId].orEmpty()
-            val encrypted = encryptEnvelopePayload(
-                payloadBase64 = ciphertext,
-                deviceId = deviceId,
-                sessionHint = stableSessionHint
-            )
+            val signalEnvelope = sessionRuntime.encryptRecipientEnvelope(
+                chatId = chatId,
+                peerDeviceId = deviceId,
+                plaintext = payloadPlaintext
+            ) ?: throw IllegalStateException("Missing libsignal session for recipient device $deviceId")
+
             val envelopePayload = JSONObject()
-                .put("session_hint", stableSessionHint)
+                .put("session_hint", signalEnvelope.sessionId.ifBlank { stableSessionHint })
                 .put("device_id", deviceId)
-                .put("envelope_v", "v2.aesgcm")
-                .put("ciphertext", encrypted.ciphertextBase64)
-                .put("nonce", encrypted.nonceBase64)
-                .put("aad", encrypted.aadBase64)
+                .put("envelope_v", "v3.libsignal")
+                .put("cipher_type", signalEnvelope.messageType)
+                .put("ciphertext", signalEnvelope.ciphertextBase64)
+                .put("address_name", signalEnvelope.addressName)
+                .put("address_device_id", signalEnvelope.addressDeviceId)
                 .put("sent_at", Instant.now().toString())
-                .toString()
-                .toByteArray(StandardCharsets.UTF_8)
-            Base64.getEncoder().encodeToString(envelopePayload)
+
+            envelopes[deviceId] = Base64.getEncoder()
+                .encodeToString(envelopePayload.toString().toByteArray(StandardCharsets.UTF_8))
         }
+        return envelopes.toMap()
     }
-
-    private fun encryptEnvelopePayload(
-        payloadBase64: String,
-        deviceId: String,
-        sessionHint: String
-    ): EncryptedEnvelope {
-        return runCatching {
-            val key = deriveEnvelopeKey(deviceId, sessionHint)
-            val nonce = ByteArray(12).also(secureRandom::nextBytes)
-            val aadRaw = "device:$deviceId|session:$sessionHint".toByteArray(StandardCharsets.UTF_8)
-
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
-            cipher.updateAAD(aadRaw)
-            val encryptedRaw = cipher.doFinal(payloadBase64.toByteArray(StandardCharsets.UTF_8))
-
-            EncryptedEnvelope(
-                ciphertextBase64 = Base64.getEncoder().encodeToString(encryptedRaw),
-                nonceBase64 = Base64.getEncoder().encodeToString(nonce),
-                aadBase64 = Base64.getEncoder().encodeToString(aadRaw)
-            )
-        }.getOrElse {
-            // Fail open to preserve delivery if crypto operation fails on a specific device.
-            EncryptedEnvelope(
-                ciphertextBase64 = payloadBase64,
-                nonceBase64 = "",
-                aadBase64 = ""
-            )
-        }
-    }
-
-    private fun deriveEnvelopeKey(deviceId: String, sessionHint: String): ByteArray {
-        val seed = "$deviceId|$sessionHint|vostok-envelope-v2".toByteArray(StandardCharsets.UTF_8)
-        val digest = MessageDigest.getInstance("SHA-256").digest(seed)
-        return digest.copyOf(32)
-    }
-
-    private data class EncryptedEnvelope(
-        val ciphertextBase64: String,
-        val nonceBase64: String,
-        val aadBase64: String
-    )
 
     private fun encodeRequest(request: CreateMessageRequest): String {
         return JSONObject()

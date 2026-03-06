@@ -26,6 +26,7 @@ struct ChatListView: View {
     @State private var isCreateGroupPresented = false
     @State private var selectedFolder: ChatFolder = .all
     @State private var showsSearch = false
+    @State private var realtimeSnapshot = RealtimeDiagnosticsSnapshot()
 
     private static let isoFormatter = ISO8601DateFormatter()
     private static let timeFormatter: DateFormatter = {
@@ -73,7 +74,13 @@ struct ChatListView: View {
                     )
                 }
                 .simultaneousGesture(TapGesture().onEnded {
-                    viewModel.markChatRead(chatID: chat.id)
+                    guard case let .authenticated(session) = appState.sessionState else {
+                        viewModel.markChatRead(chatID: chat.id)
+                        return
+                    }
+                    Task {
+                        await viewModel.syncReadState(token: session.token, chatID: chat.id)
+                    }
                 })
                 .listRowInsets(EdgeInsets())
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -102,6 +109,7 @@ struct ChatListView: View {
                 selectedFolder: selectedFolder,
                 channelCount: channelCount,
                 showsSearchField: showsSearch,
+                realtimeSnapshot: realtimeSnapshot,
                 searchQuery: $viewModel.searchQuery,
                 onSelectFolder: { selectedFolder = $0 },
                 onEditTap: {},
@@ -144,6 +152,13 @@ struct ChatListView: View {
             Task {
                 await routeIfNeeded()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .vostokChatReadEvent)) { notification in
+            guard let event = RealtimeChatReadEvent(notification: notification) else { return }
+            viewModel.markChatRead(chatID: event.chatID)
+        }
+        .task {
+            await monitorRealtimeDiagnostics()
         }
     }
 
@@ -208,22 +223,30 @@ struct ChatListView: View {
     private func routeIfNeeded() async {
         guard let requestedChatID = appState.selectedChatID else { return }
         defer { appState.consumeChatNavigation() }
+        guard case let .authenticated(session) = appState.sessionState else { return }
 
         if let existing = viewModel.chat(withID: requestedChatID) {
             routedChat = existing
             isRoutedChatPresented = true
-            viewModel.markChatRead(chatID: requestedChatID)
+            await viewModel.syncReadState(token: session.token, chatID: requestedChatID)
             return
         }
 
-        guard case let .authenticated(session) = appState.sessionState else { return }
         await viewModel.load(token: session.token)
         if let loaded = viewModel.chat(withID: requestedChatID) {
             routedChat = loaded
             isRoutedChatPresented = true
-            viewModel.markChatRead(chatID: requestedChatID)
+            await viewModel.syncReadState(token: session.token, chatID: requestedChatID)
         } else {
             viewModel.errorMessage = "Unable to open chat \(requestedChatID)."
+        }
+    }
+
+    @MainActor
+    private func monitorRealtimeDiagnostics() async {
+        while !Task.isCancelled {
+            realtimeSnapshot = await container.realtimeClient.snapshotDiagnostics()
+            try? await Task.sleep(for: .seconds(2))
         }
     }
 }
@@ -232,6 +255,7 @@ private struct ChatListHeader: View {
     let selectedFolder: ChatFolder
     let channelCount: Int
     let showsSearchField: Bool
+    let realtimeSnapshot: RealtimeDiagnosticsSnapshot
     @Binding var searchQuery: String
     let onSelectFolder: (ChatFolder) -> Void
     let onEditTap: () -> Void
@@ -254,14 +278,18 @@ private struct ChatListHeader: View {
 
                 Spacer(minLength: 8)
 
-                HStack(spacing: 4) {
-                    storiesBadge
-                    Text("Chats")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(VostokColors.labelPrimary)
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(VostokColors.accent)
+                VStack(spacing: 3) {
+                    HStack(spacing: 4) {
+                        storiesBadge
+                        Text("Chats")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VostokColors.labelPrimary)
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(VostokColors.accent)
+                    }
+
+                    realtimeStatusBadge
                 }
 
                 Spacer(minLength: 8)
@@ -361,6 +389,26 @@ private struct ChatListHeader: View {
         }
     }
 
+    private var realtimeStatusBadge: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+            Text(statusText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(VostokColors.labelSecondary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 20)
+        .background(
+            Capsule(style: .continuous)
+                .fill(VostokColors.surfaceTertiary.opacity(0.9))
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Realtime status")
+        .accessibilityValue(statusText)
+    }
+
     private var glassCapsuleBackground: some View {
         Capsule(style: .continuous)
             .fill(.ultraThinMaterial)
@@ -386,5 +434,39 @@ private struct ChatListHeader: View {
         .background(glassCapsuleBackground)
         .clipShape(Circle())
         .accessibilityLabel(label)
+    }
+
+    private var statusText: String {
+        if !realtimeSnapshot.networkAvailable {
+            return "Offline"
+        }
+
+        switch realtimeSnapshot.connectionState {
+        case .connected:
+            return "Connected"
+        case .reconnecting:
+            return "Reconnecting"
+        case .connecting:
+            return "Connecting"
+        case .paused:
+            return "Paused"
+        case .disconnected:
+            return "Disconnected"
+        }
+    }
+
+    private var statusColor: Color {
+        if !realtimeSnapshot.networkAvailable {
+            return VostokColors.danger
+        }
+
+        switch realtimeSnapshot.connectionState {
+        case .connected:
+            return VostokColors.online
+        case .reconnecting, .connecting:
+            return .orange
+        case .paused, .disconnected:
+            return VostokColors.labelSecondary
+        }
     }
 }

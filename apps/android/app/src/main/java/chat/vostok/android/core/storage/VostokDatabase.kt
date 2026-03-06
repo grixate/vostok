@@ -1,9 +1,11 @@
 package chat.vostok.android.core.storage
 
 import android.content.Context
+import androidx.room.migration.Migration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import chat.vostok.android.core.storage.dao.ChatDao
 import chat.vostok.android.core.storage.dao.ContactDao
 import chat.vostok.android.core.storage.dao.MessageDao
@@ -24,7 +26,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         PendingOutboxEntity::class,
         SignalSessionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class VostokDatabase : RoomDatabase() {
@@ -43,9 +45,17 @@ abstract class VostokDatabase : RoomDatabase() {
                 val factory = SupportOpenHelperFactory(passphrase)
                 Room.databaseBuilder(context, VostokDatabase::class.java, "vostok.db")
                     .openHelperFactory(factory)
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE signal_session ADD COLUMN signalAddressName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE signal_session ADD COLUMN signalAddressDeviceId INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE signal_session ADD COLUMN sessionRecord TEXT")
             }
         }
     }

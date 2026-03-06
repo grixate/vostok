@@ -1,5 +1,9 @@
 package chat.vostok.android.navigation
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,14 +19,20 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -60,6 +70,16 @@ import chat.vostok.android.features.settings.SettingsViewModel
 
 private data class TabDestination(val route: String, val titleRes: Int)
 
+private fun conversationRoute(chatId: String, title: String? = null): String {
+    val encodedChatId = Uri.encode(chatId)
+    val encodedTitle = title?.takeIf { it.isNotBlank() }?.let(Uri::encode)
+    return if (encodedTitle != null) {
+        "conversation/$encodedChatId?title=$encodedTitle"
+    } else {
+        "conversation/$encodedChatId"
+    }
+}
+
 @Composable
 fun VostokNavGraph(
     appState: AppState,
@@ -67,6 +87,10 @@ fun VostokNavGraph(
 ) {
     val navController = rememberNavController()
     val session by appState.session.collectAsState()
+    val pendingOpenChatId by appState.pendingOpenChatId.collectAsState()
+    val socketConnectionState by container.webSocketManager.connectionState.collectAsState()
+    val socketDiagnostics by container.webSocketManager.diagnostics.collectAsState()
+    val socketLog by container.webSocketManager.diagnosticLog.collectAsState()
 
     val tabs = listOf(
         TabDestination("chats", R.string.tab_chats),
@@ -91,6 +115,7 @@ fun VostokNavGraph(
     val conversationViewModel: ConversationViewModel = viewModel(
         factory = ConversationViewModel.Factory(
             messageRepository = container.messageRepository,
+            mediaRepository = container.mediaRepository,
             webSocketManager = container.webSocketManager
         )
     )
@@ -121,17 +146,82 @@ fun VostokNavGraph(
         )
     )
 
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val connectivityManager = rememberConnectivityManager(context)
+
     val startDestination = if (session.isAuthenticated) "chats" else "auth/register"
 
     LaunchedEffect(session.token, session.userId) {
         val token = session.token
         if (!token.isNullOrBlank()) {
             container.webSocketManager.connect(token)
+            container.webSocketManager.resume()
             session.userId?.takeIf { it.isNotBlank() }?.let { userId ->
                 container.webSocketManager.join("user:$userId")
             }
         } else {
             container.webSocketManager.disconnect()
+        }
+    }
+
+    DisposableEffect(connectivityManager) {
+        container.webSocketManager.updateNetworkAvailability(
+            isNetworkAvailable(connectivityManager)
+        )
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                container.webSocketManager.updateNetworkAvailability(
+                    isNetworkAvailable(connectivityManager)
+                )
+            }
+
+            override fun onLost(network: Network) {
+                container.webSocketManager.updateNetworkAvailability(
+                    isNetworkAvailable(connectivityManager)
+                )
+            }
+
+            override fun onUnavailable() {
+                container.webSocketManager.updateNetworkAvailability(false)
+            }
+        }
+
+        connectivityManager.registerDefaultNetworkCallback(callback)
+
+        onDispose {
+            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, session.token) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    if (session.isAuthenticated) {
+                        container.webSocketManager.resume()
+                    }
+                }
+
+                Lifecycle.Event.ON_STOP -> {
+                    container.webSocketManager.pause()
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(session.isAuthenticated, pendingOpenChatId) {
+        val chatId = pendingOpenChatId
+        if (session.isAuthenticated && !chatId.isNullOrBlank()) {
+            navController.navigate("conversation/${Uri.encode(chatId)}")
+            appState.consumeOpenChatRequest()
         }
     }
 
@@ -197,14 +287,15 @@ fun VostokNavGraph(
                     ChatListScreen(
                         paddingValues = padding,
                         viewModel = chatListViewModel,
-                        onOpenConversation = { chatId ->
-                            navController.navigate("conversation/${Uri.encode(chatId)}")
+                        onOpenConversation = { chatId, title ->
+                            navController.navigate(conversationRoute(chatId, title))
                         }
                     )
                 }
 
-                composable("conversation/{chatId}") { backStackEntry ->
+                composable("conversation/{chatId}?title={title}") { backStackEntry ->
                     val chatId = backStackEntry.arguments?.getString("chatId").orEmpty()
+                    val title = backStackEntry.arguments?.getString("title")
                     LaunchedEffect(chatId) {
                         container.webSocketManager.join("chat:$chatId")
                         container.webSocketManager.join("call:$chatId")
@@ -212,6 +303,7 @@ fun VostokNavGraph(
 
                     ConversationScreen(
                         chatId = chatId,
+                        chatTitle = title,
                         recipientDeviceIds = emptyList(),
                         viewModel = conversationViewModel,
                         onOpenCall = { selectedChatId ->
@@ -230,8 +322,8 @@ fun VostokNavGraph(
                     ContactListScreen(
                         paddingValues = padding,
                         viewModel = contactListViewModel,
-                        onOpenConversation = { chatId ->
-                            navController.navigate("conversation/${Uri.encode(chatId)}")
+                        onOpenConversation = { chatId, title ->
+                            navController.navigate(conversationRoute(chatId, title))
                         },
                         onOpenCreateGroup = { navController.navigate("group/create") }
                     )
@@ -316,6 +408,23 @@ fun VostokNavGraph(
                         username = session.username,
                         userId = session.userId,
                         deviceId = session.deviceId,
+                        secureStorageSummary = "${container.secureStorageStatus.summary()}, signing: ${container.signingStorageSummary}",
+                        socketSummary = buildString {
+                            append(socketConnectionState.name.lowercase())
+                            append(", reconnect_attempt=")
+                            append(socketDiagnostics.reconnectAttempt)
+                            socketDiagnostics.lastDisconnectCode?.let { code ->
+                                append(", last_disconnect_code=")
+                                append(code)
+                            }
+                            socketDiagnostics.lastDisconnectReason?.takeIf { it.isNotBlank() }?.let { reason ->
+                                append(", last_reason=")
+                                append(reason)
+                            }
+                        },
+                        socketEvents = socketLog,
+                        onForceReconnect = { container.webSocketManager.forceReconnect() },
+                        onClearSocketLog = { container.webSocketManager.clearDiagnosticLog() },
                         onOpenDevices = {
                             settingsViewModel.refreshDevices()
                             navController.navigate("settings/devices")
@@ -359,4 +468,18 @@ fun VostokNavGraph(
             }
         }
     }
+}
+
+@Composable
+private fun rememberConnectivityManager(context: Context): ConnectivityManager {
+    return remember(context) {
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+}
+
+private fun isNetworkAvailable(connectivityManager: ConnectivityManager): Boolean {
+    val activeNetwork = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }

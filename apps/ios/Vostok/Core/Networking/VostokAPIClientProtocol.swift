@@ -29,6 +29,7 @@ protocol VostokAPIClientProtocol {
 
     func recipientDevices(token: String, chatID: String) async throws -> RecipientDevicesResponse
     func messages(token: String, chatID: String) async throws -> MessagesResponse
+    func markChatRead(token: String, chatID: String, lastReadMessageID: String?) async throws -> ChatReadStateResponse
     func createMessage(token: String, chatID: String, request: CreateMessageRequest) async throws -> MessageResponse
     func editMessage(token: String, chatID: String, messageID: String, request: EditMessageRequest) async throws -> MessageResponse
     func deleteMessage(token: String, chatID: String, messageID: String) async throws -> MessageResponse

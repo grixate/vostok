@@ -11,6 +11,7 @@ defmodule VostokServer.Messaging do
 
   alias VostokServer.Messaging.{
     Chat,
+    ChatReadState,
     ChatDeviceSession,
     ChatSafetyVerification,
     GroupSenderKey,
@@ -454,6 +455,88 @@ defmodule VostokServer.Messaging do
       |> Repo.all()
       |> Enum.map(&present_message(&1, current_device_id, user_id))
       |> then(&{:ok, &1})
+    end
+  end
+
+  def mark_chat_read(chat_id, user_id, current_device_id, attrs \\ %{})
+
+  def mark_chat_read(chat_id, user_id, current_device_id, attrs)
+      when is_binary(chat_id) and is_binary(user_id) and is_binary(current_device_id) and
+             is_map(attrs) do
+    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+         {:ok, last_read_message_id} <- normalize_last_read_message_id(attrs),
+         :ok <- ensure_read_message_belongs_to_chat(chat_id, last_read_message_id) do
+      now = DateTime.utc_now()
+
+      upserted =
+        case Repo.get_by(ChatReadState, chat_id: chat_id, device_id: current_device_id) do
+          %ChatReadState{} = existing ->
+            next_last_read_message_id =
+              if is_nil(last_read_message_id) do
+                existing.last_read_message_id
+              else
+                last_read_message_id
+              end
+
+            existing
+            |> ChatReadState.changeset(%{
+              last_read_message_id: next_last_read_message_id,
+              read_at: now
+            })
+            |> Repo.update()
+
+          nil ->
+            %ChatReadState{}
+            |> ChatReadState.changeset(%{
+              chat_id: chat_id,
+              device_id: current_device_id,
+              last_read_message_id: last_read_message_id,
+              read_at: now
+            })
+            |> Repo.insert()
+        end
+
+      case upserted do
+        {:ok, read_state} ->
+          {:ok,
+           %{
+             chat_id: read_state.chat_id,
+             device_id: read_state.device_id,
+             last_read_message_id: read_state.last_read_message_id,
+             read_at: iso_or_nil(read_state.read_at)
+           }}
+
+        {:error, changeset} ->
+          {:error, {:validation, format_changeset_error(changeset)}}
+      end
+    end
+  end
+
+  defp normalize_last_read_message_id(attrs) when is_map(attrs) do
+    value =
+      Map.get(attrs, "last_read_message_id")
+      |> case do
+        nil -> Map.get(attrs, "message_id")
+        present -> present
+      end
+      |> normalize_string()
+
+    {:ok, value}
+  end
+
+  defp ensure_read_message_belongs_to_chat(_chat_id, nil), do: :ok
+
+  defp ensure_read_message_belongs_to_chat(chat_id, last_read_message_id)
+       when is_binary(chat_id) and is_binary(last_read_message_id) do
+    case Repo.get(Message, last_read_message_id) do
+      %Message{chat_id: ^chat_id} ->
+        :ok
+
+      %Message{} ->
+        {:error, {:validation, "last_read_message_id must reference a message in this chat."}}
+
+      nil ->
+        {:error, {:not_found, "last_read_message_id not found."}}
     end
   end
 

@@ -15,6 +15,7 @@ import chat.vostok.android.core.repository.GroupRepository
 import chat.vostok.android.core.repository.MessageRepository
 import chat.vostok.android.core.repository.MediaRepository
 import chat.vostok.android.core.storage.MediaCache
+import chat.vostok.android.core.storage.SecurePreferencesFactory
 import chat.vostok.android.core.storage.SessionStore
 import chat.vostok.android.core.storage.VostokDatabase
 import java.security.MessageDigest
@@ -28,10 +29,14 @@ class AppContainer(context: Context) {
     val apiClient = ApiClient(baseUrl = BuildConfig.VOSTOK_BASE_URL) { tokenProvider.get() }
     val database = VostokDatabase.getInstance(context, deriveDatabasePassphrase())
     val mediaCache = MediaCache(context)
+    val secureStorageStatus = SecurePreferencesFactory.currentStatus(context)
+    val signingStorageSummary = keyManager.signingStorageSummary()
     val webSocketManager = WebSocketManager(socketUrl = BuildConfig.VOSTOK_SOCKET_URL)
     val signalSessionRuntime = SignalSessionRuntime(
         apiClient = apiClient,
-        signalSessionDao = database.signalSessionDao()
+        signalSessionDao = database.signalSessionDao(),
+        keyManager = keyManager,
+        sessionStore = sessionStore
     )
 
     val authRepository = AuthRepository(

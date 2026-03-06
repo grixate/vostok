@@ -260,6 +260,36 @@ struct MessagesResponse: Codable {
     let messages: [MessageDTO]
 }
 
+struct MarkChatReadRequest: Codable {
+    let lastReadMessageID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case lastReadMessageID = "last_read_message_id"
+    }
+}
+
+struct ChatReadStateDTO: Codable, Equatable {
+    let chatID: String
+    let deviceID: String
+    let lastReadMessageID: String?
+    let readAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case chatID = "chat_id"
+        case deviceID = "device_id"
+        case lastReadMessageID = "last_read_message_id"
+        case readAt = "read_at"
+    }
+}
+
+struct ChatReadStateResponse: Codable {
+    let readState: ChatReadStateDTO
+
+    enum CodingKeys: String, CodingKey {
+        case readState = "read_state"
+    }
+}
+
 struct MessageResponse: Codable {
     let message: MessageDTO
 }

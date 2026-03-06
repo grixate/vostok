@@ -75,6 +75,12 @@ interface ApiEndpoints {
     @GET("/api/v1/chats/{chat_id}/messages")
     suspend fun messages(@Path("chat_id") chatId: String): MessagesResponse
 
+    @POST("/api/v1/chats/{chat_id}/read")
+    suspend fun markChatRead(
+        @Path("chat_id") chatId: String,
+        @Body request: MarkChatReadRequest
+    ): ChatReadStateResponse
+
     @GET("/api/v1/chats/{chat_id}/recipient-devices")
     suspend fun recipientDevices(@Path("chat_id") chatId: String): RecipientDevicesResponse
 
@@ -151,6 +157,9 @@ interface ApiEndpoints {
 
     @POST("/api/v1/devices/{device_id}/revoke")
     suspend fun revokeDevice(@Path("device_id") deviceId: String): DeviceEnvelopeResponse
+
+    @POST("/api/v1/devices/push-token")
+    suspend fun updatePushToken(@Body request: UpdatePushTokenRequest): DeviceEnvelopeResponse
 
     @GET("/api/v1/chats/{chat_id}/calls/active")
     suspend fun activeCall(@Path("chat_id") chatId: String): ActiveCallResponse
@@ -408,6 +417,7 @@ data class MessageDto(
     @Json(name = "pinned_at") val pinnedAt: String? = null,
     val header: String? = null,
     val ciphertext: String? = null,
+    @Json(name = "recipient_envelope") val recipientEnvelope: String? = null,
     @Json(name = "reply_to_message_id") val replyToMessageId: String? = null,
     @Json(name = "edited_at") val editedAt: String? = null,
     @Json(name = "deleted_at") val deletedAt: String? = null,
@@ -417,6 +427,21 @@ data class MessageDto(
 
 data class MessagesResponse(
     val messages: List<MessageDto>
+)
+
+data class MarkChatReadRequest(
+    @Json(name = "last_read_message_id") val lastReadMessageId: String? = null
+)
+
+data class ChatReadStateDto(
+    @Json(name = "chat_id") val chatId: String,
+    @Json(name = "device_id") val deviceId: String,
+    @Json(name = "last_read_message_id") val lastReadMessageId: String? = null,
+    @Json(name = "read_at") val readAt: String? = null
+)
+
+data class ChatReadStateResponse(
+    @Json(name = "read_state") val readState: ChatReadStateDto
 )
 
 data class RecipientDeviceDto(
@@ -430,15 +455,31 @@ data class RecipientDevicesResponse(
 )
 
 data class SessionBootstrapRequest(
-    @Json(name = "peer_device_id") val peerDeviceId: String
+    @Json(name = "peer_device_id") val peerDeviceId: String? = null,
+    @Json(name = "initiator_ephemeral_keys") val initiatorEphemeralKeys: Map<String, String>? = null
 )
 
 data class ChatSessionDto(
     val id: String,
     @Json(name = "chat_id") val chatId: String,
     val status: String,
+    @Json(name = "established_at") val establishedAt: String? = null,
+    @Json(name = "superseded_at") val supersededAt: String? = null,
+    @Json(name = "establishment_state") val establishmentState: String? = null,
+    @Json(name = "session_state") val sessionState: String? = null,
+    @Json(name = "handshake_hash") val handshakeHash: String? = null,
     @Json(name = "recipient_device_id") val recipientDeviceId: String,
-    @Json(name = "initiator_device_id") val initiatorDeviceId: String
+    @Json(name = "initiator_device_id") val initiatorDeviceId: String,
+    @Json(name = "initiator_identity_public_key") val initiatorIdentityPublicKey: String? = null,
+    @Json(name = "initiator_encryption_public_key") val initiatorEncryptionPublicKey: String? = null,
+    @Json(name = "initiator_ephemeral_public_key") val initiatorEphemeralPublicKey: String? = null,
+    @Json(name = "initiator_signed_prekey") val initiatorSignedPrekey: String? = null,
+    @Json(name = "initiator_signed_prekey_signature") val initiatorSignedPrekeySignature: String? = null,
+    @Json(name = "recipient_identity_public_key") val recipientIdentityPublicKey: String? = null,
+    @Json(name = "recipient_encryption_public_key") val recipientEncryptionPublicKey: String? = null,
+    @Json(name = "recipient_signed_prekey") val recipientSignedPrekey: String? = null,
+    @Json(name = "recipient_signed_prekey_signature") val recipientSignedPrekeySignature: String? = null,
+    @Json(name = "recipient_one_time_prekey") val recipientOneTimePrekey: String? = null
 )
 
 data class SessionBootstrapResponse(
@@ -536,7 +577,9 @@ data class DeviceDto(
     @Json(name = "revoked_at") val revokedAt: String? = null,
     @Json(name = "last_active_at") val lastActiveAt: String? = null,
     @Json(name = "inserted_at") val insertedAt: String? = null,
-    @Json(name = "one_time_prekey_count") val oneTimePrekeyCount: Int = 0
+    @Json(name = "one_time_prekey_count") val oneTimePrekeyCount: Int = 0,
+    @Json(name = "push_provider") val pushProvider: String? = null,
+    @Json(name = "push_token_updated_at") val pushTokenUpdatedAt: String? = null
 )
 
 data class DevicesResponse(
@@ -545,6 +588,11 @@ data class DevicesResponse(
 
 data class DeviceEnvelopeResponse(
     val device: DeviceDto
+)
+
+data class UpdatePushTokenRequest(
+    @Json(name = "push_provider") val pushProvider: String,
+    @Json(name = "push_token") val pushToken: String
 )
 
 data class CallDto(

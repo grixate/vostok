@@ -3,7 +3,9 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.vostokContainer) private var container
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("vostok.settings.appearance") private var appearanceSetting = "system"
+    @StateObject private var networkMonitor = NetworkPathMonitor()
 
     var body: some View {
         if case let .failed(message) = appState.bootstrapState {
@@ -27,6 +29,17 @@ struct RootView: View {
         } else {
             content
                 .preferredColorScheme(preferredColorScheme)
+                .task {
+                    networkMonitor.start()
+                }
+                .onChange(of: scenePhase) { newValue in
+                    handleScenePhaseChange(newValue)
+                }
+                .onChange(of: networkMonitor.isAvailable) { isAvailable in
+                    Task {
+                        await container.realtimeClient.updateNetworkAvailability(isAvailable)
+                    }
+                }
         }
     }
 
@@ -51,6 +64,22 @@ struct RootView: View {
             return .dark
         default:
             return nil
+        }
+    }
+
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        guard case .authenticated = appState.sessionState else { return }
+        Task {
+            switch phase {
+            case .active:
+                await container.realtimeClient.resume()
+            case .background:
+                await container.realtimeClient.pause()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 }

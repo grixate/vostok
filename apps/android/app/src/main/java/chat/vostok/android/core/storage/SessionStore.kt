@@ -11,7 +11,7 @@ data class StoredSession(
 )
 
 class SessionStore(context: Context) {
-    private val prefs = context.getSharedPreferences("vostok_session", Context.MODE_PRIVATE)
+    private val prefs = SecurePreferencesFactory.create(context, "vostok_session")
 
     fun save(session: StoredSession) {
         prefs.edit()

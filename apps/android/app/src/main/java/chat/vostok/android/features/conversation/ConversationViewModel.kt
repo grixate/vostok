@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import chat.vostok.android.core.network.MessageDto
 import chat.vostok.android.core.network.WebSocketManager
+import chat.vostok.android.core.repository.MediaRepository
 import chat.vostok.android.core.repository.MessageRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ data class ConversationUiState(
 
 class ConversationViewModel(
     private val messageRepository: MessageRepository,
+    private val mediaRepository: MediaRepository,
     private val webSocketManager: WebSocketManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ConversationUiState())
@@ -55,6 +57,7 @@ class ConversationViewModel(
                 messageRepository.flushPending(chatId)
                 messageRepository.syncChat(chatId)
             }.onSuccess { messages ->
+                syncReadState(chatId, messages)
                 _uiState.value = _uiState.value.copy(messages = messages, isLoading = false)
             }.onFailure { throwable ->
                 _uiState.value = _uiState.value.copy(
@@ -122,12 +125,12 @@ class ConversationViewModel(
         }
     }
 
-    fun sendVoice(chatId: String, recipientDeviceIds: List<String>) {
+    fun sendVoice(chatId: String, recipientDeviceIds: List<String>, durationSeconds: Int = 4) {
         viewModelScope.launch {
             runCatching {
                 messageRepository.sendVoiceNoteMessage(
                     chatId = chatId,
-                    durationSeconds = 4,
+                    durationSeconds = durationSeconds.coerceAtLeast(1),
                     recipientDeviceIds = recipientDeviceIds
                 )
             }.onSuccess {
@@ -138,12 +141,76 @@ class ConversationViewModel(
         }
     }
 
-    fun sendRoundVideo(chatId: String, recipientDeviceIds: List<String>) {
+    fun sendVoiceUpload(
+        chatId: String,
+        filename: String,
+        contentType: String,
+        payload: ByteArray,
+        durationSeconds: Int,
+        recipientDeviceIds: List<String>
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val upload = mediaRepository.uploadBytes(
+                    filename = filename,
+                    contentType = contentType,
+                    payload = payload,
+                    mediaKind = "audio"
+                )
+                messageRepository.sendVoiceNoteUploadMessage(
+                    chatId = chatId,
+                    uploadId = upload.id,
+                    filename = upload.filename,
+                    contentType = upload.contentType,
+                    durationSeconds = durationSeconds.coerceAtLeast(1),
+                    recipientDeviceIds = recipientDeviceIds
+                )
+            }.onSuccess {
+                load(chatId)
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(error = throwable.message ?: "Failed to send voice")
+            }
+        }
+    }
+
+    fun sendRoundVideo(chatId: String, recipientDeviceIds: List<String>, durationSeconds: Int = 6) {
         viewModelScope.launch {
             runCatching {
                 messageRepository.sendRoundVideoMessage(
                     chatId = chatId,
-                    durationSeconds = 6,
+                    durationSeconds = durationSeconds.coerceAtLeast(1),
+                    recipientDeviceIds = recipientDeviceIds
+                )
+            }.onSuccess {
+                load(chatId)
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(error = throwable.message ?: "Failed to send video")
+            }
+        }
+    }
+
+    fun sendRoundVideoUpload(
+        chatId: String,
+        filename: String,
+        contentType: String,
+        payload: ByteArray,
+        durationSeconds: Int,
+        recipientDeviceIds: List<String>
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val upload = mediaRepository.uploadBytes(
+                    filename = filename,
+                    contentType = contentType,
+                    payload = payload,
+                    mediaKind = "video"
+                )
+                messageRepository.sendRoundVideoUploadMessage(
+                    chatId = chatId,
+                    uploadId = upload.id,
+                    filename = upload.filename,
+                    contentType = upload.contentType,
+                    durationSeconds = durationSeconds.coerceAtLeast(1),
                     recipientDeviceIds = recipientDeviceIds
                 )
             }.onSuccess {
@@ -158,15 +225,34 @@ class ConversationViewModel(
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
             webSocketManager.events.collect { event ->
-                if (event.topic == "chat:$chatId" && event.event == "message:new") {
-                    val messageId = event.payload.optString("message_id").takeIf { it.isNotBlank() }
-                    runCatching {
-                        messageRepository.ingestRealtimeMessage(chatId, messageId)
-                    }.onSuccess { updated ->
-                        _uiState.value = _uiState.value.copy(messages = updated)
+                when {
+                    event.event == "socket:reconnected" -> {
+                        runCatching {
+                            messageRepository.syncChat(chatId)
+                        }.onSuccess { updated ->
+                            syncReadState(chatId, updated)
+                            _uiState.value = _uiState.value.copy(messages = updated, error = null)
+                        }
+                    }
+
+                    event.topic == "chat:$chatId" && event.event == "message:new" -> {
+                        val messageId = event.payload.optString("message_id").takeIf { it.isNotBlank() }
+                        runCatching {
+                            messageRepository.ingestRealtimeMessage(chatId, messageId)
+                        }.onSuccess { updated ->
+                            syncReadState(chatId, updated)
+                            _uiState.value = _uiState.value.copy(messages = updated)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun syncReadState(chatId: String, messages: List<MessageDto>) {
+        val lastMessageId = messages.lastOrNull()?.id ?: return
+        runCatching {
+            messageRepository.markChatRead(chatId = chatId, lastReadMessageId = lastMessageId)
         }
     }
 
@@ -177,11 +263,12 @@ class ConversationViewModel(
 
     class Factory(
         private val messageRepository: MessageRepository,
+        private val mediaRepository: MediaRepository,
         private val webSocketManager: WebSocketManager
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ConversationViewModel(messageRepository, webSocketManager) as T
+            return ConversationViewModel(messageRepository, mediaRepository, webSocketManager) as T
         }
     }
 }

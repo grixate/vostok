@@ -10,6 +10,14 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var authToken: String?
+    private var connectionState: RealtimeConnectionState = .disconnected
+    private var reconnectAttempt: Int = 0
+    private var lastDisconnectReason: String?
+    private var lastInboundAt: Date?
+    private var diagnosticLog: [String] = []
+    private var isPaused = false
+    private var networkAvailable = true
+    private let maxDiagnosticLogLines = 24
 
     private let stream: AsyncStream<RealtimeEvent>
     private let continuation: AsyncStream<RealtimeEvent>.Continuation
@@ -27,17 +35,93 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
 
     func connect(token: String) async {
         authToken = token
+        isPaused = false
+        recordDiagnostic("connect() called")
+        guard networkAvailable else {
+            transition(to: .disconnected)
+            recordDiagnostic("connect aborted: network unavailable")
+            return
+        }
         guard task == nil else { return }
+        transition(to: .connecting)
         _ = await establishConnection(token: token, emitConnected: true)
         await rejoinStoredTopics()
     }
 
     func disconnect() async {
         authToken = nil
+        isPaused = false
+        reconnectAttempt = 0
         reconnectTask?.cancel()
         reconnectTask = nil
+        recordDiagnostic("disconnect() called")
         teardownSocket(emitDisconnected: true)
         topics.removeAll()
+    }
+
+    func pause() async {
+        guard !isPaused else { return }
+        isPaused = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        recordDiagnostic("pause() called")
+        teardownSocket(emitDisconnected: false)
+        transition(to: .paused)
+    }
+
+    func resume() async {
+        guard isPaused else { return }
+        isPaused = false
+        recordDiagnostic("resume() called")
+        guard let authToken, task == nil, networkAvailable else { return }
+        transition(to: .reconnecting)
+        _ = await establishConnection(token: authToken, emitConnected: true)
+        await rejoinStoredTopics()
+    }
+
+    func updateNetworkAvailability(_ isAvailable: Bool) async {
+        guard networkAvailable != isAvailable else { return }
+        networkAvailable = isAvailable
+        recordDiagnostic("network availability changed: \(isAvailable)")
+
+        if isAvailable {
+            guard !isPaused, let _ = authToken, task == nil else { return }
+            await scheduleReconnectIfNeeded(immediate: true)
+            return
+        }
+
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        if task != nil {
+            lastDisconnectReason = "network_unavailable"
+            teardownSocket(emitDisconnected: true)
+        } else {
+            transition(to: .disconnected)
+        }
+    }
+
+    func forceReconnect(reason: String) async {
+        guard authToken != nil else { return }
+        recordDiagnostic("forceReconnect() reason=\(reason)")
+        teardownSocket(emitDisconnected: true)
+        await scheduleReconnectIfNeeded(immediate: true)
+    }
+
+    func clearDiagnosticLog() async {
+        diagnosticLog.removeAll()
+        recordDiagnostic("diagnostic log cleared")
+    }
+
+    func snapshotDiagnostics() async -> RealtimeDiagnosticsSnapshot {
+        .init(
+            connectionState: connectionState,
+            reconnectAttempt: reconnectAttempt,
+            networkAvailable: networkAvailable,
+            lastDisconnectReason: lastDisconnectReason,
+            lastInboundAt: lastInboundAt,
+            joinedTopics: orderedTopicsForRejoin(topics),
+            recentLogLines: diagnosticLog
+        )
     }
 
     func join(topic: String) async {
@@ -64,6 +148,11 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
     private func heartbeatLoop() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(25))
+            if shouldMarkSocketStale(lastInboundAt: lastInboundAt, now: .now) {
+                recordDiagnostic("socket marked stale after 90s idle")
+                task?.cancel(with: .goingAway, reason: nil)
+                return
+            }
             await sendPhoenix(topic: "phoenix", event: "heartbeat", payload: [:])
         }
     }
@@ -74,6 +163,7 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
             do {
                 let message = try await task.receive()
                 if case let .string(text) = message {
+                    lastInboundAt = Date()
                     await parseInbound(text: text)
                 }
             } catch {
@@ -84,6 +174,7 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
     }
 
     private func establishConnection(token: String, emitConnected: Bool) async -> Bool {
+        guard networkAvailable else { return false }
         var components = URLComponents(url: socketURL, resolvingAgainstBaseURL: false)
         var items = components?.queryItems ?? []
         items.append(URLQueryItem(name: "token", value: token))
@@ -96,8 +187,13 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
         ws.resume()
         self.session = session
         task = ws
+        lastInboundAt = Date()
+        lastDisconnectReason = nil
+        recordDiagnostic("opening socket")
 
         if emitConnected {
+            reconnectAttempt = 0
+            transition(to: .connected)
             continuation.yield(.connected)
         }
 
@@ -121,23 +217,34 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
         session = nil
 
         if emitDisconnected {
+            if !isPaused {
+                transition(to: .disconnected)
+            }
             continuation.yield(.disconnected)
         }
     }
 
     private func handleConnectionFailure() async {
+        lastDisconnectReason = "socket_failure"
+        recordDiagnostic("socket failure")
         teardownSocket(emitDisconnected: true)
         await scheduleReconnectIfNeeded()
     }
 
-    private func scheduleReconnectIfNeeded() async {
-        guard reconnectTask == nil, let token = authToken else { return }
+    private func scheduleReconnectIfNeeded(immediate: Bool = false) async {
+        guard reconnectTask == nil,
+              let token = authToken,
+              shouldScheduleReconnectAfterDrop(isPaused: isPaused, networkAvailable: networkAvailable, hasAuthToken: true)
+        else {
+            return
+        }
+        transition(to: stateAfterSocketDrop(isPaused: isPaused, networkAvailable: networkAvailable, hasAuthToken: true))
         reconnectTask = Task { [token] in
-            await self.reconnectLoop(token: token)
+            await self.reconnectLoop(token: token, immediate: immediate)
         }
     }
 
-    private func reconnectLoop(token: String) async {
+    private func reconnectLoop(token: String, immediate: Bool) async {
         defer { reconnectTask = nil }
 
         for attempt in 0..<5 {
@@ -145,12 +252,22 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
                 return
             }
 
-            let delay = min(2 << attempt, 30)
-            try? await Task.sleep(for: .seconds(delay))
+            if !networkAvailable {
+                transition(to: .disconnected)
+                return
+            }
+
+            reconnectAttempt = attempt + 1
+            let delay = immediate && attempt == 0 ? 0 : reconnectDelaySeconds(attempt: attempt + 1)
+            recordDiagnostic("reconnect attempt \(reconnectAttempt) in \(delay)s")
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
 
             guard task == nil else { return }
             let connected = await establishConnection(token: token, emitConnected: true)
             if connected {
+                recordDiagnostic("reconnect attempt \(reconnectAttempt) succeeded")
                 await rejoinStoredTopics()
                 return
             }
@@ -159,10 +276,41 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
 
     private func rejoinStoredTopics() async {
         guard task != nil else { return }
-        for topic in topics.sorted() {
+        for topic in orderedTopicsForRejoin(topics) {
             await sendPhoenix(topic: topic, event: "phx_join", payload: [:])
             continuation.yield(.joined(topic: topic))
         }
+    }
+
+    nonisolated internal func reconnectDelaySeconds(attempt: Int) -> Int {
+        let normalizedAttempt = max(1, attempt)
+        return min(2 << (normalizedAttempt - 1), 30)
+    }
+
+    nonisolated internal func shouldScheduleReconnectAfterDrop(isPaused: Bool, networkAvailable: Bool, hasAuthToken: Bool) -> Bool {
+        !isPaused && networkAvailable && hasAuthToken
+    }
+
+    nonisolated internal func stateAfterSocketDrop(isPaused: Bool, networkAvailable: Bool, hasAuthToken: Bool) -> RealtimeConnectionState {
+        if isPaused {
+            return .paused
+        }
+        if !networkAvailable {
+            return .disconnected
+        }
+        if hasAuthToken {
+            return .reconnecting
+        }
+        return .disconnected
+    }
+
+    nonisolated internal func shouldMarkSocketStale(lastInboundAt: Date?, now: Date) -> Bool {
+        guard let lastInboundAt else { return false }
+        return now.timeIntervalSince(lastInboundAt) > 90
+    }
+
+    nonisolated internal func orderedTopicsForRejoin(_ topics: Set<String>) -> [String] {
+        topics.sorted()
     }
 
     private func nextRef() -> String {
@@ -183,6 +331,8 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
         do {
             try await task.send(.string(text))
         } catch {
+            lastDisconnectReason = "send_failure"
+            recordDiagnostic("send failed for \(topic):\(event)")
             await handleConnectionFailure()
         }
     }
@@ -214,6 +364,20 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
             continuation.yield(.callSignal(chatID: topic.replacingOccurrences(of: "call:", with: "")))
         default:
             continuation.yield(.raw(topic: topic, event: event, payload: payload.mapValues { AnyHashable(String(describing: $0)) }))
+        }
+    }
+
+    private func transition(to state: RealtimeConnectionState) {
+        guard connectionState != state else { return }
+        connectionState = state
+        recordDiagnostic("state -> \(state.rawValue)")
+    }
+
+    private func recordDiagnostic(_ line: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        diagnosticLog.append("[\(timestamp)] \(line)")
+        if diagnosticLog.count > maxDiagnosticLogLines {
+            diagnosticLog.removeFirst(diagnosticLog.count - maxDiagnosticLogLines)
         }
     }
 }

@@ -186,6 +186,10 @@ class CallViewModel(
         realtimeJob = viewModelScope.launch {
             webSocketManager.events.collect { event ->
                 when (event.event) {
+                    "socket:reconnected" -> {
+                        refresh()
+                    }
+
                     "call:state" -> {
                         val currentCallId = _uiState.value.callId
                         val payloadCallId = event.payload

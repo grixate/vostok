@@ -8,6 +8,22 @@ final class VostokDatabase {
         let chatID: String
         let peerDeviceID: String
         let status: String
+        let signalAddressName: String
+        let signalAddressDeviceID: Int
+        let sessionPayload: String?
+        let updatedAt: String
+    }
+
+    struct SenderKeyRecord: Codable, Equatable, Identifiable {
+        let id: String
+        let chatID: String
+        let ownerDeviceID: String
+        let recipientDeviceID: String
+        let keyID: String
+        let senderKeyEpoch: Int
+        let algorithm: String
+        let status: String
+        let wrappedSenderKey: String
         let updatedAt: String
     }
 
@@ -31,8 +47,6 @@ final class VostokDatabase {
                 migrator: migrator
             )
         } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_NOTADB {
-            // Previous local builds may have created a plaintext file at this path.
-            // Reset files and bootstrap a fresh SQLCipher database.
             try Self.removeDatabaseFiles(at: resolvedDatabaseURL)
             dbQueue = try Self.openEncryptedQueue(
                 databaseURL: resolvedDatabaseURL,
@@ -178,7 +192,8 @@ final class VostokDatabase {
                 guard let row = try Row.fetchOne(
                     db,
                     sql: """
-                    SELECT session_id, chat_id, peer_device_id, status, updated_at
+                    SELECT session_id, chat_id, peer_device_id, status, signal_address_name,
+                           signal_address_device_id, session_payload, updated_at
                     FROM signal_session
                     WHERE chat_id = ? AND peer_device_id = ?
                     LIMIT 1
@@ -187,26 +202,31 @@ final class VostokDatabase {
                 ) else {
                     return nil
                 }
-
-                guard let sessionID: String = row["session_id"],
-                      let loadedChatID: String = row["chat_id"],
-                      let loadedPeerDeviceID: String = row["peer_device_id"],
-                      let status: String = row["status"],
-                      let updatedAt: String = row["updated_at"]
-                else {
-                    return nil
-                }
-
-                return SessionRecord(
-                    sessionID: sessionID,
-                    chatID: loadedChatID,
-                    peerDeviceID: loadedPeerDeviceID,
-                    status: status,
-                    updatedAt: updatedAt
-                )
+                return mapSessionRecord(row)
             }
         } catch {
             return nil
+        }
+    }
+
+    func sessionRecords(chatID: String) -> [SessionRecord] {
+        do {
+            return try dbQueue.read { db in
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT session_id, chat_id, peer_device_id, status, signal_address_name,
+                           signal_address_device_id, session_payload, updated_at
+                    FROM signal_session
+                    WHERE chat_id = ?
+                    ORDER BY updated_at DESC, peer_device_id ASC
+                    """,
+                    arguments: [chatID]
+                )
+                return rows.compactMap(mapSessionRecord)
+            }
+        } catch {
+            return []
         }
     }
 
@@ -215,11 +235,23 @@ final class VostokDatabase {
             try dbQueue.write { db in
                 try db.execute(
                     sql: """
-                    INSERT INTO signal_session (session_id, chat_id, peer_device_id, status, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO signal_session (
+                        session_id,
+                        chat_id,
+                        peer_device_id,
+                        status,
+                        signal_address_name,
+                        signal_address_device_id,
+                        session_payload,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(chat_id, peer_device_id) DO UPDATE SET
                       session_id = excluded.session_id,
                       status = excluded.status,
+                      signal_address_name = excluded.signal_address_name,
+                      signal_address_device_id = excluded.signal_address_device_id,
+                      session_payload = excluded.session_payload,
                       updated_at = excluded.updated_at
                     """,
                     arguments: [
@@ -227,6 +259,9 @@ final class VostokDatabase {
                         record.chatID,
                         record.peerDeviceID,
                         record.status,
+                        record.signalAddressName,
+                        record.signalAddressDeviceID,
+                        record.sessionPayload,
                         record.updatedAt
                     ]
                 )
@@ -236,8 +271,161 @@ final class VostokDatabase {
         }
     }
 
+    func senderKeyRecords(chatID: String) -> [SenderKeyRecord] {
+        do {
+            return try dbQueue.read { db in
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, chat_id, owner_device_id, recipient_device_id, key_id,
+                           sender_key_epoch, algorithm, status, wrapped_sender_key, updated_at
+                    FROM sender_key
+                    WHERE chat_id = ?
+                    ORDER BY sender_key_epoch DESC, owner_device_id ASC, recipient_device_id ASC
+                    """,
+                    arguments: [chatID]
+                )
+                return rows.compactMap(mapSenderKeyRecord)
+            }
+        } catch {
+            return []
+        }
+    }
+
+    func senderKeyRecord(chatID: String, ownerDeviceID: String, recipientDeviceID: String) -> SenderKeyRecord? {
+        do {
+            return try dbQueue.read { db in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                    SELECT id, chat_id, owner_device_id, recipient_device_id, key_id,
+                           sender_key_epoch, algorithm, status, wrapped_sender_key, updated_at
+                    FROM sender_key
+                    WHERE chat_id = ? AND owner_device_id = ? AND recipient_device_id = ?
+                    ORDER BY sender_key_epoch DESC
+                    LIMIT 1
+                    """,
+                    arguments: [chatID, ownerDeviceID, recipientDeviceID]
+                ) else {
+                    return nil
+                }
+                return mapSenderKeyRecord(row)
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    func saveSenderKeyRecords(_ records: [SenderKeyRecord]) {
+        guard !records.isEmpty else { return }
+
+        do {
+            try dbQueue.write { db in
+                for record in records {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO sender_key (
+                            id,
+                            chat_id,
+                            owner_device_id,
+                            recipient_device_id,
+                            key_id,
+                            sender_key_epoch,
+                            algorithm,
+                            status,
+                            wrapped_sender_key,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                          chat_id = excluded.chat_id,
+                          owner_device_id = excluded.owner_device_id,
+                          recipient_device_id = excluded.recipient_device_id,
+                          key_id = excluded.key_id,
+                          sender_key_epoch = excluded.sender_key_epoch,
+                          algorithm = excluded.algorithm,
+                          status = excluded.status,
+                          wrapped_sender_key = excluded.wrapped_sender_key,
+                          updated_at = excluded.updated_at
+                        """,
+                        arguments: [
+                            record.id,
+                            record.chatID,
+                            record.ownerDeviceID,
+                            record.recipientDeviceID,
+                            record.keyID,
+                            record.senderKeyEpoch,
+                            record.algorithm,
+                            record.status,
+                            record.wrappedSenderKey,
+                            record.updatedAt
+                        ]
+                    )
+                }
+            }
+        } catch {
+            // Best-effort local cache only.
+        }
+    }
+
+    private func mapSessionRecord(_ row: Row) -> SessionRecord? {
+        guard let sessionID: String = row["session_id"],
+              let chatID: String = row["chat_id"],
+              let peerDeviceID: String = row["peer_device_id"],
+              let status: String = row["status"],
+              let signalAddressName: String = row["signal_address_name"],
+              let signalAddressDeviceID: Int = row["signal_address_device_id"],
+              let updatedAt: String = row["updated_at"]
+        else {
+            return nil
+        }
+
+        let sessionPayload: String? = row["session_payload"]
+
+        return SessionRecord(
+            sessionID: sessionID,
+            chatID: chatID,
+            peerDeviceID: peerDeviceID,
+            status: status,
+            signalAddressName: signalAddressName,
+            signalAddressDeviceID: signalAddressDeviceID,
+            sessionPayload: sessionPayload,
+            updatedAt: updatedAt
+        )
+    }
+
+    private func mapSenderKeyRecord(_ row: Row) -> SenderKeyRecord? {
+        guard let id: String = row["id"],
+              let chatID: String = row["chat_id"],
+              let ownerDeviceID: String = row["owner_device_id"],
+              let recipientDeviceID: String = row["recipient_device_id"],
+              let keyID: String = row["key_id"],
+              let senderKeyEpoch: Int = row["sender_key_epoch"],
+              let algorithm: String = row["algorithm"],
+              let status: String = row["status"],
+              let wrappedSenderKey: String = row["wrapped_sender_key"],
+              let updatedAt: String = row["updated_at"]
+        else {
+            return nil
+        }
+
+        return SenderKeyRecord(
+            id: id,
+            chatID: chatID,
+            ownerDeviceID: ownerDeviceID,
+            recipientDeviceID: recipientDeviceID,
+            keyID: keyID,
+            senderKeyEpoch: senderKeyEpoch,
+            algorithm: algorithm,
+            status: status,
+            wrappedSenderKey: wrappedSenderKey,
+            updatedAt: updatedAt
+        )
+    }
+
     private static func makeMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
+
         migrator.registerMigration("v1_cache_and_sessions") { db in
             try db.create(table: "chat_cache", ifNotExists: true) { table in
                 table.column("chat_id", .text).notNull().primaryKey()
@@ -268,10 +456,51 @@ final class VostokDatabase {
                 table.column("chat_id", .text).notNull()
                 table.column("peer_device_id", .text).notNull()
                 table.column("status", .text).notNull()
+                table.column("signal_address_name", .text).notNull().defaults(to: "")
+                table.column("signal_address_device_id", .integer).notNull().defaults(to: 1)
+                table.column("session_payload", .text)
                 table.column("updated_at", .text).notNull()
                 table.uniqueKey(["chat_id", "peer_device_id"])
             }
         }
+
+        migrator.registerMigration("v2_signal_runtime") { db in
+            let existingSessionColumns = try db.columns(in: "signal_session").map(\.name)
+
+            if !existingSessionColumns.contains("signal_address_name") {
+                try db.alter(table: "signal_session") { table in
+                    table.add(column: "signal_address_name", .text).notNull().defaults(to: "")
+                }
+            }
+
+            if !existingSessionColumns.contains("signal_address_device_id") {
+                try db.alter(table: "signal_session") { table in
+                    table.add(column: "signal_address_device_id", .integer).notNull().defaults(to: 1)
+                }
+            }
+
+            if !existingSessionColumns.contains("session_payload") {
+                try db.alter(table: "signal_session") { table in
+                    table.add(column: "session_payload", .text)
+                }
+            }
+
+            try db.create(table: "sender_key", ifNotExists: true) { table in
+                table.column("id", .text).notNull().primaryKey()
+                table.column("chat_id", .text).notNull()
+                table.column("owner_device_id", .text).notNull()
+                table.column("recipient_device_id", .text).notNull()
+                table.column("key_id", .text).notNull()
+                table.column("sender_key_epoch", .integer).notNull()
+                table.column("algorithm", .text).notNull()
+                table.column("status", .text).notNull()
+                table.column("wrapped_sender_key", .text).notNull()
+                table.column("updated_at", .text).notNull()
+                table.uniqueKey(["chat_id", "owner_device_id", "recipient_device_id", "key_id"])
+            }
+            try db.create(index: "idx_sender_key_chat_owner", on: "sender_key", columns: ["chat_id", "owner_device_id"], ifNotExists: true)
+        }
+
         return migrator
     }
 

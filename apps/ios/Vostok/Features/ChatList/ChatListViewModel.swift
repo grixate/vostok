@@ -169,6 +169,19 @@ final class ChatListViewModel: ObservableObject {
         applyChatPresentation()
     }
 
+    func syncReadState(token: String, chatID: String, lastReadMessageID: String? = nil) async {
+        markChatRead(chatID: chatID)
+        do {
+            try await messageRepository.markChatRead(
+                token: token,
+                chatID: chatID,
+                lastReadMessageID: lastReadMessageID
+            )
+        } catch {
+            // Keep local state responsive even if the network update fails.
+        }
+    }
+
     private func refreshIncremental(chatID: String, messageID: String) async {
         guard let token = sessionToken else { return }
         do {

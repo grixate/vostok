@@ -88,7 +88,6 @@
 		F00D286BFF95976ADB77EA32 /* AttachmentCipherPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */; };
 		F2741111828906D99DE77DA2 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699C016BC27DAF6912CF5F61 /* APIClient.swift */; };
 		F3A69B66AB260E1870C10DB3 /* Environment.plist in Resources */ = {isa = PBXBuildFile; fileRef = D3C15430D2050E53C6139F71 /* Environment.plist */; };
-		F430BE213E36B2CFD7BADE3E /* SecureCodableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */; };
 		FCA4CE88794CC2BAF2724D79 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EEB65E83815B4A53ADD965 /* AppContainer.swift */; };
 		FF6EC67021E12C50CAF4A829 /* PhoenixRealtimeClientProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */; };
 		FF814D39FF277ACCE4708FF8 /* VoicePlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */; };
@@ -144,7 +143,6 @@
 		545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoenixRealtimeClientProtocol.swift; sourceTree = "<group>"; };
 		54ED52862BFD7928ED8B51EE /* GRDBSQLCipher */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GRDBSQLCipher; path = ThirdParty/GRDBSQLCipher; sourceTree = SOURCE_ROOT; };
 		5597C37B87A0EF99E2630D7A /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
-		590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureCodableStore.swift; sourceTree = "<group>"; };
 		59204B84C0C04F7FBC8A886D /* RealtimeMessageEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeMessageEvent.swift; sourceTree = "<group>"; };
 		5F84CC698D47AB4F748D145C /* AppRouteParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteParser.swift; sourceTree = "<group>"; };
 		651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
@@ -262,7 +260,6 @@
 			children = (
 				9965ABF7956BDE38CFB26A57 /* Database.swift */,
 				D2857C5741AF24E4AE67C753 /* Repositories.swift */,
-				590C522687A671CB5B9BEF55 /* SecureCodableStore.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -718,7 +715,6 @@
 				9DF738B4E3E8D9BB1F65055E /* Repositories.swift in Sources */,
 				2C312A4D1A6A24A4316B1746 /* RootView.swift in Sources */,
 				C22D99EA526965AD9CAA90DC /* RoundVideoRecorder.swift in Sources */,
-				F430BE213E36B2CFD7BADE3E /* SecureCodableStore.swift in Sources */,
 				1356D9B37B941D52E95CE5DD /* SettingsView.swift in Sources */,
 				7BC55AD29E580E2492FD8158 /* SettingsViewModel.swift in Sources */,
 				CE88AB2922313C6AB37F682B /* SignalCryptoProvider.swift in Sources */,

@@ -88,7 +88,18 @@ struct VostokApp: App {
                 // Keep current behavior fail-safe; the app remains usable if quick-reply fails.
                 return true
             }
-        case .markRead:
+        case let .markRead(chatID, messageID):
+            do {
+                try await state.container.messageRepository.markChatRead(
+                    token: session.token,
+                    chatID: chatID,
+                    lastReadMessageID: messageID
+                )
+            } catch {
+                // Keep current behavior fail-safe; badge cleanup still matters if read sync fails.
+            }
+            let event = RealtimeChatReadEvent(chatID: chatID, messageID: messageID)
+            NotificationCenter.default.post(name: .vostokChatReadEvent, object: nil, userInfo: event.userInfo)
             UIApplication.shared.applicationIconBadgeNumber = max(UIApplication.shared.applicationIconBadgeNumber - 1, 0)
             return true
         }

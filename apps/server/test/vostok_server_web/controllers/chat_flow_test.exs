@@ -498,5 +498,36 @@ defmodule VostokServerWeb.ChatFlowTest do
                }
              ]
            } = json_response(messages_conn, 200)
+
+    mark_read_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/read", %{
+        last_read_message_id: reply_message_id
+      })
+
+    assert %{
+             "read_state" => %{
+               "chat_id" => ^chat_id,
+               "device_id" => ^device_id,
+               "last_read_message_id" => ^reply_message_id,
+               "read_at" => read_at
+             }
+           } = json_response(mark_read_conn, 200)
+
+    assert is_binary(read_at)
+
+    mark_read_without_cursor_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/chats/#{chat_id}/read", %{})
+
+    assert %{
+             "read_state" => %{
+               "chat_id" => ^chat_id,
+               "device_id" => ^device_id,
+               "last_read_message_id" => ^reply_message_id
+             }
+           } = json_response(mark_read_without_cursor_conn, 200)
   end
 end

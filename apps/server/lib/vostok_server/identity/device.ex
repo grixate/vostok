@@ -15,6 +15,9 @@ defmodule VostokServer.Identity.Device do
     field :encryption_public_key, :binary
     field :signed_prekey, :binary
     field :signed_prekey_signature, :binary
+    field :push_provider, :string
+    field :push_token, :string
+    field :push_token_updated_at, :utc_datetime_usec
     field :last_active_at, :utc_datetime_usec
     field :revoked_at, :utc_datetime_usec
 
@@ -34,6 +37,9 @@ defmodule VostokServer.Identity.Device do
       :encryption_public_key,
       :signed_prekey,
       :signed_prekey_signature,
+      :push_provider,
+      :push_token,
+      :push_token_updated_at,
       :last_active_at,
       :revoked_at
     ])

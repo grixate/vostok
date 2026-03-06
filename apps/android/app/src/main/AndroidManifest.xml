@@ -38,6 +38,10 @@
         <receiver
             android:name=".core.push.UnifiedPushReceiver"
             android:exported="true" />
+
+        <receiver
+            android:name=".core.push.PushActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

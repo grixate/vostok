@@ -87,14 +87,40 @@ class ApiClient(
 
     suspend fun messages(chatId: String): MessagesResponse = service.messages(chatId)
 
+    suspend fun markChatRead(chatId: String, lastReadMessageId: String? = null): ChatReadStateResponse =
+        service.markChatRead(
+            chatId,
+            MarkChatReadRequest(lastReadMessageId = lastReadMessageId)
+        )
+
     suspend fun recipientDevices(chatId: String): RecipientDevicesResponse =
         service.recipientDevices(chatId)
 
-    suspend fun sessionBootstrap(chatId: String, peerDeviceId: String): SessionBootstrapResponse =
-        service.sessionBootstrap(chatId, SessionBootstrapRequest(peerDeviceId))
+    suspend fun sessionBootstrap(
+        chatId: String,
+        initiatorEphemeralKeys: Map<String, String>,
+        peerDeviceId: String? = null
+    ): SessionBootstrapResponse =
+        service.sessionBootstrap(
+            chatId,
+            SessionBootstrapRequest(
+                peerDeviceId = peerDeviceId,
+                initiatorEphemeralKeys = initiatorEphemeralKeys
+            )
+        )
 
-    suspend fun sessionRekey(chatId: String, peerDeviceId: String): SessionBootstrapResponse =
-        service.sessionRekey(chatId, SessionBootstrapRequest(peerDeviceId))
+    suspend fun sessionRekey(
+        chatId: String,
+        initiatorEphemeralKeys: Map<String, String>,
+        peerDeviceId: String? = null
+    ): SessionBootstrapResponse =
+        service.sessionRekey(
+            chatId,
+            SessionBootstrapRequest(
+                peerDeviceId = peerDeviceId,
+                initiatorEphemeralKeys = initiatorEphemeralKeys
+            )
+        )
 
     suspend fun createMessage(chatId: String, request: CreateMessageRequest): MessageResponse =
         service.createMessage(chatId, request)
@@ -161,6 +187,14 @@ class ApiClient(
     suspend fun devices(): DevicesResponse = service.devices()
 
     suspend fun revokeDevice(deviceId: String): DeviceEnvelopeResponse = service.revokeDevice(deviceId)
+
+    suspend fun updatePushToken(pushProvider: String, pushToken: String): DeviceEnvelopeResponse =
+        service.updatePushToken(
+            UpdatePushTokenRequest(
+                pushProvider = pushProvider,
+                pushToken = pushToken
+            )
+        )
 
     suspend fun activeCall(chatId: String): ActiveCallResponse = service.activeCall(chatId)
 

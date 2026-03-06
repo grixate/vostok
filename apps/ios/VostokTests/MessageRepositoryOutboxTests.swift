@@ -47,6 +47,121 @@ final class MessageRepositoryOutboxTests: XCTestCase {
         XCTAssertEqual(messages.first?.clientID, clientID)
     }
 
+    func testDatabaseReopenPreservesSessionPayloadAndSenderKeys() async throws {
+        let database = try makeTestDatabase()
+        database.saveSessionRecord(
+            .init(
+                sessionID: "session-1",
+                chatID: "chat-crypto",
+                peerDeviceID: "device-2",
+                status: "active",
+                signalAddressName: "device-2",
+                signalAddressDeviceID: 77,
+                sessionPayload: Data("serialized-session".utf8).base64EncodedString(),
+                updatedAt: "2026-03-06T00:00:00Z"
+            )
+        )
+        database.saveSenderKeyRecords([
+            .init(
+                id: "sender-key-1",
+                chatID: "chat-crypto",
+                ownerDeviceID: "device-1",
+                recipientDeviceID: "device-2",
+                keyID: "key-1",
+                senderKeyEpoch: 1,
+                algorithm: "sender-key.v1",
+                status: "active",
+                wrappedSenderKey: Data("wrapped".utf8).base64EncodedString(),
+                updatedAt: "2026-03-06T00:00:00Z"
+            )
+        ])
+
+        let reopened = try VostokDatabase(databaseURL: tempDatabaseURL, passphrase: "test-passphrase")
+        let restoredSession = reopened.sessionRecord(chatID: "chat-crypto", peerDeviceID: "device-2")
+        let restoredSenderKeys = reopened.senderKeyRecords(chatID: "chat-crypto")
+
+        XCTAssertEqual(restoredSession?.sessionID, "session-1")
+        XCTAssertEqual(restoredSession?.signalAddressDeviceID, 77)
+        XCTAssertEqual(restoredSenderKeys.count, 1)
+        XCTAssertEqual(restoredSenderKeys.first?.keyID, "key-1")
+    }
+
+    func testSignalRuntimeDistributesAndCachesSenderKeys() async throws {
+        URLProtocolQueueStub.enqueueJSON(statusCode: 200, object: ["sender_keys": []])
+        URLProtocolQueueStub.enqueueJSON(
+            statusCode: 200,
+            object: [
+                "sender_keys": [
+                    [
+                        "id": "sender-key-1",
+                        "chat_id": "chat-group",
+                        "owner_device_id": "device-1",
+                        "recipient_device_id": "device-2",
+                        "key_id": "key-1",
+                        "sender_key_epoch": 1,
+                        "algorithm": "sender-key.v1",
+                        "status": "active",
+                        "wrapped_sender_key": Data("wrapped-2".utf8).base64EncodedString()
+                    ],
+                    [
+                        "id": "sender-key-2",
+                        "chat_id": "chat-group",
+                        "owner_device_id": "device-1",
+                        "recipient_device_id": "device-3",
+                        "key_id": "key-1",
+                        "sender_key_epoch": 1,
+                        "algorithm": "sender-key.v1",
+                        "status": "active",
+                        "wrapped_sender_key": Data("wrapped-3".utf8).base64EncodedString()
+                    ]
+                ]
+            ]
+        )
+
+        let session = makeSession()
+        let apiClient = APIClient(baseURL: URL(string: "https://example.test")!, session: session)
+        let database = try makeTestDatabase()
+        let runtime = SignalSessionRuntime(apiClient: apiClient, database: database)
+
+        let keys = await runtime.ensureGroupSenderKeys(
+            token: "token",
+            chatID: "chat-group",
+            ownerDeviceID: "device-1",
+            recipientDeviceIDs: ["device-2", "device-3"]
+        )
+
+        XCTAssertEqual(keys.count, 2)
+        XCTAssertEqual(database.senderKeyRecords(chatID: "chat-group").count, 2)
+    }
+
+    func testMarkChatReadPostsReadStateRequest() async throws {
+        URLProtocolQueueStub.enqueueJSON(
+            statusCode: 200,
+            object: [
+                "read_state": [
+                    "chat_id": "chat-1",
+                    "device_id": "device-1",
+                    "last_read_message_id": "msg-99",
+                    "read_at": "2026-03-06T00:00:00Z"
+                ]
+            ]
+        )
+
+        let session = makeSession()
+        let apiClient = APIClient(baseURL: URL(string: "https://example.test")!, session: session)
+        let database = try makeTestDatabase()
+        let repository = InMemoryMessageRepository(apiClient: apiClient, database: database)
+
+        try await repository.markChatRead(token: "token", chatID: "chat-1", lastReadMessageID: "msg-99")
+
+        let request = try XCTUnwrap(URLProtocolQueueStub.recordedRequests.last)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/api/v1/chats/chat-1/read")
+        let body = try XCTUnwrap(httpBodyData(for: request))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["last_read_message_id"] as? String, "msg-99")
+    }
+
     private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolQueueStub.self]
@@ -92,13 +207,37 @@ final class MessageRepositoryOutboxTests: XCTestCase {
             "recipient_envelope": NSNull()
         ]
     }
+
+    private func httpBodyData(for request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+
+        let bufferSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        var data = Data()
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufferSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data.isEmpty ? nil : data
+    }
 }
 
 private final class URLProtocolQueueStub: URLProtocol {
     private static var queue: [Result<(Int, Data), Error>] = []
+    static var recordedRequests: [URLRequest] = []
 
     static func reset() {
         queue.removeAll()
+        recordedRequests.removeAll()
     }
 
     static func enqueueFailure(_ error: Error) {
@@ -119,6 +258,7 @@ private final class URLProtocolQueueStub: URLProtocol {
     }
 
     override func startLoading() {
+        Self.recordedRequests.append(request)
         guard !Self.queue.isEmpty else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return

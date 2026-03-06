@@ -42,6 +42,7 @@ struct VostokListRow: View {
                     Text(title)
                         .font(.system(size: 17, weight: .medium))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.88)
                     Spacer()
                     HStack(spacing: 2) {
                         if showsReadIndicator {
@@ -52,6 +53,8 @@ struct VostokListRow: View {
                         Text(trailing)
                             .font(.system(size: 14, weight: .regular))
                             .foregroundStyle(VostokColors.labelSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                 }
                 HStack(alignment: .center, spacing: 4) {
@@ -64,6 +67,7 @@ struct VostokListRow: View {
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(VostokColors.labelSecondary)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.9)
                     if isMuted {
                         Image(systemName: "bell.slash.fill")
                         .font(.system(size: 12))
@@ -83,7 +87,7 @@ struct VostokListRow: View {
         }
         .padding(.leading, 10)
         .padding(.trailing, 16)
-        .frame(maxWidth: .infinity, minHeight: 78, maxHeight: 78, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
         .background(VostokColors.secondaryBackground)
         .overlay(alignment: .topTrailing) {
             if showsSeparator {

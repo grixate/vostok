@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftUI
 
 @MainActor
@@ -125,5 +126,29 @@ final class AppState: ObservableObject {
         } catch {
             // Keep this fail-safe and avoid breaking app startup/navigation flow.
         }
+    }
+}
+
+@MainActor
+final class NetworkPathMonitor: ObservableObject {
+    @Published private(set) var isAvailable = true
+
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "chat.vostok.ios.network-monitor")
+    private var hasStarted = false
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        monitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isAvailable = path.status == .satisfied
+            }
+        }
+        monitor.start(queue: queue)
+    }
+
+    deinit {
+        monitor.cancel()
     }
 }

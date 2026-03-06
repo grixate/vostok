@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var pushManager = PushManager.shared
+    @State private var realtimeSnapshot = RealtimeDiagnosticsSnapshot()
     private let container: AppContainer
 
     init(container: AppContainer) {
@@ -46,11 +48,99 @@ struct SettingsView: View {
             NavigationLink("Safety Numbers") { SafetyNumberView(container: container) }
             NavigationLink("Media Lab") { MediaLabView(container: container) }
 
+            Section("Realtime Diagnostics") {
+                HStack {
+                    Text("State")
+                    Spacer()
+                    Text(realtimeSnapshot.connectionState.rawValue.capitalized)
+                        .foregroundStyle(realtimeSnapshot.connectionState == .connected ? VostokColors.online : VostokColors.labelSecondary)
+                }
+
+                HStack {
+                    Text("Reconnect attempts")
+                    Spacer()
+                    Text("\(realtimeSnapshot.reconnectAttempt)")
+                        .foregroundStyle(VostokColors.labelSecondary)
+                }
+
+                HStack {
+                    Text("Network")
+                    Spacer()
+                    Text(realtimeSnapshot.networkAvailable ? "Available" : "Offline")
+                        .foregroundStyle(realtimeSnapshot.networkAvailable ? VostokColors.online : VostokColors.danger)
+                }
+
+                HStack(alignment: .top) {
+                    Text("Last disconnect")
+                    Spacer()
+                    Text(realtimeSnapshot.lastDisconnectReason ?? "None")
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(VostokColors.labelSecondary)
+                }
+
+                HStack(alignment: .top) {
+                    Text("Joined topics")
+                    Spacer()
+                    Text(realtimeSnapshot.joinedTopics.isEmpty ? "None" : realtimeSnapshot.joinedTopics.joined(separator: ", "))
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(VostokColors.labelSecondary)
+                }
+
+                if let lastInboundAt = realtimeSnapshot.lastInboundAt {
+                    HStack {
+                        Text("Last inbound")
+                        Spacer()
+                        Text(RelativeDateTimeFormatter().localizedString(for: lastInboundAt, relativeTo: Date()))
+                            .foregroundStyle(VostokColors.labelSecondary)
+                    }
+                }
+
+                Button("Force reconnect") {
+                    Task { await container.realtimeClient.forceReconnect(reason: "settings_manual") }
+                }
+                .buttonStyle(VostokSecondaryButtonStyle())
+
+                Button("Copy socket log") {
+                    UIPasteboard.general.string = realtimeSnapshot.recentLogLines.joined(separator: "\n")
+                }
+                .buttonStyle(VostokSecondaryButtonStyle())
+
+                Button("Clear socket log") {
+                    Task { await container.realtimeClient.clearDiagnosticLog() }
+                }
+                .buttonStyle(VostokSecondaryButtonStyle())
+
+                if realtimeSnapshot.recentLogLines.isEmpty {
+                    Text("No socket events yet")
+                        .font(VostokTypography.footnote)
+                        .foregroundStyle(VostokColors.labelSecondary)
+                } else {
+                    ForEach(realtimeSnapshot.recentLogLines.reversed(), id: \.self) { line in
+                        Text(line)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundStyle(VostokColors.labelSecondary)
+                            .textSelection(.enabled)
+                            .accessibilityLabel(line)
+                    }
+                }
+            }
+
             Button("Log out", role: .destructive) {
                 appState.logout()
             }
         }
         .vostokNavBar(title: "Settings", large: true)
+        .task {
+            await monitorRealtimeDiagnostics()
+        }
+    }
+
+    @MainActor
+    private func monitorRealtimeDiagnostics() async {
+        while !Task.isCancelled {
+            realtimeSnapshot = await container.realtimeClient.snapshotDiagnostics()
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 }
 
