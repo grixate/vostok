@@ -371,8 +371,7 @@ function App() {
   const [chatSearchQuery, setChatSearchQuery] = useState('')
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [profileOverlayOpen, setProfileOverlayOpen] = useState(false)
-  const [userListOpen, setUserListOpen] = useState(false)
-  const [serverUsers, setServerUsers] = useState<string[]>([])
+  const [newMessageMode, setNewMessageMode] = useState(false)
   const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
   const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; tone: string }>>([])
@@ -981,9 +980,9 @@ function App() {
         ])
         let nextChats = chatResponse.chats
 
-        if (nextChats.length === 0) {
+        if (!nextChats.some((c) => c.is_self_chat)) {
           const created = await createDirectChat(sessionToken, me.user.username)
-          nextChats = [created.chat]
+          nextChats = [created.chat, ...nextChats]
         }
 
         if (cancelled) {
@@ -1754,19 +1753,15 @@ function App() {
     setDevices(response.devices)
   }
 
-  async function handleCreateDirectChat(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!storedDevice) {
-      return
-    }
-
+  async function startDirectChatWith(username: string) {
+    if (!storedDevice) return
     setLoading(true)
-
     try {
-      const response = await createDirectChat(storedDevice.sessionToken, newChatUsername)
+      const response = await createDirectChat(storedDevice.sessionToken, username)
       setChatItems((current) => mergeChat(current, response.chat))
       setActiveChatId(response.chat.id)
+      setNewChatUsername('')
+      setNewMessageMode(false)
       setBanner({ tone: 'success', message: `Direct chat ready: ${response.chat.title}` })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create direct chat.'
@@ -1774,6 +1769,11 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleCreateDirectChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await startDirectChatWith(newChatUsername)
   }
 
   async function _handleCreateGroupChat(event: FormEvent<HTMLFormElement>) {
@@ -3904,109 +3904,183 @@ function App() {
               </div>
             </div>
           ) : null}
-          <div className="sidebar__title-row">
-            <button
-              className="sidebar__hamburger-btn"
-              onClick={() => setProfileOverlayOpen((v) => !v)}
-              type="button"
-              aria-label="Menu"
-            >
-              <svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true">
-                <path d="M1 2H19M1 8H19M1 14H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
-            <span className="sidebar__title">Chats</span>
-            <button
-              className="sidebar__compose-btn"
-              type="button"
-              aria-label="New message"
-              onClick={() => setUserListOpen(true)}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M13 2L16 5L6 15H3V12L13 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="M11 4L14 7" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            </button>
-          </div>
-          <label className="search-bar">
-            <span className="search-bar__icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </span>
-            <input
-              className="search-bar__input"
-              disabled={loading}
-              onChange={(event) => setChatFilter(event.target.value)}
-              placeholder="Search"
-              ref={chatFilterInputRef}
-              type="search"
-              value={chatFilter}
-              aria-label="Search chats"
-            />
-          </label>
-        </div>
-        <div className="sidebar__list">
-          {visibleChatItems.length > 0 ? (
-            visibleChatItems.map((chat, index) => (
+          {newMessageMode ? (
+            <div className="sidebar__title-row">
               <button
-                key={chat.id}
-                className="chat-list-button"
-                onClick={() => setActiveChatId(chat.id)}
-                ref={(element) => {
-                  chatButtonRefs.current[chat.id] = element
-                }}
+                className="sidebar__back-btn"
                 type="button"
+                aria-label="Back"
+                onClick={() => { setNewMessageMode(false); setNewChatUsername('') }}
               >
-                <ChatListItem
-                  title={chat.title}
-                  preview={
-                    chat.message_count > 0
-                      ? `${chat.message_count} encrypted ${chat.message_count === 1 ? 'message' : 'messages'}`
-                      : 'No messages yet'
-                  }
-                  timestamp={formatRelativeTime(chat.latest_message_at)}
-                  unreadCount={chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
-                  active={chat.id === activeChat?.id}
-                  pinned={chat.is_self_chat}
-                  avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
-                  avatarInitial={chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
-                  isFirst={index === 0}
-                />
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M12 4L5 10L12 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-            ))
+              <span className="sidebar__title">New Message</span>
+            </div>
           ) : (
-            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
-              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>
-                No chats yet
-              </p>
-              <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>
-                Start a conversation above
-              </p>
+            <div className="sidebar__title-row">
+              <button
+                className="sidebar__hamburger-btn"
+                onClick={() => setProfileOverlayOpen((v) => !v)}
+                type="button"
+                aria-label="Menu"
+              >
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true">
+                  <path d="M1 2H19M1 8H19M1 14H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              <span className="sidebar__title">Chats</span>
+              <button
+                className="sidebar__compose-btn"
+                type="button"
+                aria-label="New message"
+                onClick={() => { setNewMessageMode(true); setNewChatUsername('') }}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M13 2L16 5L6 15H3V12L13 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  <path d="M11 4L14 7" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              </button>
             </div>
           )}
+          {newMessageMode ? (
+            <form className="new-message-search" onSubmit={handleCreateDirectChat}>
+              <span className="new-message-search__to">To:</span>
+              <input
+                autoFocus
+                className="new-message-search__input"
+                disabled={loading}
+                onChange={(event) => setNewChatUsername(event.target.value)}
+                placeholder="Username…"
+                ref={directChatInputRef}
+                value={newChatUsername}
+                aria-label="Search or enter username"
+              />
+            </form>
+          ) : (
+            <label className="search-bar">
+              <span className="search-bar__icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </span>
+              <input
+                className="search-bar__input"
+                disabled={loading}
+                onChange={(event) => setChatFilter(event.target.value)}
+                placeholder="Search"
+                ref={chatFilterInputRef}
+                type="search"
+                value={chatFilter}
+                aria-label="Search chats"
+              />
+            </label>
+          )}
         </div>
+        {newMessageMode ? (
+          <div className="sidebar__list">
+            {chatItems
+              .filter((c) => !newChatUsername || c.title.toLowerCase().includes(newChatUsername.toLowerCase()))
+              .map((chat) => (
+                <button
+                  key={chat.id}
+                  className="chat-list-button"
+                  type="button"
+                  onClick={() => { setActiveChatId(chat.id); setNewMessageMode(false); setNewChatUsername('') }}
+                >
+                  <ChatListItem
+                    title={chat.title}
+                    preview={chat.is_self_chat ? 'Saved Messages' : chat.type === 'group' ? 'Group' : 'Direct message'}
+                    timestamp=""
+                    avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
+                    avatarInitial={chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
+                  />
+                </button>
+              ))}
+            {newChatUsername.trim().length > 0 &&
+              !chatItems.some((c) => c.title.toLowerCase() === newChatUsername.trim().toLowerCase()) ? (
+              <button
+                className="chat-list-button new-message-create"
+                type="button"
+                disabled={loading}
+                onClick={() => startDirectChatWith(newChatUsername.trim())}
+              >
+                <div
+                  className="chat-list-item__avatar"
+                  style={{ background: 'var(--accent)', flexShrink: 0 }}
+                >
+                  {newChatUsername.trim().slice(0, 1).toUpperCase()}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
+                  <strong style={{ fontSize: 15 }}>{newChatUsername.trim()}</strong>
+                  <span style={{ fontSize: 13, color: 'var(--label2)' }}>Start new chat</span>
+                </div>
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="sidebar__list">
+            {visibleChatItems.length > 0 ? (
+              visibleChatItems.map((chat, index) => (
+                <button
+                  key={chat.id}
+                  className="chat-list-button"
+                  onClick={() => setActiveChatId(chat.id)}
+                  ref={(element) => {
+                    chatButtonRefs.current[chat.id] = element
+                  }}
+                  type="button"
+                >
+                  <ChatListItem
+                    title={chat.title}
+                    preview={
+                      chat.message_count > 0
+                        ? `${chat.message_count} encrypted ${chat.message_count === 1 ? 'message' : 'messages'}`
+                        : 'No messages yet'
+                    }
+                    timestamp={formatRelativeTime(chat.latest_message_at)}
+                    unreadCount={chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
+                    active={chat.id === activeChat?.id}
+                    pinned={chat.is_self_chat}
+                    avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
+                    avatarInitial={chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
+                    isFirst={index === 0}
+                  />
+                </button>
+              ))
+            ) : (
+              <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
+                <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>
+                  No chats yet
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>
+                  Start a conversation above
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
 
       <main className="conversation-pane">
+        {activeChat ? (
         <ConversationHeader
-          title={activeChat?.title ?? 'Vostok'}
+          title={activeChat.title}
           subtitle={
-            activeChat
-              ? activeChat.is_self_chat
-                ? 'Saved Messages'
-                : activeChat.type === 'group'
-                  ? `${groupMembers.length} members`
-                  : 'last seen recently'
-              : 'Select a chat to start messaging'
+            activeChat.is_self_chat
+              ? 'Saved Messages'
+              : activeChat.type === 'group'
+                ? `${groupMembers.length} members`
+                : 'last seen recently'
           }
-          avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
-          avatarInitial={activeChat?.is_self_chat ? '🔖' : activeChat?.title?.slice(0, 1)}
-          online={activeChat != null && !activeChat.is_self_chat && activeChat.type !== 'group'}
-          onClickInfo={activeChat ? () => setDetailRailPreferred((v) => !v) : undefined}
-          actions={activeChat ? (
+          avatarColor={activeChat.is_self_chat ? '#007AFF' : activeChat.type === 'group' ? '#4CD964' : '#5856D6'}
+          avatarInitial={activeChat.is_self_chat ? '🔖' : activeChat.title.slice(0, 1)}
+          online={!activeChat.is_self_chat && activeChat.type !== 'group'}
+          onClickInfo={() => setDetailRailPreferred((v) => !v)}
+          actions={(
             <>
               {!activeChat.is_self_chat ? (
                 <button className="vostok-icon-button" type="button" aria-label="Voice call" disabled={loading} onClick={() => handleStartCall('voice')}>
@@ -4045,8 +4119,9 @@ function App() {
                 ) : null}
               </div>
             </>
-          ) : undefined}
+          )}
         />
+        ) : null}
         {chatSearchOpen ? (
           <div className="chat-search-bar">
             <button className="chat-search-bar__nav" type="button" aria-label="Previous result">
@@ -4478,48 +4553,6 @@ function App() {
         </>
       ) : null}
 
-      {/* ── User list overlay (pencil button) ── */}
-      {userListOpen ? (
-        <>
-          <div className="overlay-backdrop" onClick={() => setUserListOpen(false)} />
-          <div className="user-list-overlay">
-            <div className="user-list-overlay__header">
-              <h2>New Message</h2>
-              <button type="button" onClick={() => setUserListOpen(false)} aria-label="Close">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            <form className="user-list-overlay__search" onSubmit={handleCreateDirectChat}>
-              <input
-                autoFocus
-                disabled={loading}
-                onChange={(event) => setNewChatUsername(event.target.value)}
-                placeholder="Search by username…"
-                ref={directChatInputRef}
-                value={newChatUsername}
-              />
-              <button className="primary-action" disabled={loading || newChatUsername.trim() === ''} type="submit">
-                Start Chat
-              </button>
-            </form>
-            <div className="user-list-overlay__list">
-              {chatItems.map((chat) => (
-                <button
-                  key={chat.id}
-                  className="user-list-overlay__item"
-                  type="button"
-                  onClick={() => { setActiveChatId(chat.id); setUserListOpen(false) }}
-                >
-                  <div className="user-list-overlay__avatar" style={{ background: chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6' }}>
-                    {chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
-                  </div>
-                  <span>{chat.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      ) : null}
 
       {/* ── iOS glass toast notifications ── */}
       {toasts.length > 0 ? (
