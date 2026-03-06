@@ -91,6 +91,7 @@ type ConversationHeaderProps = {
   avatarInitial?: string
   online?: boolean
   onBack?: () => void
+  onClickInfo?: () => void
   actions?: ReactNode
 }
 
@@ -100,26 +101,31 @@ export function ConversationHeader({
   avatarColor,
   avatarInitial,
   online,
+  onClickInfo,
   actions
 }: ConversationHeaderProps) {
   return (
     <div className="conversation-header">
-      <div className="conversation-header__left">
-        <button
+      <button
+        className="conversation-header__left"
+        type="button"
+        onClick={onClickInfo}
+        style={{ cursor: onClickInfo ? 'pointer' : 'default' }}
+      >
+        <div
           className="conversation-header__avatar"
-          type="button"
           aria-label={`${title} details`}
           style={{ background: avatarColor ?? 'linear-gradient(135deg, #007AFF, #5856D6)' }}
         >
           {avatarInitial ?? title.slice(0, 1)}
-        </button>
+        </div>
         <div className="conversation-header__info">
           <span className="conversation-header__name">{title}</span>
           <span className={cx('conversation-header__status', online && 'conversation-header__status--online')}>
             {subtitle}
           </span>
         </div>
-      </div>
+      </button>
       {actions ? (
         <div className="conversation-header__actions">{actions}</div>
       ) : null}
@@ -311,14 +317,19 @@ export function ContextMenu({ variant = 'recipient', actions }: ContextMenuProps
 
 type ChatInfoPanelProps = {
   title: string
-  phone: string
   handle: string
   avatarColor?: string
+  onClose?: () => void
 }
 
-export function ChatInfoPanel({ title, phone, handle, avatarColor }: ChatInfoPanelProps) {
+export function ChatInfoPanel({ title, handle, avatarColor, onClose }: ChatInfoPanelProps) {
   return (
     <div className="chat-info-panel">
+      {onClose ? (
+        <button className="chat-info-panel__close" type="button" onClick={onClose} aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </button>
+      ) : null}
       <div
         className="chat-info-panel__avatar"
         style={{ background: avatarColor ?? 'linear-gradient(135deg, #007AFF, #5856D6)' }}
@@ -327,16 +338,6 @@ export function ChatInfoPanel({ title, phone, handle, avatarColor }: ChatInfoPan
       </div>
       <strong className="chat-info-panel__title">{title}</strong>
       <span className="chat-info-panel__subtitle">{handle}</span>
-      <div className="chat-info-panel__stats">
-        <div>
-          <span className="chat-info-panel__label">Phone</span>
-          <span>{phone}</span>
-        </div>
-        <div>
-          <span className="chat-info-panel__label">Media</span>
-          <span>0 items</span>
-        </div>
-      </div>
     </div>
   )
 }

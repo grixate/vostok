@@ -430,6 +430,12 @@ button {
   gap: 10px;
   flex: 1;
   min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
 }
 
 .conversation-header__avatar {
@@ -1175,6 +1181,7 @@ button {
 /* ─── Status Banners ──────────────────────────────────────────────────────── */
 
 .status-banner {
+  display: none;
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 500;
@@ -1744,4 +1751,581 @@ button {
   .auth-card {
     max-width: 100%;
   }
+}
+
+/* ─── Dropdown Menu (Three-dots / Attach popover) ────────────────────────── */
+
+.dropdown-anchor {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  background: var(--bg);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--sep);
+  padding: 6px;
+  z-index: 100;
+  animation: dropdown-in 0.15s ease;
+}
+
+.dropdown-menu--bottom {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropdown-menu__item:hover {
+  background: var(--fill);
+}
+
+.dropdown-menu__item--danger {
+  color: var(--danger);
+}
+
+.dropdown-menu__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+/* ─── Chat Search Bar ────────────────────────────────────────────────────── */
+
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 0.5px solid var(--sep);
+  background: var(--bg);
+}
+
+.chat-search-bar__nav {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--label2);
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.chat-search-bar__nav:hover {
+  background: var(--fill);
+  color: var(--label);
+}
+
+.chat-search-bar__field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--fill);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--label2);
+}
+
+.chat-search-bar__input {
+  flex: 1;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  outline: none;
+}
+
+.chat-search-bar__input::placeholder {
+  color: var(--label3);
+}
+
+.chat-search-bar__clear {
+  display: flex;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.chat-search-bar__close {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--label2);
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.chat-search-bar__close:hover {
+  background: var(--fill);
+  color: var(--label);
+}
+
+/* ─── Right-click Context Menu ───────────────────────────────────────────── */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.msg-context-menu {
+  position: fixed;
+  z-index: 201;
+  min-width: 180px;
+  background: var(--bg);
+  border-radius: 12px;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--sep);
+  padding: 6px;
+  animation: dropdown-in 0.12s ease;
+}
+
+.msg-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.msg-context-menu button:hover {
+  background: var(--fill);
+}
+
+.msg-context-menu__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+.msg-context-menu__danger {
+  color: var(--danger) !important;
+}
+
+/* ─── Profile Overlay (Burger Menu) ──────────────────────────────────────── */
+
+.profile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 320px;
+  height: 100%;
+  background: var(--bg);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.10);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  animation: slide-in-left 0.2s ease;
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.profile-overlay__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 0.5px solid var(--sep);
+}
+
+.profile-overlay__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.profile-overlay__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-overlay__info strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.profile-overlay__info span {
+  font-size: 13px;
+  color: var(--label2);
+}
+
+.profile-overlay__close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--label2);
+  cursor: pointer;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.profile-overlay__close:hover {
+  background: var(--fill);
+}
+
+.profile-overlay__actions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+
+.profile-overlay__actions button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--label);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-overlay__actions button:hover {
+  background: var(--fill);
+}
+
+.profile-overlay__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+.profile-overlay__danger {
+  color: var(--danger) !important;
+}
+
+/* ─── User List Overlay (New Message) ────────────────────────────────────── */
+
+.user-list-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  max-height: 500px;
+  background: var(--bg);
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px var(--sep);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dropdown-in 0.15s ease;
+}
+
+.user-list-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+}
+
+.user-list-overlay__header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.user-list-overlay__header button {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--label2);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.user-list-overlay__header button:hover {
+  background: var(--fill);
+}
+
+.user-list-overlay__search {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.user-list-overlay__search input {
+  flex: 1;
+  border: none;
+  background: var(--fill);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  outline: none;
+}
+
+.user-list-overlay__search input::placeholder {
+  color: var(--label3);
+}
+
+.user-list-overlay__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.user-list-overlay__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--label);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.user-list-overlay__item:hover {
+  background: var(--fill);
+}
+
+.user-list-overlay__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ─── Voice Recorder (inline) ────────────────────────────────────────────── */
+
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-top: 0.5px solid var(--sep);
+}
+
+.voice-recorder__indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse-red 1s ease infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.voice-recorder__duration {
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--label);
+  min-width: 48px;
+}
+
+.voice-recorder__waves {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  overflow: hidden;
+}
+
+.voice-recorder__wave-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  background: var(--accent);
+  animation: wave-bar 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes wave-bar {
+  from { height: 6px; }
+  to { height: 24px; }
+}
+
+.voice-recorder__cancel {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--danger);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.voice-recorder__cancel:hover {
+  background: rgba(255, 59, 48, 0.08);
+}
+
+.voice-recorder__send {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.voice-recorder__send:hover {
+  filter: brightness(1.1);
+}
+
+/* ─── iOS Glass Toast Notifications ──────────────────────────────────────── */
+
+.toast-stack {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 10px 20px;
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  animation: toast-in 0.3s ease;
+  white-space: nowrap;
+}
+
+.toast--success {
+  background: rgba(52, 199, 89, 0.85);
+  backdrop-filter: blur(20px);
+}
+
+.toast--error {
+  background: rgba(255, 59, 48, 0.85);
+  backdrop-filter: blur(20px);
+}
+
+.toast--info {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Chat Info Panel Close Button ───────────────────────────────────────── */
+
+.chat-info-panel__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--fill);
+  color: var(--label2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.chat-info-panel__close:hover {
+  background: var(--sep);
+}
+
+.chat-info-panel {
+  position: relative;
 }

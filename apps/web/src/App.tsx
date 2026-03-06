@@ -254,7 +254,7 @@ function readDetailRailPreference(): boolean {
     return false
   }
 
-  return window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT
+  return false
 }
 
 function readDesktopWindowGeometry(): DesktopWindowGeometry | null {
@@ -366,6 +366,16 @@ function App() {
   )
   const [_membraneClientEndpointId, setMembraneClientEndpointId] = useState<string | null>(null)
   const [attachmentPlaybackUrls, setAttachmentPlaybackUrls] = useState<Record<string, string>>({})
+  const [contextMenuMessage, setContextMenuMessage] = useState<{ message: CachedMessage; x: number; y: number } | null>(null)
+  const [chatSearchOpen, setChatSearchOpen] = useState(false)
+  const [chatSearchQuery, setChatSearchQuery] = useState('')
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [profileOverlayOpen, setProfileOverlayOpen] = useState(false)
+  const [userListOpen, setUserListOpen] = useState(false)
+  const [serverUsers, setServerUsers] = useState<string[]>([])
+  const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
+  const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; tone: string }>>([])
 
   const deferredActiveChatId = useDeferredValue(activeChatId)
   const activeChatIdRef = useRef<string | null>(deferredActiveChatId)
@@ -390,6 +400,16 @@ function App() {
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
   const localMediaStreamRef = useRef<MediaStream | null>(null)
+  const chatSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const voiceRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function showToast(message: string, tone: string = 'info') {
+    const id = `toast-${Date.now()}-${Math.random()}`
+    setToasts((prev) => [...prev, { id, message, tone }])
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id))
+    }, 3000)
+  }
 
   function resetMembraneClient() {
     void removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
@@ -3221,8 +3241,12 @@ function App() {
         return
       }
 
-      setBanner({ tone: 'info', message: 'Finishing voice note…' })
       recorder.stop()
+      if (voiceRecordingTimerRef.current) {
+        clearInterval(voiceRecordingTimerRef.current)
+        voiceRecordingTimerRef.current = null
+      }
+      setVoiceRecordingDuration(0)
       return
     }
 
@@ -3263,7 +3287,10 @@ function App() {
 
       recorder.start()
       setVoiceNoteRecording(true)
-      setBanner({ tone: 'info', message: 'Recording voice note… tap again to stop.' })
+      setVoiceRecordingDuration(0)
+      voiceRecordingTimerRef.current = setInterval(() => {
+        setVoiceRecordingDuration((d) => d + 1)
+      }, 1000)
     } catch (error) {
       cleanupVoiceNoteCapture()
       const message = error instanceof Error ? error.message : 'Failed to start voice note recording.'
@@ -3880,7 +3907,7 @@ function App() {
           <div className="sidebar__title-row">
             <button
               className="sidebar__hamburger-btn"
-              onClick={() => setDetailRailPreferred((current) => !current)}
+              onClick={() => setProfileOverlayOpen((v) => !v)}
               type="button"
               aria-label="Menu"
             >
@@ -3893,7 +3920,7 @@ function App() {
               className="sidebar__compose-btn"
               type="button"
               aria-label="New message"
-              onClick={() => directChatInputRef.current?.focus()}
+              onClick={() => setUserListOpen(true)}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                 <path d="M13 2L16 5L6 15H3V12L13 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -3919,30 +3946,6 @@ function App() {
               aria-label="Search chats"
             />
           </label>
-          <form className="new-chat-form" onSubmit={handleCreateDirectChat} style={{ padding: '0 4px 4px' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                disabled={loading}
-                onChange={(event) => setNewChatUsername(event.target.value)}
-                placeholder="Start chat by username…"
-                ref={directChatInputRef}
-                value={newChatUsername}
-                style={{
-                  flex: 1, border: 'none', background: 'var(--fill)', borderRadius: 8,
-                  padding: '8px 10px', fontSize: 13, fontFamily: 'var(--font)',
-                  color: 'var(--label)', outline: 'none'
-                }}
-              />
-              <button
-                className="primary-action"
-                disabled={loading || newChatUsername.trim() === ''}
-                type="submit"
-                style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8 }}
-              >
-                Go
-              </button>
-            </div>
-          </form>
         </div>
         <div className="sidebar__list">
           {visibleChatItems.length > 0 ? (
@@ -3988,7 +3991,6 @@ function App() {
       </aside>
 
       <main className="conversation-pane">
-        {banner ? <div className={`status-banner status-banner--${banner.tone}`}>{banner.message}</div> : null}
         <ConversationHeader
           title={activeChat?.title ?? 'Vostok'}
           subtitle={
@@ -4003,20 +4005,77 @@ function App() {
           avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
           avatarInitial={activeChat?.is_self_chat ? '🔖' : activeChat?.title?.slice(0, 1)}
           online={activeChat != null && !activeChat.is_self_chat && activeChat.type !== 'group'}
+          onClickInfo={activeChat ? () => setDetailRailPreferred((v) => !v) : undefined}
           actions={activeChat ? (
             <>
-              <button className="vostok-icon-button" type="button" aria-label="Voice call" disabled={loading} onClick={() => handleStartCall('voice')}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M17 14.2V16.5C17 17 16.6 17.4 16.1 17.5C15.7 17.5 15.3 17.5 14.9 17.5C8.3 17.5 3 12.2 3 5.6C3 5.2 3 4.8 3.1 4.4C3.1 3.9 3.5 3.5 4 3.5H6.3C6.7 3.5 7.1 3.8 7.2 4.2C7.3 4.8 7.5 5.3 7.7 5.8C7.8 6.1 7.7 6.4 7.5 6.6L6.5 7.6C7.5 9.4 9.1 11 10.9 12L11.9 11C12.1 10.8 12.4 10.7 12.7 10.8C13.2 11 13.7 11.2 14.3 11.3C14.7 11.4 15 11.8 15 12.2V14.2H17Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-              <button className="vostok-icon-button" type="button" aria-label="Search" disabled={loading}>
+              {!activeChat.is_self_chat ? (
+                <button className="vostok-icon-button" type="button" aria-label="Voice call" disabled={loading} onClick={() => handleStartCall('voice')}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M17 14.2V16.5C17 17 16.6 17.4 16.1 17.5C15.7 17.5 15.3 17.5 14.9 17.5C8.3 17.5 3 12.2 3 5.6C3 5.2 3 4.8 3.1 4.4C3.1 3.9 3.5 3.5 4 3.5H6.3C6.7 3.5 7.1 3.8 7.2 4.2C7.3 4.8 7.5 5.3 7.7 5.8C7.8 6.1 7.7 6.4 7.5 6.6L6.5 7.6C7.5 9.4 9.1 11 10.9 12L11.9 11C12.1 10.8 12.4 10.7 12.7 10.8C13.2 11 13.7 11.2 14.3 11.3C14.7 11.4 15 11.8 15 12.2V14.2H17Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              ) : null}
+              <button className="vostok-icon-button" type="button" aria-label="Search" disabled={loading} onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5"/><path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>
-              <button className="vostok-icon-button" type="button" aria-label="More options" disabled={loading}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="5" r="1.5" fill="currentColor"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/><circle cx="10" cy="15" r="1.5" fill="currentColor"/></svg>
-              </button>
+              <div className="dropdown-anchor">
+                <button className="vostok-icon-button" type="button" aria-label="More options" disabled={loading} onClick={() => setMoreMenuOpen((v) => !v)}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="5" r="1.5" fill="currentColor"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/><circle cx="10" cy="15" r="1.5" fill="currentColor"/></svg>
+                </button>
+                {moreMenuOpen ? (
+                  <div className="dropdown-menu" onClick={() => setMoreMenuOpen(false)}>
+                    <button className="dropdown-menu__item" type="button" onClick={() => { setChatSearchOpen(true); setChatSearchQuery('') }}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      Search
+                    </button>
+                    {activeChat?.type === 'group' ? (
+                      <button className="dropdown-menu__item" type="button" onClick={() => { /* edit group */ }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                        Edit
+                      </button>
+                    ) : null}
+                    <button className="dropdown-menu__item" type="button" onClick={() => setDetailRailPreferred((v) => !v)}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5V8M8 10.5V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      Info
+                    </button>
+                    <div className="dropdown-menu__sep" />
+                    <button className="dropdown-menu__item dropdown-menu__item--danger" type="button">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      Delete Chat
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : undefined}
         />
+        {chatSearchOpen ? (
+          <div className="chat-search-bar">
+            <button className="chat-search-bar__nav" type="button" aria-label="Previous result">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 10L8 6L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button className="chat-search-bar__nav" type="button" aria-label="Next result">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="chat-search-bar__field">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              <input
+                className="chat-search-bar__input"
+                placeholder="Search"
+                ref={chatSearchInputRef}
+                value={chatSearchQuery}
+                onChange={(e) => setChatSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {chatSearchQuery ? (
+                <button className="chat-search-bar__clear" type="button" onClick={() => setChatSearchQuery('')} aria-label="Clear">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" fill="var(--label3)"/><path d="M5 5L9 9M9 5L5 9" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </button>
+              ) : null}
+            </div>
+            <button className="chat-search-bar__close" type="button" onClick={() => setChatSearchOpen(false)} aria-label="Close search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        ) : null}
 
         <section className="conversation-stage">
           {pinnedMessage && !pinnedMessage.deletedAt ? (
@@ -4048,7 +4107,17 @@ function App() {
                     : null
 
                 return (
-                <MessageBubble key={message.id} side={message.side} timestamp={formatRelativeTime(message.sentAt)}>
+                <MessageBubble
+                  key={message.id}
+                  side={message.side}
+                  timestamp={formatRelativeTime(message.sentAt)}
+                  onContextMenu={(e) => {
+                    if (message.side !== 'system' && !message.deletedAt) {
+                      e.preventDefault()
+                      setContextMenuMessage({ message, x: e.clientX, y: e.clientY })
+                    }
+                  }}
+                >
                   {message.replyToMessageId ? (
                     <span className="message-thread__reply-preview">
                       {resolveReplyPreview(messageItems, message.replyToMessageId)}
@@ -4118,20 +4187,6 @@ function App() {
                         .join(' • ')}
                     </span>
                   ) : null}
-                  {message.side !== 'system' && !message.deletedAt ? (
-                    <div className="message-thread__actions">
-                      <button className="mini-action" disabled={loading} onClick={() => handleReplyToMessage(message)} type="button">Reply</button>
-                      {message.side === 'outgoing' && !message.attachment ? (
-                        <button className="mini-action" disabled={loading} onClick={() => handleStartEditingMessage(message)} type="button">Edit</button>
-                      ) : null}
-                      {message.side === 'outgoing' ? (
-                        <button className="mini-action" disabled={loading} onClick={() => handleDeleteExistingMessage(message)} type="button">Delete</button>
-                      ) : null}
-                      {!message.id.startsWith('optimistic-') ? (
-                        <button className="mini-action" disabled={loading} onClick={() => handleToggleMessagePin(message)} type="button">{message.pinnedAt ? 'Unpin' : 'Pin'}</button>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </MessageBubble>
                 )
               })}
@@ -4140,12 +4195,26 @@ function App() {
 
         </section>
 
-        {activeChat ? (
+        {activeChat && !voiceNoteRecording ? (
           <form className="live-composer" onSubmit={handleSendMessage}>
             <input hidden onChange={handleAttachmentPick} ref={fileInputRef} type="file" />
-            <button className="live-composer__btn" type="button" aria-label="Attach file" disabled={loading} onClick={() => fileInputRef.current?.click()}>
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M18 10L10.5 17.5C8.5 19.5 5.5 19.5 3.5 17.5C1.5 15.5 1.5 12.5 3.5 10.5L11 3C12.5 1.5 15 1.5 16.5 3C18 4.5 18 7 16.5 8.5L9 16C8 17 6.5 17 5.5 16C4.5 15 4.5 13.5 5.5 12.5L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            </button>
+            <div className="dropdown-anchor">
+              <button className="live-composer__btn" type="button" aria-label="Attach file" disabled={loading} onClick={() => setAttachPopoverOpen((v) => !v)}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M18 10L10.5 17.5C8.5 19.5 5.5 19.5 3.5 17.5C1.5 15.5 1.5 12.5 3.5 10.5L11 3C12.5 1.5 15 1.5 16.5 3C18 4.5 18 7 16.5 8.5L9 16C8 17 6.5 17 5.5 16C4.5 15 4.5 13.5 5.5 12.5L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+              {attachPopoverOpen ? (
+                <div className="dropdown-menu dropdown-menu--bottom" onClick={() => setAttachPopoverOpen(false)}>
+                  <button className="dropdown-menu__item" type="button" onClick={() => { fileInputRef.current?.setAttribute('accept', 'image/*,video/*'); fileInputRef.current?.click() }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/><path d="M2 11L5.5 7.5L8 10L10 8L14 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Photo or Video
+                  </button>
+                  <button className="dropdown-menu__item" type="button" onClick={() => { fileInputRef.current?.removeAttribute('accept'); fileInputRef.current?.click() }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9 2H4C3.4 2 3 2.4 3 3V13C3 13.6 3.4 14 4 14H12C12.6 14 13 13.6 13 13V6L9 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M9 2V6H13" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                    File
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <div className="live-composer__field">
               {replyTargetMessageId ? (
                 <div className="live-composer__reply">
@@ -4180,18 +4249,36 @@ function App() {
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 15V5M10 5L6 9M10 5L14 9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             ) : (
-              <button className="live-composer__btn" type="button" aria-label="Record voice message" disabled={loading} onClick={() => void handleVoiceNoteToggle()}>
+              <button className="live-composer__btn live-composer__mic" type="button" aria-label="Record voice message" disabled={loading} onClick={() => void handleVoiceNoteToggle()}>
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="8" y="2" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11C4 14.866 7.134 18 11 18C14.866 18 18 14.866 18 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11 18V21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>
             )}
           </form>
+        ) : null}
+        {activeChat && voiceNoteRecording ? (
+          <div className="voice-recorder">
+            <div className="voice-recorder__indicator" />
+            <span className="voice-recorder__duration">
+              {String(Math.floor(voiceRecordingDuration / 60)).padStart(2, '0')}:{String(voiceRecordingDuration % 60).padStart(2, '0')}
+            </span>
+            <div className="voice-recorder__waves">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <span key={i} className="voice-recorder__wave-bar" style={{ animationDelay: `${i * 0.05}s` }} />
+              ))}
+            </div>
+            <button className="voice-recorder__cancel" type="button" onClick={() => { voiceNoteRecorderRef.current?.stop(); cleanupVoiceNoteCapture(); setVoiceNoteRecording(false); if (voiceRecordingTimerRef.current) { clearInterval(voiceRecordingTimerRef.current); voiceRecordingTimerRef.current = null } setVoiceRecordingDuration(0) }}>
+              Cancel
+            </button>
+            <button className="voice-recorder__send" type="button" aria-label="Send voice note" onClick={() => void handleVoiceNoteToggle()}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 15V5M10 5L6 9M10 5L14 9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
         ) : null}
       </main>
 
       <aside className={detailRailVisible ? 'detail-rail' : 'detail-rail detail-rail--hidden'}>
         <ChatInfoPanel
           title={activeChat?.title ?? profileUsername ?? storedDevice?.username ?? 'User'}
-          phone="+7 999 555 01 10"
           handle={`@${activeChat?.title?.toLowerCase().replace(/\s+/g, '_') ?? profileUsername ?? storedDevice?.username ?? 'user'}`}
           avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
         />
@@ -4316,6 +4403,134 @@ function App() {
           </div>
         ) : null}
       </aside>
+
+      {/* ── Right-click context menu on messages ── */}
+      {contextMenuMessage ? (
+        <>
+          <div className="overlay-backdrop" onClick={() => setContextMenuMessage(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenuMessage(null) }} />
+          <div className="msg-context-menu" style={{ top: contextMenuMessage.y, left: contextMenuMessage.x }}>
+            <button type="button" onClick={() => { handleReplyToMessage(contextMenuMessage.message); setContextMenuMessage(null) }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4L2 8L6 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 8H10C12.2 8 14 9.8 14 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              Reply
+            </button>
+            {contextMenuMessage.message.side === 'outgoing' && !contextMenuMessage.message.attachment ? (
+              <button type="button" onClick={() => { handleStartEditingMessage(contextMenuMessage.message); setContextMenuMessage(null) }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                Edit
+              </button>
+            ) : null}
+            {!contextMenuMessage.message.id.startsWith('optimistic-') ? (
+              <button type="button" onClick={() => { handleToggleMessagePin(contextMenuMessage.message); setContextMenuMessage(null) }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 2L12.5 4.5L9 8V11L7 9L3 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M5.5 5.5L9.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                {contextMenuMessage.message.pinnedAt ? 'Unpin' : 'Pin'}
+              </button>
+            ) : null}
+            <button type="button" onClick={() => { void navigator.clipboard.writeText(contextMenuMessage.message.text); setContextMenuMessage(null); showToast('Copied to clipboard') }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M11 5V3.5C11 2.7 10.3 2 9.5 2H3.5C2.7 2 2 2.7 2 3.5V9.5C2 10.3 2.7 11 3.5 11H5" stroke="currentColor" strokeWidth="1.3"/></svg>
+              Copy
+            </button>
+            {contextMenuMessage.message.side === 'outgoing' ? (
+              <>
+                <div className="msg-context-menu__sep" />
+                <button type="button" className="msg-context-menu__danger" onClick={() => { handleDeleteExistingMessage(contextMenuMessage.message); setContextMenuMessage(null) }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4H13M5.5 4V3C5.5 2.4 5.9 2 6.5 2H9.5C10.1 2 10.5 2.4 10.5 3V4M4.5 4V13C4.5 13.6 4.9 14 5.5 14H10.5C11.1 14 11.5 13.6 11.5 13V4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Delete
+                </button>
+              </>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
+      {/* ── Profile / Settings overlay (burger menu) ── */}
+      {profileOverlayOpen ? (
+        <>
+          <div className="overlay-backdrop" onClick={() => setProfileOverlayOpen(false)} />
+          <div className="profile-overlay">
+            <div className="profile-overlay__header">
+              <div className="profile-overlay__avatar" style={{ background: '#5856D6' }}>
+                {(profileUsername ?? storedDevice?.username ?? 'U').slice(0, 1)}
+              </div>
+              <div className="profile-overlay__info">
+                <strong>{profileUsername ?? storedDevice?.username ?? 'User'}</strong>
+                <span>@{profileUsername ?? storedDevice?.username ?? 'user'}</span>
+              </div>
+              <button className="profile-overlay__close" type="button" onClick={() => setProfileOverlayOpen(false)} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="profile-overlay__actions">
+              <button type="button" onClick={() => { setProfileOverlayOpen(false); setView('link') }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7 4H4C3 4 2 5 2 6V14C2 15 3 16 4 16H12C13 16 14 15 14 14V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10 2H16V8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 2L8 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Link Device
+              </button>
+              <button type="button" onClick={() => { setProfileOverlayOpen(false); handleReauthenticate() }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 9C2 5.1 5.1 2 9 2C12.9 2 16 5.1 16 9C16 12.9 12.9 16 9 16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M2 9H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Refresh Session
+              </button>
+              <div className="profile-overlay__sep" />
+              <button type="button" className="profile-overlay__danger" onClick={() => { setProfileOverlayOpen(false); handleForgetDevice() }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 2H12M3 5H15M13 5L12.5 14C12.5 15.1 11.6 16 10.5 16H7.5C6.4 16 5.5 15.1 5.5 14L5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {/* ── User list overlay (pencil button) ── */}
+      {userListOpen ? (
+        <>
+          <div className="overlay-backdrop" onClick={() => setUserListOpen(false)} />
+          <div className="user-list-overlay">
+            <div className="user-list-overlay__header">
+              <h2>New Message</h2>
+              <button type="button" onClick={() => setUserListOpen(false)} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <form className="user-list-overlay__search" onSubmit={handleCreateDirectChat}>
+              <input
+                autoFocus
+                disabled={loading}
+                onChange={(event) => setNewChatUsername(event.target.value)}
+                placeholder="Search by username…"
+                ref={directChatInputRef}
+                value={newChatUsername}
+              />
+              <button className="primary-action" disabled={loading || newChatUsername.trim() === ''} type="submit">
+                Start Chat
+              </button>
+            </form>
+            <div className="user-list-overlay__list">
+              {chatItems.map((chat) => (
+                <button
+                  key={chat.id}
+                  className="user-list-overlay__item"
+                  type="button"
+                  onClick={() => { setActiveChatId(chat.id); setUserListOpen(false) }}
+                >
+                  <div className="user-list-overlay__avatar" style={{ background: chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6' }}>
+                    {chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
+                  </div>
+                  <span>{chat.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {/* ── iOS glass toast notifications ── */}
+      {toasts.length > 0 ? (
+        <div className="toast-stack">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`toast toast--${toast.tone}`}>
+              {toast.message}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
