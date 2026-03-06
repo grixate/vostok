@@ -8,16 +8,12 @@ import {
   type ChangeEvent,
   type FormEvent
 } from 'react'
-import { GlassSurface } from '@vostok/ui-primitives'
 import { outboxRetryDelayMs, sha256Hex } from '@vostok/crypto-core'
 import {
-  CallSurface,
   ChatInfoPanel,
   ChatListItem,
-  ContextMenu,
   ConversationHeader,
-  MessageBubble,
-  ReactionBar
+  MessageBubble
 } from '@vostok/ui-chat'
 import {
   appendMediaUploadPart,
@@ -328,47 +324,47 @@ function App() {
   const [newGroupMembers, setNewGroupMembers] = useState('')
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
-  const [devices, setDevices] = useState<DeviceInfo[]>([])
-  const [groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
-  const [outboxPendingCount, setOutboxPendingCount] = useState(0)
+  const [_devices, setDevices] = useState<DeviceInfo[]>([])
+  const [_groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
+  const [_outboxPendingCount, setOutboxPendingCount] = useState(0)
   const [linkMetadataByUrl, setLinkMetadataByUrl] = useState<Record<string, LinkMetadata>>({})
   const [safetyNumbers, setSafetyNumbers] = useState<SafetyNumberEntry[]>([])
   const [verifyingSafetyDeviceId, setVerifyingSafetyDeviceId] = useState<string | null>(null)
-  const [remotePrekeyBundles, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
+  const [_remotePrekeyBundles, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
   const [chatSessions, setChatSessions] = useState<ChatDeviceSession[]>([])
-  const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null)
-  const [federationPeers, setFederationPeers] = useState<FederationPeer[]>([])
-  const [federationDeliveries, setFederationDeliveries] = useState<FederationDeliveryJob[]>([])
+  const [_adminOverview, setAdminOverview] = useState<AdminOverview | null>(null)
+  const [_federationPeers, setFederationPeers] = useState<FederationPeer[]>([])
+  const [_federationDeliveries, setFederationDeliveries] = useState<FederationDeliveryJob[]>([])
   const [federationDomain, setFederationDomain] = useState('')
   const [federationDisplayName, setFederationDisplayName] = useState('')
-  const [federationInviteToken, setFederationInviteToken] = useState<string | null>(null)
-  const [turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
+  const [_federationInviteToken, setFederationInviteToken] = useState<string | null>(null)
+  const [_turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
   const [activeCall, setActiveCall] = useState<CallSession | null>(null)
-  const [callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
+  const [_callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
   const [callKeys, setCallKeys] = useState<CallKeyDistribution[]>([])
-  const [callRoom, setCallRoom] = useState<CallRoomState | null>(null)
+  const [_callRoom, setCallRoom] = useState<CallRoomState | null>(null)
   const [callWebRtcEndpoint, setCallWebRtcEndpoint] = useState<CallWebRtcEndpointState | null>(null)
-  const [callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
+  const [_callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
   const [callSignals, setCallSignals] = useState<CallSignal[]>([])
-  const [localMediaMode, setLocalMediaMode] = useState<'none' | 'audio' | 'audio_video'>('none')
+  const [_localMediaMode, setLocalMediaMode] = useState<'none' | 'audio' | 'audio_video'>('none')
   const [localAudioTrackCount, setLocalAudioTrackCount] = useState(0)
   const [localVideoTrackCount, setLocalVideoTrackCount] = useState(0)
-  const [membraneClientReady, setMembraneClientReady] = useState(false)
+  const [_membraneClientReady, setMembraneClientReady] = useState(false)
   const [membraneClientConnected, setMembraneClientConnected] = useState(false)
-  const [membraneRemoteEndpointCount, setMembraneRemoteEndpointCount] = useState(0)
-  const [membraneRemoteTrackCount, setMembraneRemoteTrackCount] = useState(0)
-  const [membraneReadyTrackCount, setMembraneReadyTrackCount] = useState(0)
-  const [membraneReadyAudioTrackCount, setMembraneReadyAudioTrackCount] = useState(0)
-  const [membraneReadyVideoTrackCount, setMembraneReadyVideoTrackCount] = useState(0)
-  const [membraneRemoteEndpointIds, setMembraneRemoteEndpointIds] = useState<string[]>([])
-  const [membraneRemoteTrackIds, setMembraneRemoteTrackIds] = useState<string[]>([])
+  const [_membraneRemoteEndpointCount, setMembraneRemoteEndpointCount] = useState(0)
+  const [_membraneRemoteTrackCount, setMembraneRemoteTrackCount] = useState(0)
+  const [_membraneReadyTrackCount, setMembraneReadyTrackCount] = useState(0)
+  const [_membraneReadyAudioTrackCount, setMembraneReadyAudioTrackCount] = useState(0)
+  const [_membraneReadyVideoTrackCount, setMembraneReadyVideoTrackCount] = useState(0)
+  const [_membraneRemoteEndpointIds, setMembraneRemoteEndpointIds] = useState<string[]>([])
+  const [_membraneRemoteTrackIds, setMembraneRemoteTrackIds] = useState<string[]>([])
   const [membraneRemoteEndpoints, setMembraneRemoteEndpoints] = useState<
     MembraneRemoteEndpointSnapshot[]
   >([])
   const [membraneRemoteTracks, setMembraneRemoteTracks] = useState<MembraneRemoteTrackSnapshot[]>(
     []
   )
-  const [membraneClientEndpointId, setMembraneClientEndpointId] = useState<string | null>(null)
+  const [_membraneClientEndpointId, setMembraneClientEndpointId] = useState<string | null>(null)
   const [attachmentPlaybackUrls, setAttachmentPlaybackUrls] = useState<Record<string, string>>({})
 
   const deferredActiveChatId = useDeferredValue(activeChatId)
@@ -570,7 +566,7 @@ function App() {
     return activeSessions
   }
 
-  async function handleRekeyActiveChatSessions() {
+  async function _handleRekeyActiveChatSessions() {
     if (!storedDevice || !activeChatId) {
       setBanner({ tone: 'error', message: 'Select a chat before rekeying direct-chat sessions.' })
       return
@@ -827,7 +823,7 @@ function App() {
     }
   }
 
-  async function handleRotatePrekeys() {
+  async function _handleRotatePrekeys() {
     if (!storedDevice) {
       setBanner({ tone: 'error', message: 'No local device identity is available.' })
       return
@@ -1760,7 +1756,7 @@ function App() {
     }
   }
 
-  async function handleCreateGroupChat(event: FormEvent<HTMLFormElement>) {
+  async function _handleCreateGroupChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!storedDevice || newGroupTitle.trim() === '') {
@@ -1792,7 +1788,7 @@ function App() {
     }
   }
 
-  async function handleRenameActiveGroupChat(event: FormEvent<HTMLFormElement>) {
+  async function _handleRenameActiveGroupChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!storedDevice || !activeChat || activeChat.type !== 'group' || groupRenameTitle.trim() === '') {
@@ -1817,7 +1813,7 @@ function App() {
     }
   }
 
-  async function handleUpdateActiveGroupMemberRole(member: GroupMember, role: 'admin' | 'member') {
+  async function _handleUpdateActiveGroupMemberRole(member: GroupMember, role: 'admin' | 'member') {
     if (!storedDevice || !activeChat || activeChat.type !== 'group' || member.role === role) {
       return
     }
@@ -1872,7 +1868,7 @@ function App() {
     }
   }
 
-  async function handleRotateGroupSenderKey() {
+  async function _handleRotateGroupSenderKey() {
     if (!storedDevice || !activeChat || activeChat.type !== 'group') {
       return
     }
@@ -1919,7 +1915,7 @@ function App() {
     }
   }
 
-  async function handleRevokeLinkedDevice(deviceId: string) {
+  async function _handleRevokeLinkedDevice(deviceId: string) {
     if (!storedDevice) {
       return
     }
@@ -1969,7 +1965,7 @@ function App() {
     }
   }
 
-  async function handleCreateFederationPeer(event: FormEvent<HTMLFormElement>) {
+  async function _handleCreateFederationPeer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!storedDevice || federationDomain.trim() === '') {
@@ -1999,7 +1995,7 @@ function App() {
     }
   }
 
-  async function handleQueueFederationDelivery(peerId: string) {
+  async function _handleQueueFederationDelivery(peerId: string) {
     if (!storedDevice) {
       return
     }
@@ -2025,7 +2021,7 @@ function App() {
     }
   }
 
-  async function handleCreateFederationPeerInvite(peerId: string) {
+  async function _handleCreateFederationPeerInvite(peerId: string) {
     if (!storedDevice) {
       return
     }
@@ -2050,7 +2046,7 @@ function App() {
     }
   }
 
-  async function handleAttemptFederationDelivery(jobId: string) {
+  async function _handleAttemptFederationDelivery(jobId: string) {
     if (!storedDevice) {
       return
     }
@@ -2077,7 +2073,7 @@ function App() {
     }
   }
 
-  async function handleUpdateFederationPeerStatus(
+  async function _handleUpdateFederationPeerStatus(
     peerId: string,
     status: 'pending' | 'active' | 'disabled'
   ) {
@@ -2102,7 +2098,7 @@ function App() {
     }
   }
 
-  async function handleHeartbeatFederationPeer(peerId: string) {
+  async function _handleHeartbeatFederationPeer(peerId: string) {
     if (!storedDevice) {
       return
     }
@@ -2124,7 +2120,7 @@ function App() {
     }
   }
 
-  async function handleRefreshTurnCredentials() {
+  async function _handleRefreshTurnCredentials() {
     if (!storedDevice) {
       return
     }
@@ -2183,7 +2179,7 @@ function App() {
     }
   }
 
-  async function handleJoinActiveCall() {
+  async function _handleJoinActiveCall() {
     if (!storedDevice || !activeCall) {
       return
     }
@@ -2240,7 +2236,7 @@ function App() {
     }
   }
 
-  async function handleRotateCallKeyEpoch() {
+  async function _handleRotateCallKeyEpoch() {
     if (!storedDevice || !activeCall || !activeChatId) {
       return
     }
@@ -2281,7 +2277,7 @@ function App() {
     }
   }
 
-  async function handleLeaveActiveCall() {
+  async function _handleLeaveActiveCall() {
     if (!storedDevice || !activeCall) {
       return
     }
@@ -2305,7 +2301,7 @@ function App() {
     }
   }
 
-  async function handleProvisionMembraneWebRtcEndpoint() {
+  async function _handleProvisionMembraneWebRtcEndpoint() {
     if (!storedDevice || !activeCall) {
       return
     }
@@ -2329,7 +2325,7 @@ function App() {
     }
   }
 
-  async function handlePollMembraneWebRtcEndpoint() {
+  async function _handlePollMembraneWebRtcEndpoint() {
     if (!storedDevice || !activeCall) {
       return
     }
@@ -2365,7 +2361,7 @@ function App() {
     }
   }
 
-  async function handlePingMembraneWebRtcEndpoint() {
+  async function _handlePingMembraneWebRtcEndpoint() {
     if (!storedDevice || !activeCall) {
       return
     }
@@ -2397,7 +2393,7 @@ function App() {
     }
   }
 
-  async function handleInitializeWebRtc() {
+  async function _handleInitializeWebRtc() {
     if (!activeCall || !storedDevice) {
       return
     }
@@ -2432,7 +2428,7 @@ function App() {
     }
   }
 
-  async function handleRefreshDesktopRuntime() {
+  async function _handleRefreshDesktopRuntime() {
     if (!isDesktopShell()) {
       setBanner({ tone: 'info', message: 'Desktop runtime details are only available inside the Tauri shell.' })
       return
@@ -2639,7 +2635,7 @@ function App() {
     }
   }
 
-  async function handleAttachLocalMedia(mode: 'audio' | 'audio_video') {
+  async function _handleAttachLocalMedia(mode: 'audio' | 'audio_video') {
     if (!activeCall) {
       return
     }
@@ -2697,7 +2693,7 @@ function App() {
     }
   }
 
-  async function handleReleaseLocalMedia() {
+  async function _handleReleaseLocalMedia() {
     await removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
     membraneLocalTrackIdsRef.current = []
 
@@ -3275,7 +3271,7 @@ function App() {
     }
   }
 
-  async function handleRoundVideoToggle() {
+  async function _handleRoundVideoToggle() {
     if (roundVideoRecording) {
       const recorder = roundVideoRecorderRef.current
 
@@ -3435,7 +3431,7 @@ function App() {
     }
   }
 
-  async function handleQuickReaction(reactionKey: string) {
+  async function _handleQuickReaction(reactionKey: string) {
     if (!storedDevice || !activeChatId) {
       return
     }
@@ -3606,13 +3602,13 @@ function App() {
   const appShellClassName = detailRailVisible ? 'app-shell' : 'app-shell app-shell--detail-hidden'
   const dominantRemoteEndpointId = pickDominantRemoteSpeakerEndpointId(membraneRemoteTracks)
   const featuredRemoteTrack = pickFeaturedRemoteTrack(membraneRemoteTracks, dominantRemoteEndpointId)
-  const dominantRemoteEndpoint = dominantRemoteEndpointId
+  const _dominantRemoteEndpoint = dominantRemoteEndpointId
     ? membraneRemoteEndpoints.find((endpoint) => endpoint.id === dominantRemoteEndpointId) ?? null
     : null
-  const remoteAudioTrackCount = membraneRemoteTracks.filter(
+  const _remoteAudioTrackCount = membraneRemoteTracks.filter(
     (track) => track.ready && track.kind === 'audio'
   ).length
-  const remoteVideoTrackCount = membraneRemoteTracks.filter(
+  const _remoteVideoTrackCount = membraneRemoteTracks.filter(
     (track) => track.ready && track.kind === 'video'
   ).length
 
@@ -3722,30 +3718,19 @@ function App() {
   if (onboarding) {
     return (
       <div className="auth-shell">
-        <section className="auth-shell__hero">
-          <span className="sidebar__eyebrow">Vostok Stage 2</span>
-          <h1>Identity and device bootstrap</h1>
-          <p>
-            This slice adds real registration, challenge-response authentication, and local device
-            key storage in the browser.
-          </p>
+        <div className="auth-card">
+          <div className="auth-card__logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+              <circle cx="28" cy="28" r="28" fill="var(--accent)" />
+              <text x="28" y="34" textAnchor="middle" fill="white" fontSize="24" fontWeight="700">V</text>
+            </svg>
+          </div>
+          <h1 className="auth-card__title">Vostok</h1>
+          <p className="auth-card__subtitle">Secure messaging for everyone</p>
 
-          <MessageBubble className="conversation-stage__hero" side="system">
-            <strong className="hero-card__title">Private by default</strong>
-            <span className="hero-card__copy">
-              Your browser now generates local signing and encryption keys. The server stores only
-              the public halves and later verifies challenge signatures during login.
-            </span>
-            <span className="hero-card__mark" aria-hidden="true">
-              V
-            </span>
-          </MessageBubble>
-        </section>
-
-        <GlassSurface className="auth-card">
           <div className="auth-card__tabs">
             <button
-              className={view === 'register' ? 'auth-tab auth-tab--active' : 'auth-tab'}
+              className={view === 'register' || view === 'welcome' ? 'auth-tab auth-tab--active' : 'auth-tab'}
               type="button"
               onClick={() => setView('register')}
             >
@@ -3763,7 +3748,7 @@ function App() {
               type="button"
               onClick={() => setView('link')}
             >
-              Link Device
+              Link
             </button>
           </div>
 
@@ -3773,21 +3758,13 @@ function App() {
 
           {view === 'welcome' || view === 'register' ? (
             <form className="auth-form" onSubmit={handleRegister}>
-              <div className="auth-copy">
-                <h2>Create your first device</h2>
-                <p>
-                  This flow creates a local device key, registers a username, and stores the issued
-                  session token in local browser storage.
-                </p>
-              </div>
-
               <label className="auth-field">
                 <span>Username</span>
                 <input
                   autoComplete="username"
                   disabled={loading}
                   onChange={(event) => setUsername(event.target.value)}
-                  placeholder="grigory"
+                  placeholder="Choose a username"
                   required
                   value={username}
                 />
@@ -3798,42 +3775,33 @@ function App() {
                 <input
                   disabled={loading}
                   onChange={(event) => setDeviceName(event.target.value)}
-                  placeholder="Safari on Mac"
+                  placeholder="e.g. Safari on Mac"
                   required
                   value={deviceName}
                 />
               </label>
 
               <button className="primary-action" disabled={loading} type="submit">
-                {loading ? 'Working…' : 'Register This Device'}
+                {loading ? 'Creating...' : 'Create Account'}
               </button>
             </form>
           ) : null}
 
           {view === 'login' ? (
             <div className="auth-form">
-              <div className="auth-copy">
-                <h2>Re-authenticate on this browser</h2>
-                <p>
-                  This uses the stored private key to sign a fresh server challenge and mint a new
-                  session token.
-                </p>
-              </div>
-
-              <div className="device-summary-card">
-                {storedDevice ? (
-                  <>
+              {storedDevice ? (
+                <div className="auth-device-card">
+                  <div className="auth-device-card__avatar" style={{ background: '#007AFF' }}>
+                    {(storedDevice.username ?? 'U').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div>
                     <strong>{storedDevice.username}</strong>
-                    <span>{storedDevice.deviceName}</span>
-                    <span>Device ID: {storedDevice.deviceId}</span>
-                  </>
-                ) : (
-                  <>
-                    <strong>No local device found</strong>
-                    <span>Register once on this browser before using sign-in.</span>
-                  </>
-                )}
-              </div>
+                    <span style={{ fontSize: 13, color: 'var(--label2)' }}>{storedDevice.deviceName}</span>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: 14, color: 'var(--label2)', textAlign: 'center' }}>No local device found. Register first.</p>
+              )}
 
               <button
                 className="primary-action"
@@ -3841,32 +3809,24 @@ function App() {
                 onClick={handleReauthenticate}
                 type="button"
               >
-                {loading ? 'Working…' : 'Sign Challenge'}
+                {loading ? 'Signing in...' : 'Sign In'}
               </button>
             </div>
           ) : null}
 
           {view === 'link' ? (
             <div className="auth-form">
-              <div className="auth-copy">
-                <h2>Link a second device</h2>
-                <p>
-                  The full QR-based pairing flow lands in the next slice. This screen reserves the
-                  Stage 2 entry point so the UX is in place before the pairing transport is added.
-                </p>
-              </div>
-
               <label className="auth-field">
                 <span>Pairing code</span>
-                <input disabled placeholder="Coming next" value="" readOnly />
+                <input disabled placeholder="Coming soon" value="" readOnly />
               </label>
 
               <button className="secondary-action" disabled type="button">
-                Pairing Transport Pending
+                Link Device
               </button>
             </div>
           ) : null}
-        </GlassSurface>
+        </div>
       </div>
     )
   }
@@ -3875,7 +3835,6 @@ function App() {
     <div className={appShellClassName}>
       <aside className="sidebar">
         <div className="sidebar__header">
-          <span className="sidebar__eyebrow">Vostok</span>
           {desktopShell ? (
             <div
               className={
@@ -3885,147 +3844,109 @@ function App() {
               }
             >
               <div className="desktop-titlebar__meta" data-tauri-drag-region>
-                <strong>{desktopRuntime?.appName ?? 'Vostok Desktop'}</strong>
-                <span>
-                  {desktopRuntime
-                    ? `${desktopRuntime.platform}/${desktopRuntime.arch}`
-                    : 'Tauri desktop host'}
-                </span>
+                <strong>{desktopRuntime?.appName ?? 'Vostok'}</strong>
               </div>
               <div className="desktop-titlebar__actions">
                 <button
-                  aria-label={desktopWindowAlwaysOnTop ? 'Disable always on top' : 'Enable always on top'}
-                  className="vostok-icon-button desktop-titlebar__button"
-                  disabled={loading}
-                  onClick={handleToggleDesktopAlwaysOnTop}
-                  type="button"
-                >
-                  <span className="vostok-icon-button__glyph">
-                    {desktopWindowAlwaysOnTop ? 'P' : 'p'}
-                  </span>
-                </button>
-                <button
-                  aria-label={desktopWindowFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  className="vostok-icon-button desktop-titlebar__button"
-                  disabled={loading}
-                  onClick={handleToggleDesktopFullscreen}
-                  type="button"
-                >
-                  <span className="vostok-icon-button__glyph">
-                    {desktopWindowFullscreen ? 'U' : 'u'}
-                  </span>
-                </button>
-                <button
-                  aria-label="Minimize desktop window"
-                  className="vostok-icon-button desktop-titlebar__button"
+                  aria-label="Minimize"
+                  className="desktop-titlebar__button"
                   disabled={loading}
                   onClick={handleMinimizeDesktopHostWindow}
                   type="button"
                 >
-                  <span className="vostok-icon-button__glyph">-</span>
+                  −
                 </button>
                 <button
-                  aria-label={desktopWindowMaximized ? 'Restore desktop window' : 'Maximize desktop window'}
-                  className="vostok-icon-button desktop-titlebar__button"
+                  aria-label={desktopWindowMaximized ? 'Restore' : 'Maximize'}
+                  className="desktop-titlebar__button"
                   disabled={loading}
                   onClick={handleToggleDesktopWindowMaximize}
                   type="button"
                 >
-                  <span className="vostok-icon-button__glyph">
-                    {desktopWindowMaximized ? 'R' : '+'}
-                  </span>
+                  {desktopWindowMaximized ? '❐' : '□'}
                 </button>
                 <button
-                  aria-label="Close desktop window"
-                  className="vostok-icon-button desktop-titlebar__button"
+                  aria-label="Close"
+                  className="desktop-titlebar__button"
                   disabled={loading}
                   onClick={handleCloseDesktopHostWindow}
                   type="button"
                 >
-                  <span className="vostok-icon-button__glyph">x</span>
+                  ✕
                 </button>
               </div>
             </div>
           ) : null}
-          <h1>Chats</h1>
-          <p>Stage 3 now uses authenticated direct chats and opaque encrypted message envelopes.</p>
-        </div>
-        <button
-          aria-pressed={detailRailVisible}
-          className="secondary-action detail-rail-toggle"
-          onClick={() => setDetailRailPreferred((current) => !current)}
-          type="button"
-        >
-          {detailRailVisible
-            ? 'Hide Detail Rail'
-            : isDesktopWide
-              ? 'Show Detail Rail'
-              : 'Detail Rail Hidden on Narrow Window'}
-        </button>
-        <div className="new-chat-form">
-          <label className="auth-field">
-            <span>Filter chats</span>
+          <div className="sidebar__title-row">
+            <button
+              className="sidebar__hamburger-btn"
+              onClick={() => setDetailRailPreferred((current) => !current)}
+              type="button"
+              aria-label="Menu"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true">
+                <path d="M1 2H19M1 8H19M1 14H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+            <span className="sidebar__title">Chats</span>
+            <button
+              className="sidebar__compose-btn"
+              type="button"
+              aria-label="New message"
+              onClick={() => directChatInputRef.current?.focus()}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M13 2L16 5L6 15H3V12L13 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M11 4L14 7" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            </button>
+          </div>
+          <label className="search-bar">
+            <span className="search-bar__icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </span>
             <input
+              className="search-bar__input"
               disabled={loading}
               onChange={(event) => setChatFilter(event.target.value)}
-              placeholder="Search by title"
+              placeholder="Search"
               ref={chatFilterInputRef}
+              type="search"
               value={chatFilter}
+              aria-label="Search chats"
             />
           </label>
-          {chatFilter.trim() !== '' ? (
-            <button
-              className="secondary-action"
-              disabled={loading}
-              onClick={() => setChatFilter('')}
-              type="button"
-            >
-              Clear Filter
-            </button>
-          ) : null}
+          <form className="new-chat-form" onSubmit={handleCreateDirectChat} style={{ padding: '0 4px 4px' }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                disabled={loading}
+                onChange={(event) => setNewChatUsername(event.target.value)}
+                placeholder="Start chat by username…"
+                ref={directChatInputRef}
+                value={newChatUsername}
+                style={{
+                  flex: 1, border: 'none', background: 'var(--fill)', borderRadius: 8,
+                  padding: '8px 10px', fontSize: 13, fontFamily: 'var(--font)',
+                  color: 'var(--label)', outline: 'none'
+                }}
+              />
+              <button
+                className="primary-action"
+                disabled={loading || newChatUsername.trim() === ''}
+                type="submit"
+                style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8 }}
+              >
+                Go
+              </button>
+            </div>
+          </form>
         </div>
-        <form className="new-chat-form" onSubmit={handleCreateDirectChat}>
-          <label className="auth-field">
-            <span>Start direct chat</span>
-            <input
-              disabled={loading}
-              onChange={(event) => setNewChatUsername(event.target.value)}
-              placeholder="username"
-              ref={directChatInputRef}
-              value={newChatUsername}
-            />
-          </label>
-          <button className="secondary-action" disabled={loading || newChatUsername.trim() === ''} type="submit">
-            Open Direct Chat
-          </button>
-        </form>
-        <form className="new-chat-form" onSubmit={handleCreateGroupChat}>
-          <label className="auth-field">
-            <span>Create group</span>
-            <input
-              disabled={loading}
-              onChange={(event) => setNewGroupTitle(event.target.value)}
-              placeholder="Operators"
-              ref={groupTitleInputRef}
-              value={newGroupTitle}
-            />
-          </label>
-          <label className="auth-field">
-            <span>Members (comma-separated)</span>
-            <input
-              disabled={loading}
-              onChange={(event) => setNewGroupMembers(event.target.value)}
-              placeholder="alice,bob"
-              value={newGroupMembers}
-            />
-          </label>
-          <button className="secondary-action" disabled={loading || newGroupTitle.trim() === ''} type="submit">
-            Open Group
-          </button>
-        </form>
         <div className="sidebar__list">
           {visibleChatItems.length > 0 ? (
-            visibleChatItems.map((chat) => (
+            visibleChatItems.map((chat, index) => (
               <button
                 key={chat.id}
                 className="chat-list-button"
@@ -4046,11 +3967,22 @@ function App() {
                   unreadCount={chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
                   active={chat.id === activeChat?.id}
                   pinned={chat.is_self_chat}
+                  avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
+                  avatarInitial={chat.is_self_chat ? '🔖' : chat.title.slice(0, 1)}
+                  isFirst={index === 0}
                 />
               </button>
             ))
           ) : (
-            <span className="settings-card__muted">No chats match the current filter.</span>
+            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
+              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>
+                No chats yet
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>
+                Start a conversation above
+              </p>
+            </div>
           )}
         </div>
       </aside>
@@ -4058,35 +3990,50 @@ function App() {
       <main className="conversation-pane">
         {banner ? <div className={`status-banner status-banner--${banner.tone}`}>{banner.message}</div> : null}
         <ConversationHeader
-          title={activeChat?.title ?? 'No active chat'}
+          title={activeChat?.title ?? 'Vostok'}
           subtitle={
             activeChat
               ? activeChat.is_self_chat
-                ? 'local encrypted cache available'
-                : 'direct chat envelope transport'
-              : 'create or select a direct chat'
+                ? 'Saved Messages'
+                : activeChat.type === 'group'
+                  ? `${groupMembers.length} members`
+                  : 'last seen recently'
+              : 'Select a chat to start messaging'
           }
+          avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
+          avatarInitial={activeChat?.is_self_chat ? '🔖' : activeChat?.title?.slice(0, 1)}
+          online={activeChat != null && !activeChat.is_self_chat && activeChat.type !== 'group'}
+          actions={activeChat ? (
+            <>
+              <button className="vostok-icon-button" type="button" aria-label="Voice call" disabled={loading} onClick={() => handleStartCall('voice')}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M17 14.2V16.5C17 17 16.6 17.4 16.1 17.5C15.7 17.5 15.3 17.5 14.9 17.5C8.3 17.5 3 12.2 3 5.6C3 5.2 3 4.8 3.1 4.4C3.1 3.9 3.5 3.5 4 3.5H6.3C6.7 3.5 7.1 3.8 7.2 4.2C7.3 4.8 7.5 5.3 7.7 5.8C7.8 6.1 7.7 6.4 7.5 6.6L6.5 7.6C7.5 9.4 9.1 11 10.9 12L11.9 11C12.1 10.8 12.4 10.7 12.7 10.8C13.2 11 13.7 11.2 14.3 11.3C14.7 11.4 15 11.8 15 12.2V14.2H17Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <button className="vostok-icon-button" type="button" aria-label="Search" disabled={loading}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5"/><path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+              <button className="vostok-icon-button" type="button" aria-label="More options" disabled={loading}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="5" r="1.5" fill="currentColor"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/><circle cx="10" cy="15" r="1.5" fill="currentColor"/></svg>
+              </button>
+            </>
+          ) : undefined}
         />
 
         <section className="conversation-stage">
           {pinnedMessage && !pinnedMessage.deletedAt ? (
-            <GlassSurface className="pinned-message-banner">
-              <span className="sidebar__eyebrow">Pinned message</span>
+            <div className="pinned-message-banner">
               <strong>{resolvePinnedPreview(pinnedMessage)}</strong>
-              <span>{formatRelativeTime(pinnedMessage.pinnedAt ?? pinnedMessage.sentAt)}</span>
-            </GlassSurface>
+            </div>
           ) : null}
-          {messageItems.length === 0 ? (
-            <MessageBubble className="conversation-stage__hero" side="system">
-              <strong className="hero-card__title">No messages here yet...</strong>
-              <span className="hero-card__copy">
-                Stage 3 now supports recipient-targeted envelope wrapping for newly registered
-                devices, with a legacy local-cache fallback for older browser-only messages.
-              </span>
-              <span className="hero-card__mark" aria-hidden="true">
-                V
-              </span>
-            </MessageBubble>
+          {!activeChat ? (
+            <div className="conversation-stage__empty">
+              <div style={{ fontSize: 48, marginBottom: 8 }}>💬</div>
+              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>Select a chat to start messaging</p>
+            </div>
+          ) : messageItems.length === 0 ? (
+            <div className="conversation-stage__empty">
+              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>No messages here yet</p>
+              <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
+            </div>
           ) : (
             <div className="message-thread">
               {messageItems.map((message) => {
@@ -4101,13 +4048,13 @@ function App() {
                     : null
 
                 return (
-                <MessageBubble key={message.id} side={message.side}>
+                <MessageBubble key={message.id} side={message.side} timestamp={formatRelativeTime(message.sentAt)}>
                   {message.replyToMessageId ? (
                     <span className="message-thread__reply-preview">
-                      Replying to {resolveReplyPreview(messageItems, message.replyToMessageId)}
+                      {resolveReplyPreview(messageItems, message.replyToMessageId)}
                     </span>
                   ) : null}
-                  <strong>{message.text}</strong>
+                  <span>{message.text}</span>
                   {linkPreview ? (
                     <a
                       className="message-thread__link-preview"
@@ -4171,179 +4118,88 @@ function App() {
                         .join(' • ')}
                     </span>
                   ) : null}
-                  {message.side !== 'system' ? (
+                  {message.side !== 'system' && !message.deletedAt ? (
                     <div className="message-thread__actions">
-                      {!message.deletedAt ? (
-                        <button
-                          className="secondary-action"
-                          disabled={loading}
-                          onClick={() => handleReplyToMessage(message)}
-                          type="button"
-                        >
-                          Reply
-                        </button>
+                      <button className="mini-action" disabled={loading} onClick={() => handleReplyToMessage(message)} type="button">Reply</button>
+                      {message.side === 'outgoing' && !message.attachment ? (
+                        <button className="mini-action" disabled={loading} onClick={() => handleStartEditingMessage(message)} type="button">Edit</button>
                       ) : null}
-                      {message.side === 'outgoing' && !message.attachment && !message.deletedAt ? (
-                        <button
-                          className="secondary-action"
-                          disabled={loading}
-                          onClick={() => handleStartEditingMessage(message)}
-                          type="button"
-                        >
-                          Edit
-                        </button>
+                      {message.side === 'outgoing' ? (
+                        <button className="mini-action" disabled={loading} onClick={() => handleDeleteExistingMessage(message)} type="button">Delete</button>
                       ) : null}
-                      {message.side === 'outgoing' && !message.deletedAt ? (
-                        <button
-                          className="secondary-action"
-                          disabled={loading}
-                          onClick={() => handleDeleteExistingMessage(message)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                      {!message.id.startsWith('optimistic-') && !message.deletedAt ? (
-                        <button
-                          className="secondary-action"
-                          disabled={loading}
-                          onClick={() => handleToggleMessagePin(message)}
-                          type="button"
-                        >
-                          {message.pinnedAt ? 'Unpin' : 'Pin'}
-                        </button>
+                      {!message.id.startsWith('optimistic-') ? (
+                        <button className="mini-action" disabled={loading} onClick={() => handleToggleMessagePin(message)} type="button">{message.pinnedAt ? 'Unpin' : 'Pin'}</button>
                       ) : null}
                     </div>
                   ) : null}
-                  <span className="message-thread__meta">
-                    {formatRelativeTime(message.sentAt)}
-                    {message.pinnedAt ? ' • pinned' : ''}
-                    {message.editedAt ? ' • edited' : ''}
-                    {message.deletedAt ? ' • deleted' : ''}
-                    {message.decryptable ? ' • decryptable on this device' : ' • opaque on this device'}
-                  </span>
                 </MessageBubble>
                 )
               })}
             </div>
           )}
 
-          <div className="floating-stack">
-            <ReactionBar reactions={['ACK', 'OK', 'PLAN', 'SHIP']} onSelect={handleQuickReaction} />
-            <ContextMenu
-              actions={['Reply', 'Forward (next)', 'Pin active message', 'Delete for me', 'Delete for all']}
-            />
-          </div>
         </section>
 
-        <form className="live-composer" onSubmit={handleSendMessage}>
-          <input
-            hidden
-            onChange={handleAttachmentPick}
-            ref={fileInputRef}
-            type="file"
-          />
-          <button
-            className="vostok-icon-button"
-            type="button"
-            aria-label="Attach"
-            disabled={loading || !activeChat}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <span className="vostok-icon-button__glyph">A</span>
-          </button>
-          <button
-            className="vostok-icon-button"
-            type="button"
-            aria-label={voiceNoteRecording ? 'Stop voice note recording' : 'Record voice note'}
-            disabled={loading || !activeChat}
-            onClick={() => void handleVoiceNoteToggle()}
-          >
-            <span className="vostok-icon-button__glyph">{voiceNoteRecording ? 'S' : 'M'}</span>
-          </button>
-          <button
-            className="vostok-icon-button"
-            type="button"
-            aria-label={roundVideoRecording ? 'Stop round video recording' : 'Record round video'}
-            disabled={loading || !activeChat}
-            onClick={() => void handleRoundVideoToggle()}
-          >
-            <span className="vostok-icon-button__glyph">{roundVideoRecording ? 'S' : 'V'}</span>
-          </button>
-          <GlassSurface className="live-composer__field">
-            {replyTargetMessageId ? (
-              <div className="live-composer__reply">
-                <div className="live-composer__reply-copy">
-                  <strong>{editingMessageId ? 'Editing reply' : 'Replying'}</strong>
-                  <span>{replyTargetMessage ? replyTargetMessage.text : 'Earlier message'}</span>
+        {activeChat ? (
+          <form className="live-composer" onSubmit={handleSendMessage}>
+            <input hidden onChange={handleAttachmentPick} ref={fileInputRef} type="file" />
+            <button className="live-composer__btn" type="button" aria-label="Attach file" disabled={loading} onClick={() => fileInputRef.current?.click()}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M18 10L10.5 17.5C8.5 19.5 5.5 19.5 3.5 17.5C1.5 15.5 1.5 12.5 3.5 10.5L11 3C12.5 1.5 15 1.5 16.5 3C18 4.5 18 7 16.5 8.5L9 16C8 17 6.5 17 5.5 16C4.5 15 4.5 13.5 5.5 12.5L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+            <div className="live-composer__field">
+              {replyTargetMessageId ? (
+                <div className="live-composer__reply">
+                  <div className="live-composer__reply-copy">
+                    <strong style={{ fontSize: 12, color: 'var(--accent)' }}>{editingMessageId ? 'Editing' : 'Reply'}</strong>
+                    <span>{replyTargetMessage ? replyTargetMessage.text : 'Earlier message'}</span>
+                  </div>
+                  <button className="live-composer__btn live-composer__reply-clear" type="button" disabled={loading} onClick={() => setReplyTargetMessageId(null)} aria-label="Cancel reply">✕</button>
                 </div>
-                <button
-                  className="vostok-icon-button live-composer__reply-clear"
-                  disabled={loading}
-                  onClick={() => setReplyTargetMessageId(null)}
-                  type="button"
-                >
-                  <span className="vostok-icon-button__glyph">x</span>
-                </button>
-              </div>
-            ) : null}
-            {editingMessageId && !replyTargetMessageId ? (
-              <div className="live-composer__reply">
-                <div className="live-composer__reply-copy">
-                  <strong>Editing message</strong>
-                  <span>{editingTargetMessage ? editingTargetMessage.text : 'Outgoing message'}</span>
+              ) : null}
+              {editingMessageId && !replyTargetMessageId ? (
+                <div className="live-composer__reply">
+                  <div className="live-composer__reply-copy">
+                    <strong style={{ fontSize: 12, color: 'var(--accent)' }}>Editing</strong>
+                    <span>{editingTargetMessage ? editingTargetMessage.text : 'Outgoing message'}</span>
+                  </div>
+                  <button className="live-composer__btn live-composer__reply-clear" type="button" disabled={loading} onClick={() => { setEditingMessageId(null); setDraft('') }} aria-label="Cancel edit">✕</button>
                 </div>
-                <button
-                  className="vostok-icon-button live-composer__reply-clear"
-                  disabled={loading}
-                  onClick={() => {
-                    setEditingMessageId(null)
-                    setDraft('')
-                  }}
-                  type="button"
-                >
-                  <span className="vostok-icon-button__glyph">x</span>
-                </button>
-              </div>
-            ) : null}
-            <textarea
-              className="live-composer__input"
-              disabled={loading || !activeChat}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={
-                activeChat
-                  ? editingMessageId
-                    ? 'Edit the encrypted envelope…'
-                    : 'Write an encrypted envelope…'
-                  : 'Create a chat first'
-              }
-              ref={draftInputRef}
-              rows={1}
-              value={draft}
-            />
-          </GlassSurface>
-          <button
-            className="primary-action live-composer__send"
-            disabled={loading || !activeChat || draft.trim() === ''}
-            type="submit"
-          >
-            {editingMessageId ? 'Save' : 'Send'}
-          </button>
-        </form>
+              ) : null}
+              <textarea
+                className="live-composer__input"
+                disabled={loading}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={editingMessageId ? 'Edit message…' : 'Message'}
+                ref={draftInputRef}
+                rows={1}
+                value={draft}
+              />
+            </div>
+            {draft.trim().length > 0 ? (
+              <button className="live-composer__send" disabled={loading} type="submit" aria-label="Send">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 15V5M10 5L6 9M10 5L14 9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            ) : (
+              <button className="live-composer__btn" type="button" aria-label="Record voice message" disabled={loading} onClick={() => void handleVoiceNoteToggle()}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="8" y="2" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11C4 14.866 7.134 18 11 18C14.866 18 18 14.866 18 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11 18V21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            )}
+          </form>
+        ) : null}
       </main>
 
       <aside className={detailRailVisible ? 'detail-rail' : 'detail-rail detail-rail--hidden'}>
         <ChatInfoPanel
-          title={profileUsername ?? storedDevice?.username ?? 'Dinosaur'}
+          title={activeChat?.title ?? profileUsername ?? storedDevice?.username ?? 'User'}
           phone="+7 999 555 01 10"
-          handle={`@${profileUsername ?? storedDevice?.username ?? 'dinosaur'}`}
+          handle={`@${activeChat?.title?.toLowerCase().replace(/\s+/g, '_') ?? profileUsername ?? storedDevice?.username ?? 'user'}`}
+          avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
         />
-        <GlassSurface className="settings-card">
-          <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Media</span>
-            <h3>Chat gallery</h3>
-          </div>
-          {chatMediaItems.length > 0 ? (
+        {chatMediaItems.length > 0 ? (
+          <div className="settings-card">
+            <div className="settings-card__header">
+              <h3>Media</h3>
+            </div>
             <div className="chat-media-gallery">
               {chatMediaItems.slice(-6).reverse().map((message) => (
                 <button
@@ -4373,911 +4229,92 @@ function App() {
                 </button>
               ))}
             </div>
-          ) : (
-            <span className="settings-card__muted">No attachments in the current chat yet.</span>
-          )}
-        </GlassSurface>
+          </div>
+        ) : null}
         {activeChat?.type === 'group' ? (
-          <GlassSurface className="settings-card">
+          <div className="settings-card">
             <div className="settings-card__header">
-              <span className="sidebar__eyebrow">Group</span>
-              <h3>Admin controls</h3>
+              <h3>Members</h3>
             </div>
-            <form className="new-chat-form" onSubmit={handleRenameActiveGroupChat}>
-              <label className="auth-field">
-                <span>Group title</span>
-                <input
-                  disabled={loading}
-                  onChange={(event) => setGroupRenameTitle(event.target.value)}
-                  placeholder="Operators"
-                  value={groupRenameTitle}
-                />
-              </label>
-              <button
-                className="secondary-action"
-                disabled={loading || groupRenameTitle.trim() === '' || groupRenameTitle === activeChat.title}
-                type="submit"
-              >
-                Save Group Title
-              </button>
-            </form>
-            <div className="device-summary-card">
-              <strong>Members</strong>
+            <div className="settings-card__list">
               {groupMembers.length > 0 ? (
                 groupMembers.map((member) => (
-                  <span key={member.user_id}>
-                    {member.username} • {member.role}
-                    {member.username === profileUsername ? ' • you' : ''}
-                  </span>
-                ))
-              ) : (
-                <span>Loading members…</span>
-              )}
-            </div>
-            <div className="settings-card__actions">
-              {groupMembers.map((member) => {
-                const isSelf = member.username === profileUsername
-
-                return (
                   <div key={member.user_id} className="settings-card__row">
                     <div className="settings-card__row-main">
                       <strong>{member.username}</strong>
-                      <span>
-                        {member.role}
-                        {isSelf ? ' • you' : ''}
-                      </span>
+                      <span>{member.role}{member.username === profileUsername ? ' · you' : ''}</span>
                     </div>
-                    {!isSelf ? (
+                    {member.username !== profileUsername ? (
                       <div className="settings-card__row-actions">
-                        <button
-                          className="secondary-action"
-                          disabled={loading || member.role === 'admin'}
-                          onClick={() => void handleUpdateActiveGroupMemberRole(member, 'admin')}
-                          type="button"
-                        >
-                          Promote
-                        </button>
-                        <button
-                          className="secondary-action"
-                          disabled={loading || member.role === 'member'}
-                          onClick={() => void handleUpdateActiveGroupMemberRole(member, 'member')}
-                          type="button"
-                        >
-                          Demote
-                        </button>
-                        <button
-                          className="danger-action"
-                          disabled={loading}
-                          onClick={() => void handleRemoveActiveGroupMember(member)}
-                          type="button"
-                        >
-                          Remove
-                        </button>
+                        <button className="mini-action" disabled={loading} onClick={() => void handleRemoveActiveGroupMember(member)} type="button">Remove</button>
                       </div>
-                    ) : (
-                      <span className="settings-card__muted">Self-management stays manual for now.</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="settings-card__actions">
-              <button
-                className="secondary-action"
-                disabled={loading || !activeGroupChatId}
-                onClick={() => void handleRotateGroupSenderKey()}
-                type="button"
-              >
-                Rotate Sender Key
-              </button>
-            </div>
-            <div className="settings-card__list">
-              {groupSenderKeys.length === 0 ? (
-                <span className="settings-card__muted">
-                  No inbound Sender Keys are currently queued for this device.
-                </span>
-              ) : (
-                groupSenderKeys.slice(0, 4).map((senderKey) => (
-                  <div className="settings-card__row" key={senderKey.id}>
-                    <div className="settings-card__row-main">
-                      <strong>{senderKey.key_id}</strong>
-                      <span>
-                        {senderKey.algorithm} • {senderKey.status}
-                      </span>
-                      <span>{formatRelativeTime(senderKey.updated_at ?? senderKey.inserted_at)}</span>
-                    </div>
+                    ) : null}
                   </div>
                 ))
+              ) : (
+                <span className="settings-card__muted">Loading members…</span>
               )}
             </div>
-          </GlassSurface>
+          </div>
         ) : null}
-        <GlassSurface className="settings-card">
+        <div className="settings-card">
           <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Settings</span>
-            <h3>Current device</h3>
-          </div>
-          <div className="device-summary-card">
-            <strong>{storedDevice?.deviceName ?? 'This browser'}</strong>
-            <span>{storedDevice?.username ?? 'anonymous'}</span>
-            <span>Session expires: {storedDevice?.sessionExpiresAt ?? 'not set'}</span>
-            <span>
-              Published prekeys:{' '}
-              {storedDevice?.signedPrekeyPublicKeyBase64 ? 'signed prekey present' : 'signed prekey missing'}
-              {` • ${storedDevice?.oneTimePrekeys?.length ?? 0} local one-time prekeys cached`}
-            </span>
-            <span>
-              Offline outbox: {outboxPendingCount} pending message
-              {outboxPendingCount === 1 ? '' : 's'}
-            </span>
-          </div>
-          <div className="settings-card__list">
-            {devices.length === 0 ? (
-              <span className="settings-card__muted">No linked devices found yet.</span>
-            ) : (
-              devices.map((device) => (
-                <div className="settings-card__row" key={device.id}>
-                  <div className="settings-card__row-main">
-                    <strong>{device.device_name}</strong>
-                    <span>
-                      {device.is_current ? 'current device' : 'linked device'}
-                      {device.revoked_at ? ` • revoked ${formatRelativeTime(device.revoked_at)}` : ''}
-                    </span>
-                    <span>
-                      {device.one_time_prekey_count} active one-time prekey
-                      {device.one_time_prekey_count === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  {!device.is_current && !device.revoked_at ? (
-                    <div className="settings-card__row-actions">
-                      <button
-                        className="danger-action"
-                        disabled={loading}
-                        onClick={() => void handleRevokeLinkedDevice(device.id)}
-                        type="button"
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            )}
+            <h3>Settings</h3>
           </div>
           <div className="settings-card__actions">
-            <button className="primary-action" disabled={loading} onClick={handleReauthenticate} type="button">
+            <button className="secondary-action" disabled={loading} onClick={handleReauthenticate} type="button">
               Refresh Session
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleRotatePrekeys} type="button">
-              Rotate Prekeys
             </button>
             <button className="secondary-action" onClick={() => setView('link')} type="button">
               Link Another Device
             </button>
             <button className="danger-action" onClick={handleForgetDevice} type="button">
-              Forget Local Device
+              Sign Out
             </button>
           </div>
-        </GlassSurface>
-        <GlassSurface className="settings-card">
+        </div>
+        <div className="settings-card">
           <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Desktop</span>
-            <h3>Host bridge</h3>
+            <h3>Encryption</h3>
           </div>
-          <div className="device-summary-card">
-            <strong>{isDesktopShell() ? 'Tauri desktop host detected' : 'Browser session'}</strong>
-            <span>
-              {desktopRuntime
-                ? `${desktopRuntime.appName} ${desktopRuntime.appVersion} • ${desktopRuntime.platform}/${desktopRuntime.arch}`
-                : isDesktopShell()
-                  ? 'Runtime metadata available after the desktop host responds.'
-                  : 'Desktop bridge commands are hidden until this UI runs inside the desktop wrapper.'}
-            </span>
-            <span>Native title: {desktopWindowTitle}</span>
-            <span>
-              {desktopRuntime
-                ? desktopRuntime.debug
-                  ? 'Desktop host is running in debug mode.'
-                  : 'Desktop host is running in release mode.'
-                : 'No desktop runtime metadata loaded yet.'}
-            </span>
-            <span>
-              {desktopWindowMaximized === null
-                ? 'Window state has not been toggled in this session yet.'
-                : desktopWindowMaximized
-                  ? 'Window is currently maximized.'
-                  : 'Window is currently restored.'}
-            </span>
-            <span>
-              {desktopWindowFocused === null
-                ? 'Window focus state is not known yet.'
-                : desktopWindowFocused
-                  ? 'Window is currently focused.'
-                  : 'Window is currently unfocused.'}
-            </span>
-            <span>
-              {desktopWindowAlwaysOnTop === null
-                ? 'Always-on-top state is not known yet.'
-                : desktopWindowAlwaysOnTop
-                  ? 'Window is pinned above other windows.'
-                  : 'Window follows normal stacking order.'}
-            </span>
-            <span>Always-on-top preference is remembered across desktop launches.</span>
-            <span>
-              {desktopWindowFullscreen === null
-                ? 'Fullscreen state is not known yet.'
-                : desktopWindowFullscreen
-                  ? 'Window is currently fullscreen.'
-                  : 'Window is currently windowed.'}
-            </span>
-            <span>
-              {desktopWindowGeometry
-                ? `Window frame ${desktopWindowGeometry.width}×${desktopWindowGeometry.height} at ${desktopWindowGeometry.x}, ${desktopWindowGeometry.y}`
-                : 'Window frame has not been captured yet.'}
-            </span>
-          </div>
-          <div className="settings-card__actions">
-            <button className="secondary-action" disabled={loading} onClick={handleRefreshDesktopRuntime} type="button">
-              Refresh Host Info
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleCopyDesktopDiagnostics} type="button">
-              Copy Diagnostics
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopAlwaysOnTop} type="button">
-              {desktopWindowAlwaysOnTop ? 'Disable Always On Top' : 'Enable Always On Top'}
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopFullscreen} type="button">
-              {desktopWindowFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleToggleDesktopWindowMaximize} type="button">
-              {desktopWindowMaximized ? 'Restore Window' : 'Toggle Maximize'}
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleResetDesktopHostWindowFrame} type="button">
-              Reset Window Frame
-            </button>
-            <button className="secondary-action" disabled={loading} onClick={handleMinimizeDesktopHostWindow} type="button">
-              Minimize Window
-            </button>
-          </div>
-        </GlassSurface>
-        <GlassSurface className="settings-card">
-          <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Stage 8</span>
-            <h3>Desktop shortcuts</h3>
-          </div>
-          <div className="settings-card__list">
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Compose</strong>
-                <span>`/` focuses the active chat composer.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Move between chats</strong>
-                <span>`Alt+ArrowUp/Down` selects the previous or next chat.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Filter chats</strong>
-                <span>`Cmd/Ctrl+Shift+F` focuses the chat filter field.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Toggle detail rail</strong>
-                <span>`Cmd/Ctrl+\` switches between two-column and three-column desktop layout.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Layout memory</strong>
-                <span>
-                  {isDesktopWide
-                    ? `The saved desktop preference is currently ${detailRailPreferred ? 'expanded' : 'collapsed'}.`
-                    : 'Your saved desktop rail preference is preserved while narrow windows force focus mode.'}
-                </span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Desktop host controls</strong>
-                <span>`Cmd/Ctrl+Shift+P` always on top • `Cmd/Ctrl+Shift+U` fullscreen • `Cmd/Ctrl+Shift+D` diagnostics • `Cmd/Ctrl+Shift+M` minimize • `Cmd/Ctrl+Shift+Enter` maximize/restore • `Cmd/Ctrl+Shift+W` close</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Reset window frame</strong>
-                <span>`Cmd/Ctrl+Shift+0` restores the default centered desktop frame.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Diagnostics</strong>
-                <span>The host card can copy runtime, window, and layout diagnostics to the clipboard, or use `Cmd/Ctrl+Shift+D`.</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Quick actions</strong>
-                <span>`Cmd/Ctrl+K` direct chat • `Cmd/Ctrl+Shift+G` group title</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Send and call</strong>
-                <span>`Cmd/Ctrl+Enter` send • `Cmd/Ctrl+Shift+A/V` voice or video call</span>
-              </div>
-            </div>
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Reset focus</strong>
-                <span>`Escape` clears the banner and blurs the active field.</span>
-              </div>
-            </div>
-          </div>
-        </GlassSurface>
-        <GlassSurface className="settings-card">
-          <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Stage 3</span>
-            <h3>Messaging slice</h3>
-          </div>
-          <div className="device-summary-card">
-            <strong>{activeChat?.title ?? 'No chat selected'}</strong>
-            <span>{activeChat ? `${activeChat.message_count} server envelopes` : 'Open a direct chat'}</span>
-            <span>
-              {activeChat?.is_self_chat
-                ? 'Self-chat can use recipient-wrapped envelopes when this device has an encryption key.'
-                : 'Cross-user transport now advances a local per-device ratchet from HKDF-derived session roots, explicit initiator ephemeral bootstrap, ratchet version tags, epoch transitions on re-handshake, and local DH steps when peer ratchet keys change; the full Signal-grade ratchet is still next.'}
-            </span>
-            <span>
-              {activeChat
-                ? `${remotePrekeyBundles.length} published prekey ${remotePrekeyBundles.length === 1 ? 'bundle' : 'bundles'} visible for this chat`
-                : 'Select a chat to inspect published prekeys'}
-            </span>
-            <span>
-              {activeChat
-                ? `${chatSessions.length} cached direct-chat session ${chatSessions.length === 1 ? 'record' : 'records'} ready for this chat • ${chatSessions.filter((session) => session.session_state === 'active' && session.establishment_state === 'established').length} established • ${chatSessions.filter((session) => session.session_state === 'active' && session.establishment_state === 'pending_first_message').length} pending first message • ${chatSessions.filter((session) => session.session_state === 'superseded').length} superseded`
-                : 'Select a chat to bootstrap direct-chat sessions'}
-            </span>
-          </div>
-          <div className="device-summary-card__actions">
-            <button
-              className="secondary-action"
-              disabled={loading || !activeChat}
-              onClick={handleRekeyActiveChatSessions}
-              type="button"
-            >
-              Rekey Active Sessions
-            </button>
-          </div>
-          <div className="settings-card__list">
-            {safetyNumbers.length === 0 ? (
-              <span className="settings-card__muted">
-                No remote safety numbers available for the current chat.
-              </span>
-            ) : (
-              safetyNumbers.map((entry) => (
+          {safetyNumbers.length > 0 ? (
+            <div className="settings-card__list">
+              {safetyNumbers.map((entry) => (
                 <div className="settings-card__row" key={entry.peerDeviceId}>
                   <div className="settings-card__row-main">
                     <strong>{entry.label}</strong>
-                    <span>{entry.fingerprint}</span>
-                    <span>
-                      {entry.verified
-                        ? `verified ${formatRelativeTime(entry.verifiedAt)}`
-                        : 'not verified'}
-                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>{entry.fingerprint}</span>
                   </div>
                   <div className="settings-card__row-actions">
                     {!entry.verified ? (
-                      <button
-                        className="mini-action"
-                        disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading}
-                        onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)}
-                        type="button"
-                      >
-                        Verify
-                      </button>
+                      <button className="mini-action" disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading} onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)} type="button">Verify</button>
                     ) : (
-                      <span className="settings-card__muted">Verified</span>
+                      <span style={{ fontSize: 12, color: 'var(--green)' }}>Verified</span>
                     )}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </GlassSurface>
-        <GlassSurface className="settings-card">
-          <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Stage 6</span>
-            <h3>Admin surface</h3>
-          </div>
-          <div className="device-summary-card">
-            <strong>Local operator overview</strong>
-            <span>
-              {adminOverview
-                ? `${adminOverview.users} users • ${adminOverview.chats} chats • ${adminOverview.media_uploads} uploads`
-                : 'Admin overview unavailable'}
-            </span>
-            <span>
-              {adminOverview
-                ? `${adminOverview.federation_peers} federation peers • ${adminOverview.pending_federation_peers} pending • ${adminOverview.queued_federation_deliveries ?? 0} queued deliveries`
-                : 'Federation stats unavailable'}
-            </span>
-          </div>
-          <form className="new-chat-form" onSubmit={handleCreateFederationPeer}>
-            <label className="auth-field">
-              <span>Peer domain</span>
-              <input
-                disabled={loading}
-                onChange={(event) => setFederationDomain(event.target.value)}
-                placeholder="chat.remote.example"
-                value={federationDomain}
-              />
-            </label>
-            <label className="auth-field">
-              <span>Display name</span>
-              <input
-                disabled={loading}
-                onChange={(event) => setFederationDisplayName(event.target.value)}
-                placeholder="Remote Example"
-                value={federationDisplayName}
-              />
-            </label>
-            <button className="secondary-action" disabled={loading || federationDomain.trim() === ''} type="submit">
-              Add Federation Peer
-            </button>
-          </form>
-          <div className="settings-card__list">
-            {federationInviteToken ? (
-              <div className="settings-card__row">
-                <div className="settings-card__row-main">
-                  <strong>Latest invite token</strong>
-                  <span>{federationInviteToken}</span>
-                </div>
-              </div>
-            ) : null}
-            {federationPeers.length === 0 ? (
-              <span className="settings-card__muted">No federation peers configured yet.</span>
-            ) : (
-              federationPeers.slice(0, 3).map((peer) => (
-                <div className="settings-card__row" key={peer.id}>
-                  <div className="settings-card__row-main">
-                    <strong>{peer.display_name || peer.domain}</strong>
-                    <span>
-                      {peer.status} • {peer.trust_state}
-                      {peer.last_seen_at ? ` • seen ${formatRelativeTime(peer.last_seen_at)}` : ''}
-                    </span>
-                  </div>
-                  <div className="settings-card__row-actions">
-                    <button
-                      className="mini-action"
-                      disabled={loading}
-                      onClick={() => void handleCreateFederationPeerInvite(peer.id)}
-                      type="button"
-                    >
-                      Invite
-                    </button>
-                    <button
-                      className="mini-action"
-                      disabled={loading}
-                      onClick={() =>
-                        handleUpdateFederationPeerStatus(
-                          peer.id,
-                          peer.status === 'active' ? 'disabled' : 'active'
-                        )
-                      }
-                      type="button"
-                    >
-                      {peer.status === 'active' ? 'Disable' : 'Activate'}
-                    </button>
-                    <button
-                      className="mini-action"
-                      disabled={loading}
-                      onClick={() => handleHeartbeatFederationPeer(peer.id)}
-                      type="button"
-                    >
-                      Ping
-                    </button>
-                    <button
-                      className="mini-action"
-                      disabled={loading}
-                      onClick={() => void handleQueueFederationDelivery(peer.id)}
-                      type="button"
-                    >
-                      Queue Relay
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="settings-card__list">
-            {federationDeliveries.length === 0 ? (
-              <span className="settings-card__muted">No federation deliveries queued yet.</span>
-            ) : (
-              federationDeliveries.slice(0, 3).map((delivery) => (
-                <div className="settings-card__row" key={delivery.id}>
-                  <div className="settings-card__row-main">
-                    <strong>{delivery.event_type}</strong>
-                    <span>
-                      {delivery.status} • {delivery.attempt_count} attempt
-                      {delivery.attempt_count === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <div className="settings-card__row-actions">
-                    <span className="settings-card__muted">
-                      {formatRelativeTime(delivery.updated_at ?? delivery.inserted_at)}
-                    </span>
-                    {delivery.status !== 'delivered' ? (
-                      <button
-                        className="mini-action"
-                        disabled={loading}
-                        onClick={() => void handleAttemptFederationDelivery(delivery.id)}
-                        type="button"
-                      >
-                        Mark Delivered
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </GlassSurface>
-        <GlassSurface className="settings-card">
-          <div className="settings-card__header">
-            <span className="sidebar__eyebrow">Stage 7</span>
-            <h3>Call bootstrap</h3>
-          </div>
-          <div className="device-summary-card">
-            <strong>{activeCall ? `${activeCall.mode} call active` : turnCredentials ? 'TURN credentials ready' : 'TURN credentials unavailable'}</strong>
-            <span>{turnCredentials ? `Expires ${formatRelativeTime(turnCredentials.expires_at)}` : 'Refresh to fetch a short-lived credential set.'}</span>
-            <span>
-              {activeCall
-                ? `Started ${formatRelativeTime(activeCall.started_at)}`
-                : turnCredentials
-                  ? `${turnCredentials.uris.length} relay URI${turnCredentials.uris.length === 1 ? '' : 's'} issued`
-                  : 'No active TURN lease'}
-            </span>
-            <span>
-              {activeCall
-                ? callRoom
-                  ? `${callRoom.participant_count} participant${callRoom.participant_count === 1 ? '' : 's'} in ${callRoom.backend}`
-                  : 'Membrane room is active and ready for join state'
-                : 'A Membrane room spins up when a call becomes active'}
-            </span>
-            <span>
-              {activeCall
-                ? callWebRtcEndpoint
-                  ? callWebRtcEndpoint.exists
-                    ? `Membrane endpoint ${callWebRtcEndpoint.endpoint_id} ready • ${callWebRtcEndpoint.pending_media_event_count} queued event${callWebRtcEndpoint.pending_media_event_count === 1 ? '' : 's'}`
-                    : 'Membrane WebRTC endpoint not provisioned for this device yet'
-                  : 'Membrane WebRTC endpoint state not loaded yet'
-                : 'Endpoint state appears after a call becomes active'}
-            </span>
-            <span>
-              {activeCall
-                ? `${callKeys.length} inbound call key distribution${callKeys.length === 1 ? '' : 's'} cached for this device`
-                : 'Call key distributions appear after a call is active'}
-            </span>
-            <span>
-              {membraneClientReady
-                ? membraneClientConnected
-                  ? 'Native Membrane WebRTC client connected.'
-                  : 'Membrane client initialized and waiting for endpoint negotiation.'
-                : 'Membrane browser client not initialized yet'}
-            </span>
-            <span>
-              {membraneClientConnected
-                ? `Membrane client connected as ${membraneClientEndpointId ?? 'pending'} • ${membraneRemoteEndpointCount} remote endpoint${membraneRemoteEndpointCount === 1 ? '' : 's'} • ${membraneRemoteTrackCount} remote track${membraneRemoteTrackCount === 1 ? '' : 's'}`
-                : 'Connect the Membrane client after provisioning the endpoint.'}
-            </span>
-            <span>
-              {membraneClientConnected
-                ? `${membraneReadyTrackCount} ready native track${membraneReadyTrackCount === 1 ? '' : 's'} • ${membraneReadyAudioTrackCount} audio • ${membraneReadyVideoTrackCount} video`
-                : 'Native remote track readiness appears after endpoint negotiation completes'}
-            </span>
-            <span>
-              {membraneRemoteEndpointIds.length > 0
-                ? `Remote endpoint IDs: ${membraneRemoteEndpointIds.join(', ')}`
-                : 'No remote Membrane endpoints announced yet'}
-            </span>
-            <span>
-              {membraneRemoteTrackIds.length > 0
-                ? `Remote track IDs: ${membraneRemoteTrackIds.join(', ')}`
-                : 'No remote Membrane tracks announced yet'}
-            </span>
-            <span>
-              {localMediaMode === 'none'
-                ? 'No local camera/microphone tracks attached'
-                : `${localAudioTrackCount} local audio • ${localVideoTrackCount} local video`}
-            </span>
-            <span>
-              {`${remoteAudioTrackCount} remote audio • ${remoteVideoTrackCount} remote video`}
-            </span>
-          </div>
-          <div className="settings-card__actions">
-            <button className="secondary-action" disabled={loading} onClick={handleRefreshTurnCredentials} type="button">
-              Refresh TURN Credentials
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleProvisionMembraneWebRtcEndpoint}
-              type="button"
-            >
-              Provision Membrane Endpoint
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleInitializeWebRtc}
-              type="button"
-            >
-              Initialize Native WebRTC
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={() => handleAttachLocalMedia('audio')}
-              type="button"
-            >
-              Attach Microphone
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={() => handleAttachLocalMedia('audio_video')}
-              type="button"
-            >
-              Attach Camera + Mic
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeChat}
-              onClick={() => handleStartCall('voice')}
-              type="button"
-            >
-              Start Voice Call
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeChat}
-              onClick={() => handleStartCall('video')}
-              type="button"
-            >
-              Start Video Call
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handlePingMembraneWebRtcEndpoint}
-              type="button"
-            >
-              Ping Membrane Endpoint
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handlePollMembraneWebRtcEndpoint}
-              type="button"
-            >
-              Poll Membrane Events
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleJoinActiveCall}
-              type="button"
-            >
-              Join Membrane Room
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleRotateCallKeyEpoch}
-              type="button"
-            >
-              Rotate Call Key Epoch
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || !activeCall}
-              onClick={handleLeaveActiveCall}
-              type="button"
-            >
-              Leave Room
-            </button>
-            <button
-              className="secondary-action"
-              disabled={loading || (!activeCall && localMediaMode === 'none')}
-              onClick={handleReleaseLocalMedia}
-              type="button"
-            >
-              Release Local Media
-            </button>
-            <button
-              className="danger-action"
-              disabled={loading || !activeCall}
-              onClick={handleEndCall}
-              type="button"
-            >
-              End Active Call
-            </button>
-          </div>
-          <div className="settings-card__list">
-            {callParticipants.length > 0 ? (
-              callParticipants.map((participant) => (
-                <div className="settings-card__row" key={participant.id}>
-                  <div className="settings-card__row-main">
-                    <strong>{participant.device_id === storedDevice?.deviceId ? 'This device' : participant.device_id}</strong>
-                    <span>
-                      {participant.status} • {participant.track_kind}
-                    </span>
-                  </div>
-                  <span className="call-room-pill">{participant.left_at ? 'Left' : 'Live'}</span>
-                </div>
-              ))
-            ) : turnCredentials?.uris.length ? (
-              turnCredentials.uris.map((uri) => (
-                <div className="settings-card__row" key={uri}>
-                  <div className="settings-card__row-main">
-                    <strong>Relay</strong>
-                    <span>{uri}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <span className="settings-card__muted">No relay URIs loaded.</span>
-            )}
-          </div>
-          <div className="settings-card__list">
-            {callKeys.length > 0 ? (
-              callKeys.slice(0, 4).map((distribution) => (
-                <div className="settings-card__row" key={distribution.id}>
-                  <div className="settings-card__row-main">
-                    <strong>Epoch {distribution.key_epoch}</strong>
-                    <span>
-                      {distribution.algorithm} • {distribution.status}
-                    </span>
-                    <span>
-                      {distribution.owner_device_id === storedDevice?.deviceId
-                        ? 'owned by this device'
-                        : `owner ${distribution.owner_device_id}`}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <span className="settings-card__muted">No call key distributions fetched yet.</span>
-            )}
-          </div>
-          <div className="settings-card__list">
-            {callSignals.length > 0 ? (
-              callSignals
-                .slice(-4)
-                .reverse()
-                .map((signal) => (
-                  <div className="settings-card__row" key={signal.id}>
-                    <div className="settings-card__row-main">
-                      <strong>{signal.signal_type}</strong>
-                      <span>
-                        {signal.from_device_id === storedDevice?.deviceId ? 'This device' : signal.from_device_id}
-                        {' • '}
-                        {formatRelativeTime(signal.inserted_at)}
-                      </span>
-                      <span>{truncateSignalPayload(signal.payload)}</span>
-                    </div>
-                  </div>
-                ))
-            ) : (
-              <span className="settings-card__muted">No call signals recorded yet.</span>
-            )}
-          </div>
-          <div className="settings-card__list">
-            {featuredRemoteTrack ? (
-              <div className="settings-card__row">
-                <div className="settings-card__row-main">
-                  <strong>
-                    {dominantRemoteEndpoint
-                      ? `Featured remote: ${dominantRemoteEndpoint.username ?? dominantRemoteEndpoint.deviceId ?? dominantRemoteEndpoint.id}`
-                      : 'Featured remote track'}
-                  </strong>
-                  <span>
-                    {featuredRemoteTrack.kind ? `${featuredRemoteTrack.kind} track` : 'Unknown track'}
-                    {' • '}
-                    {featuredRemoteTrack.endpointId}
-                    {featuredRemoteTrack.source ? ` • ${featuredRemoteTrack.source}` : ''}
-                  </span>
-                  <RemoteMembraneTrackPreview featured track={featuredRemoteTrack} />
-                </div>
-                <span className="call-room-pill">
-                  {dominantRemoteEndpointId ? 'Dominant' : 'Live'}
-                </span>
-              </div>
-            ) : null}
-            {membraneRemoteEndpoints.length > 0 ? (
-              membraneRemoteEndpoints.slice(0, 4).map((endpoint) => (
-                <div className="settings-card__row" key={`remote-endpoint-${endpoint.id}`}>
-                  <div className="settings-card__row-main">
-                    <strong>
-                      {endpoint.username
-                        ? `${endpoint.username} (${endpoint.deviceId ?? endpoint.id})`
-                        : endpoint.deviceId ?? endpoint.id}
-                    </strong>
-                    <span>
-                      {endpoint.type} • {endpoint.trackIds.length} announced track
-                      {endpoint.trackIds.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <span className="call-room-pill">
-                    {endpoint.id === dominantRemoteEndpointId ? 'Dominant' : 'Remote'}
-                  </span>
-                </div>
-              ))
-            ) : null}
-            {membraneRemoteTracks.length > 0 ? (
-              membraneRemoteTracks.slice(0, 6).map((track) => (
-                <div className="settings-card__row" key={`remote-track-${track.id}`}>
-                  <div className="settings-card__row-main">
-                    <strong>{track.kind ? `${track.kind} track` : 'Unknown track'}</strong>
-                    <span>
-                      {track.endpointId}
-                      {track.source ? ` • ${track.source}` : ''}
-                    </span>
-                    {track.voiceActivity ? (
-                      <span>Voice activity: {track.voiceActivity}</span>
-                    ) : null}
-                    <span>{track.id}</span>
-                    <RemoteMembraneTrackPreview track={track} />
-                  </div>
-                  <span className="call-room-pill">
-                    {track.ready ? (track.voiceActivity === 'speech' ? 'Speaking' : 'Ready') : 'Negotiating'}
-                  </span>
-                </div>
-              ))
-            ) : null}
-            <div className="settings-card__row">
-              <div className="settings-card__row-main">
-                <strong>Membrane endpoint</strong>
-                <span>
-                  {callWebRtcEndpoint
-                    ? `${callWebRtcEndpoint.endpoint_id} • ${callWebRtcEndpoint.exists ? 'provisioned' : 'missing'}`
-                    : 'No per-device Membrane endpoint loaded'}
-                </span>
-                <span>
-                  {callRoom
-                    ? `${callRoom.endpoint_count ?? 0} engine endpoints • ${callRoom.webrtc_endpoint_count ?? 0} WebRTC endpoint${(callRoom.webrtc_endpoint_count ?? 0) === 1 ? '' : 's'}`
-                    : 'Room metrics unavailable'}
-                </span>
-              </div>
+              ))}
             </div>
-            {callWebRtcMediaEvents.length > 0 ? (
-              callWebRtcMediaEvents.map((eventPayload, index) => (
-                <div className="settings-card__row" key={`${index}-${eventPayload}`}>
-                  <div className="settings-card__row-main">
-                    <strong>Membrane event</strong>
-                    <span>{truncateSignalPayload(eventPayload)}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <span className="settings-card__muted">No outbound Membrane endpoint events polled yet.</span>
-            )}
+          ) : (
+            <span className="settings-card__muted">No safety numbers available</span>
+          )}
+        </div>
+        {/* Admin & call controls are accessible via dedicated settings screens */}
+        {activeCall ? (
+          <div className="settings-card">
+            <div className="settings-card__header">
+              <h3>Active Call</h3>
+            </div>
+            <div className="settings-card__actions">
+              <button className="danger-action" disabled={loading} onClick={handleEndCall} type="button">End Call</button>
+            </div>
+            {featuredRemoteTrack ? (
+              <div style={{ padding: '0 16px 16px' }}>
+                <RemoteMembraneTrackPreview featured track={featuredRemoteTrack} />
+              </div>
+            ) : null}
           </div>
-        </GlassSurface>
-        <CallSurface
-          mode={activeCall ? 'active' : 'minimized'}
-          flavor={
-            activeCall?.mode === 'video'
-              ? 'video'
-              : activeCall?.mode === 'group'
-                ? 'group'
-                : 'voice'
-          }
-        />
+        ) : null}
       </aside>
     </div>
   )
@@ -6029,7 +5066,7 @@ function decodeSystemMessageText(payloadBase64: string): string {
   }
 }
 
-function truncateSignalPayload(payload: string): string {
+function _truncateSignalPayload(payload: string): string {
   return payload.length > 88 ? `${payload.slice(0, 85)}...` : payload
 }
 

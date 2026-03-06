@@ -1,24 +1,25 @@
 export type ColorTokens = {
-  page: string
-  panel: string
-  panelMuted: string
-  glass: string
-  glassBorder: string
+  bg: string
+  bgSecondary: string
+  bgTertiary: string
   accent: string
   accentSoft: string
-  textStrong: string
-  textMuted: string
-  textInverse: string
+  label: string
+  labelSecondary: string
+  labelTertiary: string
+  fill: string
+  separator: string
+  separatorOpaque: string
   bubbleIncoming: string
   bubbleOutgoing: string
   bubbleSystem: string
+  online: string
   danger: string
   success: string
 }
 
 export type TypographyTokens = {
-  familySans: string
-  familyMono: string
+  family: string
   title: string
   body: string
   caption: string
@@ -31,45 +32,47 @@ export type MotionTokens = {
 }
 
 export const colors: ColorTokens = {
-  page: "#d5e1c2",
-  panel: "rgba(255, 255, 255, 0.78)",
-  panelMuted: "rgba(255, 255, 255, 0.56)",
-  glass: "rgba(255, 255, 255, 0.66)",
-  glassBorder: "rgba(255, 255, 255, 0.46)",
-  accent: "#1d6df2",
-  accentSoft: "rgba(29, 109, 242, 0.12)",
-  textStrong: "#182214",
-  textMuted: "#4e5d49",
-  textInverse: "#f8fbf3",
-  bubbleIncoming: "rgba(255, 255, 255, 0.75)",
-  bubbleOutgoing: "#2f7cf7",
-  bubbleSystem: "rgba(34, 48, 29, 0.08)",
-  danger: "#b84b4b",
-  success: "#2b8a57"
+  bg: "#FFFFFF",
+  bgSecondary: "#F2F2F7",
+  bgTertiary: "#F9F9F9",
+  accent: "#008BFF",
+  accentSoft: "rgba(0, 139, 255, 0.10)",
+  label: "#000000",
+  labelSecondary: "rgba(60, 60, 67, 0.60)",
+  labelTertiary: "rgba(60, 60, 67, 0.30)",
+  fill: "rgba(120, 120, 128, 0.12)",
+  separator: "#E6E6E6",
+  separatorOpaque: "#C6C6C8",
+  bubbleIncoming: "#FFFFFF",
+  bubbleOutgoing: "#c8ffa3",
+  bubbleSystem: "rgba(255, 255, 255, 0.50)",
+  online: "#34C759",
+  danger: "#FF3B30",
+  success: "#34C759"
 }
 
 export const radius = {
-  shell: "32px",
-  panel: "24px",
-  pill: "999px",
-  bubble: "22px"
+  sm: "10px",
+  md: "14px",
+  lg: "18px",
+  xl: "20px",
+  pill: "999px"
 } as const
 
 export const spacing = {
-  xs: "0.25rem",
-  sm: "0.5rem",
-  md: "0.75rem",
-  lg: "1rem",
-  xl: "1.5rem",
-  xxl: "2rem"
+  xs: "4px",
+  sm: "8px",
+  md: "12px",
+  lg: "16px",
+  xl: "24px",
+  xxl: "32px"
 } as const
 
 export const typography: TypographyTokens = {
-  familySans: "\"SF Pro Display\", \"SF Pro Text\", ui-sans-serif, system-ui, sans-serif",
-  familyMono: "\"SF Mono\", ui-monospace, monospace",
-  title: "600 0.95rem/1.2 \"SF Pro Display\", \"SF Pro Text\", ui-sans-serif, system-ui, sans-serif",
-  body: "400 1rem/1.4 \"SF Pro Text\", ui-sans-serif, system-ui, sans-serif",
-  caption: "500 0.78rem/1.2 \"SF Pro Text\", ui-sans-serif, system-ui, sans-serif"
+  family: "-apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  title: "600 17px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  body: "400 15px/1.4 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  caption: "400 13px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif"
 }
 
 export const motion: MotionTokens = {
@@ -79,7 +82,9 @@ export const motion: MotionTokens = {
 }
 
 export const viewport = {
-  phoneFrame: { width: 402, height: 874 },
+  chatRowHeight: 78,
+  avatarList: 52,
+  avatarHeader: 36,
+  sidebarWidth: 320,
   desktopBreakpoint: 960
 } as const
-
