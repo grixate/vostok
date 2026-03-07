@@ -2112,6 +2112,65 @@ button {
   color: var(--danger) !important;
 }
 
+/* ─── Settings Overlay ───────────────────────────────────────────────────── */
+
+.settings-overlay__title {
+  font-size: 17px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.settings-overlay__section {
+  padding: 8px 8px 4px;
+  border-bottom: 0.5px solid var(--sep);
+}
+
+.settings-overlay__section:last-child {
+  border-bottom: none;
+}
+
+.settings-overlay__section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--label3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 12px 6px;
+}
+
+.settings-overlay__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--label);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-overlay__row:hover {
+  background: var(--fill);
+}
+
+.settings-overlay__row--info {
+  cursor: default;
+  align-items: flex-start;
+}
+
+.settings-overlay__row--info:hover {
+  background: none;
+}
+
+.settings-overlay__row--danger {
+  color: var(--danger);
+}
+
 /* ─── User List Overlay (New Message) ────────────────────────────────────── */
 
 .user-list-overlay {

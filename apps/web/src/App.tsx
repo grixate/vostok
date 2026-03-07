@@ -371,6 +371,7 @@ function App() {
   const [chatSearchQuery, setChatSearchQuery] = useState('')
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [profileOverlayOpen, setProfileOverlayOpen] = useState(false)
+  const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false)
   const [newMessageMode, setNewMessageMode] = useState(false)
   const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
   const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
@@ -4530,13 +4531,9 @@ function App() {
               </button>
             </div>
             <div className="profile-overlay__actions">
-              <button type="button" onClick={() => { setProfileOverlayOpen(false); setView('link') }}>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7 4H4C3 4 2 5 2 6V14C2 15 3 16 4 16H12C13 16 14 15 14 14V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10 2H16V8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 2L8 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                Link Device
-              </button>
-              <button type="button" onClick={() => { setProfileOverlayOpen(false); handleReauthenticate() }}>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 9C2 5.1 5.1 2 9 2C12.9 2 16 5.1 16 9C16 12.9 12.9 16 9 16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M2 9H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                Refresh Session
+              <button type="button" onClick={() => { setProfileOverlayOpen(false); setSettingsOverlayOpen(true) }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L10.5 5.5L14 6L11.5 8.5L12 12L9 10.5L6 12L6.5 8.5L4 6L7.5 5.5L9 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                Settings
               </button>
               <div className="profile-overlay__sep" />
               <button type="button" className="profile-overlay__danger" onClick={() => { setProfileOverlayOpen(false); handleForgetDevice() }}>
@@ -4548,6 +4545,62 @@ function App() {
         </>
       ) : null}
 
+
+      {/* ── Settings overlay ── */}
+      {settingsOverlayOpen ? (
+        <>
+          <div className="overlay-backdrop" onClick={() => setSettingsOverlayOpen(false)} />
+          <div className="profile-overlay settings-overlay">
+            <div className="profile-overlay__header">
+              <span className="settings-overlay__title">Settings</span>
+              <button className="profile-overlay__close" type="button" onClick={() => setSettingsOverlayOpen(false)} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            {/* Session */}
+            <div className="settings-overlay__section">
+              <div className="settings-overlay__section-title">Session</div>
+              <button className="settings-overlay__row" type="button" disabled={loading} onClick={() => { setSettingsOverlayOpen(false); handleReauthenticate() }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 9C2 5.1 5.1 2 9 2C12.9 2 16 5.1 16 9C16 12.9 12.9 16 9 16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M2 9H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Refresh Session
+              </button>
+              <button className="settings-overlay__row" type="button" onClick={() => { setSettingsOverlayOpen(false); setView('link') }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7 4H4C3 4 2 5 2 6V14C2 15 3 16 4 16H12C13 16 14 15 14 14V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10 2H16V8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 2L8 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Link Another Device
+              </button>
+            </div>
+
+            {/* Encryption */}
+            {safetyNumbers.length > 0 ? (
+              <div className="settings-overlay__section">
+                <div className="settings-overlay__section-title">Encryption</div>
+                {safetyNumbers.map((entry) => (
+                  <div className="settings-overlay__row settings-overlay__row--info" key={entry.peerDeviceId}>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: 13 }}>{entry.label}</strong>
+                      <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all', display: 'block', color: 'var(--label2)', marginTop: 2 }}>{entry.fingerprint}</span>
+                    </div>
+                    {!entry.verified ? (
+                      <button className="mini-action" disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading} onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)} type="button">Verify</button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#34C759', fontWeight: 600 }}>✓ Verified</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Danger zone */}
+            <div className="settings-overlay__section">
+              <button className="settings-overlay__row settings-overlay__row--danger" type="button" onClick={() => { setSettingsOverlayOpen(false); handleForgetDevice() }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 2H12M3 5H15M13 5L12.5 14C12.5 15.1 11.6 16 10.5 16H7.5C6.4 16 5.5 15.1 5.5 14L5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {/* ── iOS glass toast notifications ── */}
       {toasts.length > 0 ? (
