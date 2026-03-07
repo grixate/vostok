@@ -21,12 +21,14 @@ type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   glyph?: ReactNode
 }
 
-export function IconButton({ className, label, glyph, ...props }: IconButtonProps) {
+export function IconButton({ className, label, glyph, children, ...props }: IconButtonProps) {
   return (
     <button className={cx('vostok-icon-button', className)} type="button" aria-label={label} {...props}>
-      <span className="vostok-icon-button__glyph" aria-hidden="true">
-        {glyph ?? label.slice(0, 1)}
-      </span>
+      {children ?? glyph ?? (
+        <span className="vostok-icon-button__glyph" aria-hidden="true">
+          {label.slice(0, 1)}
+        </span>
+      )}
     </button>
   )
 }
@@ -54,4 +56,3 @@ type DotProps = HTMLAttributes<HTMLSpanElement> & {
 export function StatusDot({ className, status = 'online', ...props }: DotProps) {
   return <span className={cx('vostok-status-dot', `vostok-status-dot--${status}`, className)} {...props} />
 }
-
