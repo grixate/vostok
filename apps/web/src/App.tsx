@@ -372,6 +372,12 @@ function App() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [profileOverlayOpen, setProfileOverlayOpen] = useState(false)
   const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const stored = window.localStorage.getItem('vostok-theme')
+    if (stored) return stored === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [newMessageMode, setNewMessageMode] = useState(false)
   const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
   const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
@@ -1479,6 +1485,12 @@ function App() {
 
     window.localStorage.setItem(DETAIL_RAIL_STORAGE_KEY, String(detailRailPreferred))
   }, [detailRailPreferred])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    window.localStorage.setItem('vostok-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   useEffect(() => {
     if (typeof window === 'undefined' || desktopWindowAlwaysOnTop === null) {
@@ -3824,11 +3836,11 @@ function App() {
                   </div>
                   <div>
                     <strong>{storedDevice.username}</strong>
-                    <span style={{ fontSize: 13, color: 'var(--label2)' }}>{storedDevice.deviceName}</span>
+                    <span style={{ fontSize: 13, color: 'var(--label-secondary)' }}>{storedDevice.deviceName}</span>
                   </div>
                 </div>
               ) : (
-                <p style={{ fontSize: 14, color: 'var(--label2)', textAlign: 'center' }}>No local device found. Register first.</p>
+                <p style={{ fontSize: 14, color: 'var(--label-secondary)', textAlign: 'center' }}>No local device found. Register first.</p>
               )}
 
               <button
@@ -4016,7 +4028,7 @@ function App() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
                   <strong style={{ fontSize: 15 }}>{newChatUsername.trim()}</strong>
-                  <span style={{ fontSize: 13, color: 'var(--label2)' }}>Start new chat</span>
+                  <span style={{ fontSize: 13, color: 'var(--label-secondary)' }}>Start new chat</span>
                 </div>
               </button>
             ) : null}
@@ -4054,10 +4066,10 @@ function App() {
             ) : (
               <div style={{ padding: '48px 24px', textAlign: 'center' }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
-                <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>
+                <p style={{ fontSize: 15, color: 'var(--label-secondary)', margin: 0 }}>
                   No chats yet
                 </p>
-                <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>
+                <p style={{ fontSize: 13, color: 'var(--label-tertiary)', margin: '4px 0 0' }}>
                   Start a conversation above
                 </p>
               </div>
@@ -4143,7 +4155,7 @@ function App() {
               />
               {chatSearchQuery ? (
                 <button className="chat-search-bar__clear" type="button" onClick={() => setChatSearchQuery('')} aria-label="Clear">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" fill="var(--label3)"/><path d="M5 5L9 9M9 5L5 9" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" fill="var(--label-tertiary)"/><path d="M5 5L9 9M9 5L5 9" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 </button>
               ) : null}
             </div>
@@ -4159,10 +4171,22 @@ function App() {
               <strong>{resolvePinnedPreview(pinnedMessage)}</strong>
             </div>
           ) : null}
-          {!activeChat ? null : messageItems.length === 0 ? (
+          {!activeChat ? (
+            <div className="conversation-stage__no-selection">
+              <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                <circle cx="32" cy="32" r="30" fill="var(--fill-primary)"/>
+                <path d="M20 26C20 23.8 21.8 22 24 22H40C42.2 22 44 23.8 44 26V36C44 38.2 42.2 40 40 40H34L28 44V40H24C21.8 40 20 38.2 20 36V26Z" stroke="var(--label-tertiary)" strokeWidth="1.5" strokeLinejoin="round"/>
+                <circle cx="27" cy="31" r="1.5" fill="var(--label-tertiary)"/>
+                <circle cx="32" cy="31" r="1.5" fill="var(--label-tertiary)"/>
+                <circle cx="37" cy="31" r="1.5" fill="var(--label-tertiary)"/>
+              </svg>
+              <p className="conversation-stage__no-selection-title">Select a chat</p>
+              <p className="conversation-stage__no-selection-sub">Choose a conversation from the list to start messaging</p>
+            </div>
+          ) : messageItems.length === 0 ? (
             <div className="conversation-stage__empty">
-              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>No messages here yet</p>
-              <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
+              <p style={{ fontSize: 15, color: 'var(--label-secondary)', margin: 0 }}>No messages here yet</p>
+              <p style={{ fontSize: 13, color: 'var(--label-tertiary)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
             </div>
           ) : (
             <div className="message-thread">
@@ -4447,7 +4471,7 @@ function App() {
                     {!entry.verified ? (
                       <button className="mini-action" disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading} onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)} type="button">Verify</button>
                     ) : (
-                      <span style={{ fontSize: 12, color: 'var(--green)' }}>Verified</span>
+                      <span style={{ fontSize: 12, color: 'var(--status-online)' }}>Verified</span>
                     )}
                   </div>
                 </div>
@@ -4558,6 +4582,25 @@ function App() {
               </button>
             </div>
 
+            {/* Appearance */}
+            <div className="settings-overlay__section">
+              <div className="settings-overlay__section-title">Appearance</div>
+              <button
+                className="settings-overlay__row settings-overlay__row--toggle"
+                type="button"
+                onClick={() => setDarkMode((v) => !v)}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  {darkMode
+                    ? <path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.2 3.2l1.4 1.4M13.4 13.4l1.4 1.4M3.2 14.8l1.4-1.4M13.4 4.6l1.4-1.4M9 5.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    : <path d="M14.5 9.8A6 6 0 0 1 8.2 3.5 6 6 0 1 0 14.5 9.8Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  }
+                </svg>
+                {darkMode ? 'Light Mode' : 'Dark Mode'}
+                <span className="settings-overlay__toggle" data-on={darkMode} />
+              </button>
+            </div>
+
             {/* Session */}
             <div className="settings-overlay__section">
               <div className="settings-overlay__section-title">Session</div>
@@ -4579,7 +4622,7 @@ function App() {
                   <div className="settings-overlay__row settings-overlay__row--info" key={entry.peerDeviceId}>
                     <div style={{ flex: 1 }}>
                       <strong style={{ fontSize: 13 }}>{entry.label}</strong>
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all', display: 'block', color: 'var(--label2)', marginTop: 2 }}>{entry.fingerprint}</span>
+                      <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all', display: 'block', color: 'var(--label-secondary)', marginTop: 2 }}>{entry.fingerprint}</span>
                     </div>
                     {!entry.verified ? (
                       <button className="mini-action" disabled={verifyingSafetyDeviceId === entry.peerDeviceId || loading} onClick={() => void handleVerifyPeerSafetyNumber(entry.peerDeviceId)} type="button">Verify</button>

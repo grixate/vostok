@@ -1,40 +1,85 @@
 /* ─── Design Tokens ───────────────────────────────────────────────────────────
-   Source: Figma Telegram iOS UI Kit (Community)
-   Accent:         #008BFF
-   Label:          #000000
-   Label 2:        rgba(60,60,67,0.60)
-   Separator:      #E6E6E6
-   BG Primary:     #FFFFFF
-   BG Secondary:   #F2F2F7
-   Row height:     78px
-   Avatar:         52px (list) / 36px (header)
+   Source: DESIGN_LANGUAGE.md — Telegram iOS design language
+   Platform: Desktop web app
    ──────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --accent: #008BFF;
-  --accent-soft: rgba(0, 139, 255, 0.10);
-  --bg: #FFFFFF;
-  --bg2: #F2F2F7;
-  --bg3: #F9F9F9;
-  --label: #000000;
-  --label2: rgba(60, 60, 67, 0.60);
-  --label3: rgba(60, 60, 67, 0.30);
-  --fill: rgba(120, 120, 128, 0.12);
-  --sep: #E6E6E6;
-  --sep2: #C6C6C8;
-  --green: #34C759;
-  --danger: #FF3B30;
-  --font: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  /* ═══ Accent ═══ */
+  --accent:           #008BFF;
+  --accent-hover:     #0077D9;
+  --accent-muted:     rgba(0, 139, 255, 0.12);
+
+  /* ═══ Backgrounds ═══ */
+  --bg-primary:       #FFFFFF;
+  --bg-secondary:     #F2F2F7;
+  --bg-tertiary:      #E5E5EA;
+  --bg-chat:          #DCE8D4;
+
+  /* ═══ Labels ═══ */
+  --label-primary:    #000000;
+  --label-secondary:  rgba(60, 60, 67, 0.60);
+  --label-tertiary:   rgba(60, 60, 67, 0.30);
+  --label-on-accent:  #000000;
+
+  /* ═══ Fills ═══ */
+  --fill-primary:     rgba(120, 120, 128, 0.20);
+  --fill-secondary:   rgba(120, 120, 128, 0.16);
+  --fill-tertiary:    #EDEDED;
+
+  /* ═══ Separators ═══ */
+  --separator-vibrant:    #E6E6E6;
+  --separator-opaque:     #C6C6C8;
+  --separator-nonopaque:  rgba(0, 0, 0, 0.12);
+
+  /* ═══ Message Bubbles ═══ */
+  --bubble-outgoing:  #E1FEC6;
+  --bubble-incoming:  #FFFFFF;
+  --bubble-service:   rgba(0, 0, 0, 0.30);
+
+  /* ═══ Status & Semantic ═══ */
+  --status-online:      #34C759;
+  --status-story:       #00C770;
+  --color-destructive:  #FF3B30;
+  --color-purple:       #CB30E0;
+
+  /* ═══ Typography ═══ */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 
   font-family: var(--font);
   line-height: 1.5;
   font-weight: 400;
-  color: var(--label);
-  background: var(--bg2);
+  color: var(--label-primary);
+  background: var(--bg-secondary);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Dark Mode ───────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] {
+  --bg-primary:       #1C1C1E;
+  --bg-secondary:     #2C2C2E;
+  --bg-tertiary:      #3A3A3C;
+  --bg-chat:          #0E1621;
+
+  --label-primary:    #FFFFFF;
+  --label-secondary:  rgba(235, 235, 245, 0.60);
+  --label-tertiary:   rgba(235, 235, 245, 0.30);
+  --label-on-accent:  #FFFFFF;
+
+  --fill-primary:     rgba(120, 120, 128, 0.36);
+  --fill-secondary:   rgba(120, 120, 128, 0.32);
+  --fill-tertiary:    #333333;
+
+  --separator-vibrant:    #38383A;
+  --separator-opaque:     #48484A;
+  --separator-nonopaque:  rgba(255, 255, 255, 0.08);
+
+  --bubble-outgoing:  #3B6E2B;
+  --bubble-incoming:  #2C2C2E;
+  --bubble-service:   rgba(255, 255, 255, 0.20);
 }
 
 * {
@@ -62,7 +107,7 @@ button {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  background: var(--bg2);
+  background: var(--bg-secondary);
 }
 
 .app-shell--detail-hidden .detail-rail {
@@ -74,8 +119,8 @@ button {
 .sidebar {
   width: 320px;
   flex-shrink: 0;
-  background: var(--bg);
-  border-right: 0.5px solid var(--sep);
+  background: var(--bg-primary);
+  border-right: 0.5px solid var(--separator-vibrant);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -83,7 +128,7 @@ button {
 
 .sidebar__header {
   padding: 12px 12px 0;
-  background: var(--bg);
+  background: var(--bg-primary);
   flex-shrink: 0;
 }
 
@@ -105,7 +150,7 @@ button {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.43px;
-  color: var(--label);
+  color: var(--label-primary);
 }
 
 .sidebar__compose-btn {
@@ -138,7 +183,7 @@ button {
 }
 
 .sidebar__hamburger-btn:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .sidebar__back-btn {
@@ -157,7 +202,7 @@ button {
 }
 
 .sidebar__back-btn:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 /* ─── New Message inline search ─────────────────────────────────────────── */
@@ -167,13 +212,13 @@ button {
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 16px;
-  border-bottom: 1px solid var(--sep);
+  border-bottom: 1px solid var(--separator-vibrant);
 }
 
 .new-message-search__to {
   font-size: 15px;
   font-weight: 500;
-  color: var(--label2);
+  color: var(--label-secondary);
   white-space: nowrap;
 }
 
@@ -182,13 +227,13 @@ button {
   border: none;
   background: transparent;
   font-size: 15px;
-  color: var(--label);
+  color: var(--label-primary);
   outline: none;
   padding: 4px 0;
 }
 
 .new-message-search__input::placeholder {
-  color: var(--label3);
+  color: var(--label-tertiary);
 }
 
 .new-message-create {
@@ -223,7 +268,7 @@ button {
 }
 
 .sidebar__list::-webkit-scrollbar-thumb {
-  background: var(--label3);
+  background: var(--label-tertiary);
   border-radius: 2px;
 }
 
@@ -233,7 +278,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--fill);
+  background: var(--fill-primary);
   border-radius: 10px;
   padding: 7px 10px;
   margin-bottom: 8px;
@@ -241,7 +286,7 @@ button {
 }
 
 .search-bar__icon {
-  color: var(--label2);
+  color: var(--label-secondary);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -253,14 +298,14 @@ button {
   flex: 1;
   font-size: 15px;
   font-family: var(--font);
-  color: var(--label);
+  color: var(--label-primary);
   outline: none;
   letter-spacing: -0.23px;
   -webkit-appearance: none;
 }
 
 .search-bar__input::placeholder {
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 /* ─── Chat List Item ──────────────────────────────────────────────────────── */
@@ -284,9 +329,9 @@ button {
 .chat-list-item {
   display: flex;
   align-items: center;
-  height: 78px;
+  height: 68px;
   padding: 0 16px 0 10px;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-left: 3px solid transparent;
   transition: background 0.1s ease;
 }
@@ -305,7 +350,7 @@ button {
 }
 
 .chat-list-item--pinned {
-  background: var(--bg3);
+  background: var(--bg-tertiary);
 }
 
 .chat-list-item--pinned:hover {
@@ -313,15 +358,15 @@ button {
 }
 
 .chat-list-item__avatar {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-right: 10px;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: white;
   position: relative;
@@ -334,8 +379,8 @@ button {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: var(--green);
-  border: 2.5px solid var(--bg);
+  background: var(--status-online);
+  border: 2.5px solid var(--bg-primary);
   z-index: 1;
 }
 
@@ -347,7 +392,7 @@ button {
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  border-top: 0.5px solid var(--sep);
+  border-top: 0.5px solid var(--separator-vibrant);
 }
 
 .chat-list-item__body--first {
@@ -364,7 +409,7 @@ button {
   font-size: 17px;
   font-weight: 500;
   letter-spacing: -0.43px;
-  color: var(--label);
+  color: var(--label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -375,7 +420,7 @@ button {
 .chat-list-item__topline span {
   font-size: 13px;
   font-weight: 400;
-  color: var(--label2);
+  color: var(--label-secondary);
   letter-spacing: -0.08px;
   white-space: nowrap;
   flex-shrink: 0;
@@ -397,7 +442,7 @@ button {
   white-space: nowrap;
   font-size: 15px;
   letter-spacing: -0.23px;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .chat-list-item__flags {
@@ -408,7 +453,7 @@ button {
 }
 
 .chat-list-item__flag {
-  color: var(--label3);
+  color: var(--label-tertiary);
   font-size: 11px;
   font-weight: 600;
   display: flex;
@@ -431,8 +476,8 @@ button {
 }
 
 .chat-list-item__badge--muted {
-  background: var(--fill);
-  color: var(--label2);
+  background: var(--fill-primary);
+  color: var(--label-secondary);
 }
 
 /* ─── Conversation Pane ───────────────────────────────────────────────────── */
@@ -441,7 +486,7 @@ button {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg2);
+  background: var(--bg-secondary);
   min-width: 0;
   overflow: hidden;
 }
@@ -462,19 +507,17 @@ button {
 .conversation-pane__empty-text {
   font-size: 16px;
   font-weight: 400;
-  color: var(--label2);
+  color: var(--label-secondary);
   letter-spacing: -0.3px;
 }
 
 /* ─── Conversation Header ─────────────────────────────────────────────────── */
 
 .conversation-header {
-  height: 56px;
+  height: 52px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.90);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border-bottom: 0.5px solid var(--sep);
+  background: var(--bg-primary);
+  border-bottom: 0.5px solid var(--separator-vibrant);
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -522,7 +565,7 @@ button {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.4px;
-  color: var(--label);
+  color: var(--label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -531,12 +574,12 @@ button {
 .conversation-header__status {
   font-size: 13px;
   font-weight: 400;
-  color: var(--label2);
+  color: var(--label-secondary);
   letter-spacing: -0.08px;
 }
 
 .conversation-header__status--online {
-  color: var(--green);
+  color: var(--status-online);
 }
 
 .conversation-header__actions {
@@ -561,11 +604,11 @@ button {
 }
 
 .conversation-header__btn:last-child {
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .conversation-header__btn:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 /* ─── Messages Area ───────────────────────────────────────────────────────── */
@@ -574,7 +617,7 @@ button {
   flex: 1;
   overflow-y: auto;
   padding: 12px 0;
-  background: var(--bg2);
+  background: var(--bg-chat);
 }
 
 .conversation-stage::-webkit-scrollbar {
@@ -586,7 +629,7 @@ button {
 }
 
 .conversation-stage::-webkit-scrollbar-thumb {
-  background: var(--label3);
+  background: var(--label-tertiary);
   border-radius: 2px;
 }
 
@@ -605,6 +648,32 @@ button {
   text-align: center;
 }
 
+.conversation-stage__no-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  text-align: center;
+  padding: 48px 24px;
+  opacity: 0.6;
+}
+
+.conversation-stage__no-selection-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 590;
+  color: var(--label-primary);
+}
+
+.conversation-stage__no-selection-sub {
+  margin: 0;
+  font-size: 15px;
+  color: var(--label-secondary);
+  max-width: 240px;
+}
+
 /* ─── Pinned Message ──────────────────────────────────────────────────────── */
 
 .pinned-message-banner {
@@ -614,7 +683,7 @@ button {
   padding: 8px 16px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--separator-vibrant);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -630,7 +699,7 @@ button {
 
 .pinned-message-banner span:last-child {
   font-size: 11px;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 /* ─── Date Separator ──────────────────────────────────────────────────────── */
@@ -691,21 +760,21 @@ button {
 }
 
 .message-bubble--incoming .message-bubble__content {
-  background: var(--bg);
-  border-radius: 18px 18px 18px 4px;
-  color: var(--label);
+  background: var(--bg-primary);
+  border-radius: 4px 17px 17px 17px;
+  color: var(--label-primary);
 }
 
 .message-bubble--outgoing .message-bubble__content {
-  background: #c8ffa3;
-  border-radius: 18px 18px 4px 18px;
-  color: var(--label);
+  background: var(--bubble-outgoing);
+  border-radius: 17px 4px 17px 17px;
+  color: var(--label-primary);
 }
 
 .message-bubble--system .message-bubble__content {
   background: rgba(255, 255, 255, 0.50);
   backdrop-filter: blur(8px);
-  border-radius: 18px;
+  border-radius: 17px;
   text-align: center;
   max-width: 80%;
   padding: 8px 16px;
@@ -729,7 +798,7 @@ button {
 }
 
 .message-bubble--incoming .message-bubble__state {
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 /* ─── Message Thread Extras ───────────────────────────────────────────────── */
@@ -760,7 +829,7 @@ button {
   margin-bottom: 4px;
   padding-left: 8px;
   border-left: 2px solid var(--accent);
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 12px;
 }
 
@@ -873,7 +942,7 @@ button {
   background: rgba(255, 255, 255, 0.90);
   backdrop-filter: blur(20px) saturate(1.8);
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border-top: 0.5px solid var(--sep);
+  border-top: 0.5px solid var(--separator-vibrant);
 }
 
 .live-composer__btn {
@@ -885,21 +954,21 @@ button {
   justify-content: center;
   padding: 6px;
   border-radius: 50%;
-  color: var(--label2);
+  color: var(--label-secondary);
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
 .live-composer__btn:hover {
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
 }
 
 .live-composer__field {
   flex: 1;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-radius: 20px;
-  border: 0.5px solid var(--sep);
+  border: 0.5px solid var(--separator-vibrant);
   display: flex;
   align-items: center;
   padding: 8px 8px 8px 14px;
@@ -914,7 +983,7 @@ button {
   justify-content: space-between;
   gap: 8px;
   padding: 4px 8px 6px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--separator-vibrant);
   margin-bottom: 4px;
 }
 
@@ -926,7 +995,7 @@ button {
 
 .live-composer__reply-copy span {
   font-size: 12px;
-  color: var(--label2);
+  color: var(--label-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -942,7 +1011,7 @@ button {
   outline: none;
   font-size: 15px;
   font-family: var(--font);
-  color: var(--label);
+  color: var(--label-primary);
   background: transparent;
   letter-spacing: -0.23px;
   resize: none;
@@ -951,7 +1020,7 @@ button {
 }
 
 .live-composer__input::placeholder {
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .live-composer__send {
@@ -983,8 +1052,8 @@ button {
 .detail-rail {
   width: 320px;
   flex-shrink: 0;
-  background: var(--bg);
-  border-left: 0.5px solid var(--sep);
+  background: var(--bg-primary);
+  border-left: 0.5px solid var(--separator-vibrant);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -999,7 +1068,7 @@ button {
   padding: 10px 16px;
   background: none;
   border: none;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--separator-vibrant);
   cursor: pointer;
   font-size: 13px;
   color: var(--accent);
@@ -1013,14 +1082,14 @@ button {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--bg2);
+  background: var(--bg-secondary);
   padding: 24px;
 }
 
 .auth-card {
   width: 100%;
   max-width: 400px;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-radius: 16px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   padding: 40px 32px 32px;
@@ -1046,7 +1115,7 @@ button {
 .auth-card__subtitle {
   margin: -8px 0 8px;
   font-size: 15px;
-  color: var(--label2);
+  color: var(--label-secondary);
   text-align: center;
 }
 
@@ -1055,7 +1124,7 @@ button {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg2);
+  background: var(--bg-secondary);
   border-radius: 12px;
 }
 
@@ -1081,7 +1150,7 @@ button {
 .auth-card__tabs {
   display: flex;
   gap: 0;
-  background: var(--fill);
+  background: var(--fill-primary);
   border-radius: 10px;
   padding: 2px;
 }
@@ -1095,12 +1164,12 @@ button {
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: var(--label);
+  color: var(--label-primary);
   transition: all 0.15s ease;
 }
 
 .auth-tab--active {
-  background: var(--bg);
+  background: var(--bg-primary);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   color: var(--accent);
 }
@@ -1121,7 +1190,7 @@ button {
 
 .auth-copy p {
   margin: 0;
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -1135,17 +1204,17 @@ button {
 .auth-field span {
   font-size: 13px;
   font-weight: 500;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .auth-field input,
 .auth-field select,
 .auth-field textarea {
   width: 100%;
-  border: 0.5px solid var(--sep);
+  border: 0.5px solid var(--separator-vibrant);
   border-radius: 10px;
-  background: var(--bg);
-  color: var(--label);
+  background: var(--bg-primary);
+  color: var(--label-primary);
   padding: 12px 14px;
   font-size: 15px;
   font-family: var(--font);
@@ -1162,7 +1231,7 @@ button {
 .auth-field select:focus,
 .auth-field textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .new-chat-form {
@@ -1191,13 +1260,13 @@ button {
 }
 
 .secondary-action {
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
 }
 
 .danger-action {
   background: rgba(255, 59, 48, 0.12);
-  color: var(--danger);
+  color: var(--color-destructive);
 }
 
 .primary-action:hover,
@@ -1218,8 +1287,8 @@ button {
   padding: 4px 10px;
   border: 0;
   border-radius: 999px;
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -1242,17 +1311,17 @@ button {
 
 .status-banner--success {
   background: rgba(52, 199, 89, 0.12);
-  color: #1d7a3b;
+  color: var(--status-online);
 }
 
 .status-banner--info {
   background: rgba(0, 139, 255, 0.10);
-  color: #0060b9;
+  color: var(--accent-hover);
 }
 
 .status-banner--error {
   background: rgba(255, 59, 48, 0.10);
-  color: #c62828;
+  color: var(--color-destructive);
 }
 
 /* ─── Settings ────────────────────────────────────────────────────────────── */
@@ -1295,7 +1364,7 @@ button {
   align-items: center;
   padding: 10px 12px;
   border-radius: 10px;
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .settings-card__row-main {
@@ -1314,7 +1383,7 @@ button {
 
 .settings-card__row span,
 .settings-card__muted {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 13px;
 }
 
@@ -1334,7 +1403,7 @@ button {
   padding: 0;
   border: 0;
   border-radius: 8px;
-  background: var(--fill);
+  background: var(--fill-primary);
   overflow: hidden;
   cursor: pointer;
 }
@@ -1351,7 +1420,7 @@ button {
 
 .chat-media-gallery__fallback {
   padding: 8px;
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 12px;
   text-align: center;
   line-height: 1.35;
@@ -1362,8 +1431,8 @@ button {
 .call-room-pill {
   padding: 3px 8px;
   border-radius: 999px;
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -1373,7 +1442,7 @@ button {
   width: min(100%, 14rem);
   overflow: hidden;
   border-radius: 12px;
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .call-preview--featured {
@@ -1399,8 +1468,8 @@ button {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 12px;
-  border-bottom: 0.5px solid var(--sep);
-  background: var(--bg);
+  border-bottom: 0.5px solid var(--separator-vibrant);
+  background: var(--bg-primary);
 }
 
 .desktop-titlebar--inactive {
@@ -1419,7 +1488,7 @@ button {
 }
 
 .desktop-titlebar__meta span {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 11px;
 }
 
@@ -1433,14 +1502,14 @@ button {
   height: 28px;
   border-radius: 50%;
   border: none;
-  background: var(--fill);
+  background: var(--fill-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: var(--label2);
+  color: var(--label-secondary);
   transition: background 0.12s;
 }
 
@@ -1451,17 +1520,17 @@ button {
 /* ─── Shared primitives overrides ─────────────────────────────────────────── */
 
 .vostok-glass {
-  background: var(--bg);
-  border: 0.5px solid var(--sep);
+  background: var(--bg-primary);
+  border: 0.5px solid var(--separator-vibrant);
   border-radius: 12px;
 }
 
 .vostok-glass--muted {
-  background: var(--bg2);
+  background: var(--bg-secondary);
 }
 
 .vostok-glass--accent {
-  background: var(--accent-soft);
+  background: var(--accent-muted);
 }
 
 .vostok-icon-button {
@@ -1479,7 +1548,7 @@ button {
 }
 
 .vostok-icon-button:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .vostok-icon-button__glyph {
@@ -1510,7 +1579,7 @@ button {
 }
 
 .vostok-label-pill__subtitle {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 13px;
 }
 
@@ -1520,9 +1589,9 @@ button {
   right: 1px;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--bg);
+  border: 2px solid var(--bg-primary);
   border-radius: 50%;
-  background: var(--green);
+  background: var(--status-online);
 }
 
 .vostok-status-dot--away {
@@ -1530,7 +1599,7 @@ button {
 }
 
 .vostok-status-dot--muted {
-  background: var(--label3);
+  background: var(--label-tertiary);
 }
 
 /* ─── Chat Info Panel ─────────────────────────────────────────────────────── */
@@ -1561,7 +1630,7 @@ button {
 }
 
 .chat-info-panel__subtitle {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 14px;
 }
 
@@ -1577,12 +1646,12 @@ button {
   display: flex;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--fill);
+  background: var(--fill-primary);
   border-radius: 10px;
 }
 
 .chat-info-panel__label {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 13px;
 }
 
@@ -1595,7 +1664,7 @@ button {
 }
 
 .hero-card__copy {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 14px;
   max-width: 26rem;
 }
@@ -1623,14 +1692,14 @@ button {
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.90);
   backdrop-filter: blur(20px);
-  border-top: 0.5px solid var(--sep);
+  border-top: 0.5px solid var(--separator-vibrant);
 }
 
 .composer__field {
   flex: 1;
-  background: var(--bg) !important;
+  background: var(--bg-primary) !important;
   border-radius: 20px !important;
-  border: 0.5px solid var(--sep) !important;
+  border: 0.5px solid var(--separator-vibrant) !important;
   padding: 8px 8px 8px 14px;
 }
 
@@ -1647,7 +1716,7 @@ button {
 }
 
 .composer__reply-copy {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 12px;
 }
 
@@ -1666,7 +1735,7 @@ button {
 }
 
 .composer__placeholder {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 15px;
 }
 
@@ -1674,8 +1743,8 @@ button {
   border: 0;
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--fill);
-  color: var(--label2);
+  background: var(--fill-primary);
+  color: var(--label-secondary);
   cursor: pointer;
   font-size: 12px;
 }
@@ -1687,15 +1756,15 @@ button {
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px;
-  background: var(--bg) !important;
+  background: var(--bg-primary) !important;
   border-radius: 12px !important;
 }
 
 .reaction-bar__chip {
   border: 0;
   border-radius: 999px;
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
   cursor: pointer;
   padding: 6px 10px;
   font-size: 12px;
@@ -1707,7 +1776,7 @@ button {
   flex-direction: column;
   gap: 1px;
   padding: 4px;
-  background: var(--bg) !important;
+  background: var(--bg-primary) !important;
   border-radius: 12px !important;
 }
 
@@ -1715,7 +1784,7 @@ button {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--label);
+  color: var(--label-primary);
   cursor: pointer;
   padding: 10px 12px;
   text-align: left;
@@ -1723,7 +1792,7 @@ button {
 }
 
 .context-menu__item:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .call-surface {
@@ -1731,7 +1800,7 @@ button {
   flex-direction: column;
   gap: 4px;
   padding: 16px;
-  background: var(--bg2) !important;
+  background: var(--bg-secondary) !important;
   border-radius: 12px !important;
 }
 
@@ -1739,11 +1808,11 @@ button {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .call-surface__copy {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 13px;
 }
 
@@ -1755,11 +1824,11 @@ button {
   gap: 4px;
   padding: 12px 16px;
   border-radius: 10px;
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .device-summary-card span {
-  color: var(--label2);
+  color: var(--label-secondary);
   font-size: 13px;
 }
 
@@ -1817,9 +1886,9 @@ button {
   right: 0;
   margin-top: 4px;
   min-width: 200px;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--sep);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--separator-vibrant);
   padding: 6px;
   z-index: 100;
   animation: dropdown-in 0.15s ease;
@@ -1847,23 +1916,23 @@ button {
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--label);
+  color: var(--label-primary);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
 }
 
 .dropdown-menu__item:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .dropdown-menu__item--danger {
-  color: var(--danger);
+  color: var(--color-destructive);
 }
 
 .dropdown-menu__sep {
   height: 0.5px;
-  background: var(--sep);
+  background: var(--separator-vibrant);
   margin: 4px 12px;
 }
 
@@ -1874,8 +1943,8 @@ button {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border-bottom: 0.5px solid var(--sep);
-  background: var(--bg);
+  border-bottom: 0.5px solid var(--separator-vibrant);
+  background: var(--bg-primary);
 }
 
 .chat-search-bar__nav {
@@ -1886,15 +1955,15 @@ button {
   justify-content: center;
   border: none;
   background: none;
-  color: var(--label2);
+  color: var(--label-secondary);
   cursor: pointer;
   border-radius: 6px;
   flex-shrink: 0;
 }
 
 .chat-search-bar__nav:hover {
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
 }
 
 .chat-search-bar__field {
@@ -1902,10 +1971,10 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--fill);
+  background: var(--fill-primary);
   border-radius: 8px;
   padding: 6px 10px;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .chat-search-bar__input {
@@ -1914,12 +1983,12 @@ button {
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--label);
+  color: var(--label-primary);
   outline: none;
 }
 
 .chat-search-bar__input::placeholder {
-  color: var(--label3);
+  color: var(--label-tertiary);
 }
 
 .chat-search-bar__clear {
@@ -1938,15 +2007,15 @@ button {
   justify-content: center;
   border: none;
   background: none;
-  color: var(--label2);
+  color: var(--label-secondary);
   cursor: pointer;
   border-radius: 6px;
   flex-shrink: 0;
 }
 
 .chat-search-bar__close:hover {
-  background: var(--fill);
-  color: var(--label);
+  background: var(--fill-primary);
+  color: var(--label-primary);
 }
 
 /* ─── Right-click Context Menu ───────────────────────────────────────────── */
@@ -1961,9 +2030,9 @@ button {
   position: fixed;
   z-index: 201;
   min-width: 180px;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-radius: 12px;
-  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--sep);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--separator-vibrant);
   padding: 6px;
   animation: dropdown-in 0.12s ease;
 }
@@ -1978,24 +2047,24 @@ button {
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--label);
+  color: var(--label-primary);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
 }
 
 .msg-context-menu button:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .msg-context-menu__sep {
   height: 0.5px;
-  background: var(--sep);
+  background: var(--separator-vibrant);
   margin: 4px 12px;
 }
 
 .msg-context-menu__danger {
-  color: var(--danger) !important;
+  color: var(--color-destructive) !important;
 }
 
 /* ─── Profile Overlay (Burger Menu) ──────────────────────────────────────── */
@@ -2006,7 +2075,7 @@ button {
   left: 0;
   width: 320px;
   height: 100%;
-  background: var(--bg);
+  background: var(--bg-primary);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.10);
   z-index: 201;
   display: flex;
@@ -2024,7 +2093,7 @@ button {
   align-items: center;
   gap: 12px;
   padding: 20px 16px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--separator-vibrant);
 }
 
 .profile-overlay__avatar {
@@ -2054,7 +2123,7 @@ button {
 
 .profile-overlay__info span {
   font-size: 13px;
-  color: var(--label2);
+  color: var(--label-secondary);
 }
 
 .profile-overlay__close {
@@ -2065,14 +2134,14 @@ button {
   justify-content: center;
   border: none;
   background: none;
-  color: var(--label2);
+  color: var(--label-secondary);
   cursor: pointer;
   border-radius: 8px;
   flex-shrink: 0;
 }
 
 .profile-overlay__close:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .profile-overlay__actions {
@@ -2092,24 +2161,24 @@ button {
   background: none;
   font: inherit;
   font-size: 15px;
-  color: var(--label);
+  color: var(--label-primary);
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
 }
 
 .profile-overlay__actions button:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .profile-overlay__sep {
   height: 0.5px;
-  background: var(--sep);
+  background: var(--separator-vibrant);
   margin: 4px 12px;
 }
 
 .profile-overlay__danger {
-  color: var(--danger) !important;
+  color: var(--color-destructive) !important;
 }
 
 /* ─── Settings Overlay ───────────────────────────────────────────────────── */
@@ -2122,7 +2191,7 @@ button {
 
 .settings-overlay__section {
   padding: 8px 8px 4px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--separator-vibrant);
 }
 
 .settings-overlay__section:last-child {
@@ -2132,7 +2201,7 @@ button {
 .settings-overlay__section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--label3);
+  color: var(--label-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 4px 12px 6px;
@@ -2148,14 +2217,14 @@ button {
   background: none;
   font: inherit;
   font-size: 15px;
-  color: var(--label);
+  color: var(--label-primary);
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
 }
 
 .settings-overlay__row:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .settings-overlay__row--info {
@@ -2168,7 +2237,44 @@ button {
 }
 
 .settings-overlay__row--danger {
-  color: var(--danger);
+  color: var(--color-destructive);
+}
+
+.settings-overlay__row--toggle {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.settings-overlay__toggle {
+  margin-left: auto;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--fill-primary);
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.settings-overlay__toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 0.2s;
+}
+
+.settings-overlay__toggle[data-on="true"] {
+  background: var(--accent);
+}
+
+.settings-overlay__toggle[data-on="true"]::after {
+  transform: translateX(18px);
 }
 
 /* ─── User List Overlay (New Message) ────────────────────────────────────── */
@@ -2180,9 +2286,9 @@ button {
   transform: translate(-50%, -50%);
   width: 400px;
   max-height: 500px;
-  background: var(--bg);
+  background: var(--bg-primary);
   border-radius: 14px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px var(--sep);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px var(--separator-vibrant);
   z-index: 201;
   display: flex;
   flex-direction: column;
@@ -2211,13 +2317,13 @@ button {
   justify-content: center;
   border: none;
   background: none;
-  color: var(--label2);
+  color: var(--label-secondary);
   cursor: pointer;
   border-radius: 8px;
 }
 
 .user-list-overlay__header button:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .user-list-overlay__search {
@@ -2229,17 +2335,17 @@ button {
 .user-list-overlay__search input {
   flex: 1;
   border: none;
-  background: var(--fill);
+  background: var(--fill-primary);
   border-radius: 8px;
   padding: 8px 12px;
   font: inherit;
   font-size: 14px;
-  color: var(--label);
+  color: var(--label-primary);
   outline: none;
 }
 
 .user-list-overlay__search input::placeholder {
-  color: var(--label3);
+  color: var(--label-tertiary);
 }
 
 .user-list-overlay__list {
@@ -2258,14 +2364,14 @@ button {
   background: none;
   font: inherit;
   font-size: 15px;
-  color: var(--label);
+  color: var(--label-primary);
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
 }
 
 .user-list-overlay__item:hover {
-  background: var(--fill);
+  background: var(--fill-primary);
 }
 
 .user-list-overlay__avatar {
@@ -2288,15 +2394,15 @@ button {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg);
-  border-top: 0.5px solid var(--sep);
+  background: var(--bg-primary);
+  border-top: 0.5px solid var(--separator-vibrant);
 }
 
 .voice-recorder__indicator {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--danger);
+  background: var(--color-destructive);
   animation: pulse-red 1s ease infinite;
   flex-shrink: 0;
 }
@@ -2310,7 +2416,7 @@ button {
   font-size: 15px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--label);
+  color: var(--label-primary);
   min-width: 48px;
 }
 
@@ -2340,7 +2446,7 @@ button {
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--danger);
+  color: var(--color-destructive);
   cursor: pointer;
   padding: 6px 12px;
   border-radius: 8px;
@@ -2427,14 +2533,14 @@ button {
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--fill);
-  color: var(--label2);
+  background: var(--fill-primary);
+  color: var(--label-secondary);
   border-radius: 50%;
   cursor: pointer;
 }
 
 .chat-info-panel__close:hover {
-  background: var(--sep);
+  background: var(--separator-vibrant);
 }
 
 .chat-info-panel {
