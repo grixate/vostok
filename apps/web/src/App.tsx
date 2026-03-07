@@ -4158,12 +4158,7 @@ function App() {
               <strong>{resolvePinnedPreview(pinnedMessage)}</strong>
             </div>
           ) : null}
-          {!activeChat ? (
-            <div className="conversation-stage__empty">
-              <div style={{ fontSize: 48, marginBottom: 8 }}>💬</div>
-              <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>Select a chat to start messaging</p>
-            </div>
-          ) : messageItems.length === 0 ? (
+          {!activeChat ? null : messageItems.length === 0 ? (
             <div className="conversation-stage__empty">
               <p style={{ fontSize: 15, color: 'var(--label2)', margin: 0 }}>No messages here yet</p>
               <p style={{ fontSize: 13, color: 'var(--label3)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
