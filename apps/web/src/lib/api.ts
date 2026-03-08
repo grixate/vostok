@@ -1124,6 +1124,13 @@ export async function rotateCallKeys(
   })
 }
 
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('Session expired. Please sign in again.')
+    this.name = 'UnauthorizedError'
+  }
+}
+
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
@@ -1134,6 +1141,10 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   })
 
   const data = (await response.json().catch(() => ({}))) as T & ApiErrorBody
+
+  if (response.status === 401) {
+    throw new UnauthorizedError()
+  }
 
   if (!response.ok) {
     throw new Error(data.message ?? data.error ?? 'Request failed.')

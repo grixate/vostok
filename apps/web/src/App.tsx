@@ -91,7 +91,8 @@ import {
   type RecipientDevice,
   type PrekeyDeviceBundle,
   type SafetyNumberRecord,
-  type TurnCredentials
+  type TurnCredentials,
+  UnauthorizedError
 } from './lib/api'
 import {
   generateDeviceIdentity,
@@ -986,12 +987,24 @@ function App() {
           listDevices(sessionToken)
         ])
         const myUsername = me.user.username
+        console.log('[bootstrap] myUsername:', myUsername)
+        console.log('[bootstrap] raw chats from server:', chatResponse.chats.map(c => ({
+          id: c.id, title: c.title, type: c.type,
+          is_self_chat: c.is_self_chat, participant_usernames: c.participant_usernames
+        })))
         let nextChats = chatResponse.chats.map((c) => normalizeSelfChat(c, myUsername))
+        console.log('[bootstrap] after normalization, any self chat?', nextChats.some(c => c.is_self_chat))
 
         if (!nextChats.some((c) => c.is_self_chat)) {
-          const created = await createDirectChat(sessionToken, myUsername)
-          // Force the flag client-side — server may not return is_self_chat: true
-          nextChats = [{ ...created.chat, is_self_chat: true }, ...nextChats]
+          console.log('[bootstrap] no self-chat found, creating one…')
+          try {
+            const created = await createDirectChat(sessionToken, myUsername)
+            console.log('[bootstrap] createDirectChat result:', created.chat)
+            // Force the flag client-side — server may not return is_self_chat: true
+            nextChats = [{ ...created.chat, is_self_chat: true }, ...nextChats]
+          } catch (selfChatErr) {
+            console.error('[bootstrap] createDirectChat failed:', selfChatErr)
+          }
         }
 
         if (cancelled) {
@@ -1011,8 +1024,15 @@ function App() {
         }
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Failed to load chats.'
-          setBanner({ tone: 'error', message })
+          if (error instanceof UnauthorizedError) {
+            // Session expired — clear stored credentials and return to welcome
+            persistStoredDevice(null)
+            setStoredDevice(null)
+            startTransition(() => setView('welcome'))
+          } else {
+            const message = error instanceof Error ? error.message : 'Failed to load chats.'
+            setBanner({ tone: 'error', message })
+          }
         }
       } finally {
         if (!cancelled) {
