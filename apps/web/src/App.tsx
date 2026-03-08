@@ -985,11 +985,13 @@ function App() {
           listChats(sessionToken),
           listDevices(sessionToken)
         ])
-        let nextChats = chatResponse.chats
+        const myUsername = me.user.username
+        let nextChats = chatResponse.chats.map((c) => normalizeSelfChat(c, myUsername))
 
         if (!nextChats.some((c) => c.is_self_chat)) {
-          const created = await createDirectChat(sessionToken, me.user.username)
-          nextChats = [created.chat, ...nextChats]
+          const created = await createDirectChat(sessionToken, myUsername)
+          // Force the flag client-side — server may not return is_self_chat: true
+          nextChats = [{ ...created.chat, is_self_chat: true }, ...nextChats]
         }
 
         if (cancelled) {
@@ -3027,8 +3029,9 @@ function App() {
       let selfChat = chatItems.find((c) => c.is_self_chat)
       if (!selfChat) {
         const created = await createDirectChat(storedDevice.sessionToken, storedDevice.username)
-        setChatItems((prev) => [created.chat, ...prev])
-        selfChat = created.chat
+        const normalized = { ...created.chat, is_self_chat: true }
+        setChatItems((prev) => [normalized, ...prev])
+        selfChat = normalized
       }
       const clientId = window.crypto.randomUUID()
       const { payload } = await buildEncryptedMessagePayload(text.trim(), selfChat.id, clientId, 'text', null)
@@ -5095,6 +5098,16 @@ function readDesktopAlwaysOnTopPreference(): boolean | null {
 function mergeChat(current: ChatSummary[], next: ChatSummary): ChatSummary[] {
   const filtered = current.filter((chat) => chat.id !== next.id)
   return [next, ...filtered]
+}
+
+/** Client-side heuristic: a direct chat where every participant username is
+ *  the same as myUsername is a self-chat, regardless of the server flag. */
+function normalizeSelfChat(chat: ChatSummary, myUsername: string): ChatSummary {
+  if (chat.is_self_chat) return chat
+  const allSelf =
+    chat.participant_usernames.length > 0 &&
+    chat.participant_usernames.every((u) => u === myUsername)
+  return allSelf ? { ...chat, is_self_chat: true } : chat
 }
 
 function toLocalSessionDeviceMaterial(storedDevice: StoredDevice): LocalSessionDeviceMaterial {
