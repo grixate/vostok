@@ -3020,6 +3020,29 @@ function App() {
     await sendDraftMessage()
   }
 
+  async function handleSaveToSavedMessages(text: string) {
+    if (!storedDevice || !text.trim()) return
+    setLoading(true)
+    try {
+      let selfChat = chatItems.find((c) => c.is_self_chat)
+      if (!selfChat) {
+        const created = await createDirectChat(storedDevice.sessionToken, storedDevice.username)
+        setChatItems((prev) => [created.chat, ...prev])
+        selfChat = created.chat
+      }
+      const clientId = window.crypto.randomUUID()
+      const { payload } = await buildEncryptedMessagePayload(text.trim(), selfChat.id, clientId, 'text', null)
+      const response = await createMessage(storedDevice.sessionToken, selfChat.id, payload)
+      await ingestMessageIntoActiveThread(response.message, selfChat.id)
+      showToast('Saved to Saved Messages', 'success')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to save message.'
+      showToast(msg, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function cleanupVoiceNoteCapture() {
     voiceNoteRecorderRef.current = null
     voiceNoteChunksRef.current = []
@@ -3619,10 +3642,15 @@ function App() {
 
   const onboarding = view !== 'chat'
   const normalizedChatFilter = chatFilter.trim().toLowerCase()
+  const sortedChatItems = chatItems.slice().sort((a, b) => {
+    if (a.is_self_chat) return -1
+    if (b.is_self_chat) return 1
+    return 0
+  })
   const visibleChatItems =
     normalizedChatFilter === ''
-      ? chatItems
-      : chatItems.filter((chat) => chat.title.toLowerCase().includes(normalizedChatFilter))
+      ? sortedChatItems
+      : sortedChatItems.filter((chat) => chat.title.toLowerCase().includes(normalizedChatFilter))
   const detailRailVisible = detailRailPreferred && isDesktopWide
   const desktopShell = isDesktopShell()
   const activeChat =
@@ -4047,14 +4075,16 @@ function App() {
                   type="button"
                 >
                   <ChatListItem
-                    title={chat.title}
+                    title={chat.is_self_chat ? 'Saved Messages' : chat.title}
                     preview={
-                      chat.message_count > 0
-                        ? `${chat.message_count} encrypted ${chat.message_count === 1 ? 'message' : 'messages'}`
-                        : 'No messages yet'
+                      chat.is_self_chat
+                        ? 'Your Cloud Storage'
+                        : chat.message_count > 0
+                          ? `${chat.message_count} encrypted ${chat.message_count === 1 ? 'message' : 'messages'}`
+                          : 'No messages yet'
                     }
-                    timestamp={formatRelativeTime(chat.latest_message_at)}
-                    unreadCount={chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
+                    timestamp={chat.is_self_chat ? '' : formatRelativeTime(chat.latest_message_at)}
+                    unreadCount={chat.is_self_chat ? undefined : chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
                     active={chat.id === activeChat?.id}
                     pinned={chat.is_self_chat}
                     avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
@@ -4081,10 +4111,10 @@ function App() {
       <main className="conversation-pane">
         {activeChat ? (
         <ConversationHeader
-          title={activeChat.title}
+          title={activeChat.is_self_chat ? 'Saved Messages' : activeChat.title}
           subtitle={
             activeChat.is_self_chat
-              ? 'Saved Messages'
+              ? 'Your Cloud Storage'
               : activeChat.type === 'group'
                 ? `${groupMembers.length} members`
                 : 'last seen recently'
@@ -4184,10 +4214,24 @@ function App() {
               <p className="conversation-stage__no-selection-sub">Choose a conversation from the list to start messaging</p>
             </div>
           ) : messageItems.length === 0 ? (
-            <div className="conversation-stage__empty">
-              <p style={{ fontSize: 15, color: 'var(--label-secondary)', margin: 0 }}>No messages here yet</p>
-              <p style={{ fontSize: 13, color: 'var(--label-tertiary)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
-            </div>
+            activeChat.is_self_chat ? (
+              <div className="conversation-stage__empty saved-messages-empty">
+                <div className="saved-messages-empty__icon">
+                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                    <circle cx="24" cy="24" r="24" fill="var(--accent)"/>
+                    <path d="M16 14h16a2 2 0 0 1 2 2v16l-6-4-6 4-6-4-6 4V16a2 2 0 0 1 2-2Z" stroke="white" strokeWidth="1.8" strokeLinejoin="round"/>
+                    <path d="M20 21h8M20 25h5" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <p className="saved-messages-empty__title">Your Cloud Storage</p>
+                <p className="saved-messages-empty__body">Forward messages here to save them. Access from any device, any time.</p>
+              </div>
+            ) : (
+              <div className="conversation-stage__empty">
+                <p style={{ fontSize: 15, color: 'var(--label-secondary)', margin: 0 }}>No messages here yet</p>
+                <p style={{ fontSize: 13, color: 'var(--label-tertiary)', margin: '4px 0 0' }}>Send the first message to start the conversation</p>
+              </div>
+            )
           ) : (
             <div className="message-thread">
               {messageItems.map((message) => {
@@ -4524,6 +4568,12 @@ function App() {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M11 5V3.5C11 2.7 10.3 2 9.5 2H3.5C2.7 2 2 2.7 2 3.5V9.5C2 10.3 2.7 11 3.5 11H5" stroke="currentColor" strokeWidth="1.3"/></svg>
               Copy
             </button>
+            {!activeChat?.is_self_chat && contextMenuMessage.message.text.trim() ? (
+              <button type="button" onClick={() => { void handleSaveToSavedMessages(contextMenuMessage.message.text); setContextMenuMessage(null) }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2h10a1 1 0 0 1 1 1v9l-4-2.5L6 12V3a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                Save to Saved Messages
+              </button>
+            ) : null}
             {contextMenuMessage.message.side === 'outgoing' ? (
               <>
                 <div className="msg-context-menu__sep" />

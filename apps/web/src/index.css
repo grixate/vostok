@@ -674,6 +674,36 @@ button {
   max-width: 240px;
 }
 
+/* ─── Saved Messages empty state ─────────────────────────────────────────── */
+
+.saved-messages-empty {
+  gap: 16px;
+  opacity: 1;
+}
+
+.saved-messages-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.saved-messages-empty__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 590;
+  color: var(--label-primary);
+  letter-spacing: -0.3px;
+}
+
+.saved-messages-empty__body {
+  margin: 0;
+  font-size: 15px;
+  color: var(--label-secondary);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
 /* ─── Pinned Message ──────────────────────────────────────────────────────── */
 
 .pinned-message-banner {
