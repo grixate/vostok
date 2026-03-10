@@ -10,6 +10,7 @@ protocol VostokAPIClientProtocol {
     func register(request: RegisterRequest) async throws -> RegistrationResponse
     func challenge(deviceID: String) async throws -> ChallengeResponse
     func verify(request: VerifyRequest) async throws -> VerifyResponse
+    func users(token: String) async throws -> UsersResponse
     func me(token: String) async throws -> MeResponse
 
     func linkDevice(token: String, request: LinkDeviceRequest) async throws -> DeviceLinkResponse
@@ -21,6 +22,7 @@ protocol VostokAPIClientProtocol {
 
     func chats(token: String) async throws -> ChatsResponse
     func createDirectChat(token: String, username: String) async throws -> ChatResponse
+    func createSelfChat(token: String) async throws -> ChatResponse
     func createGroup(token: String, request: CreateGroupRequest) async throws -> ChatResponse
     func updateGroup(token: String, chatID: String, title: String) async throws -> ChatResponse
     func groupMembers(token: String, chatID: String) async throws -> GroupMembersResponse

@@ -11,17 +11,20 @@ final class ConversationViewModel: ObservableObject {
     private let mediaTransferService: MediaTransferService
     private let apiClient: VostokAPIClientProtocol
     private let sessionRuntime: SignalSessionRuntimeProtocol
+    private let localStateStore: ChatListLocalStateStore
 
     init(
         repository: MessageRepository,
         mediaTransferService: MediaTransferService,
         apiClient: VostokAPIClientProtocol,
-        sessionRuntime: SignalSessionRuntimeProtocol
+        sessionRuntime: SignalSessionRuntimeProtocol,
+        localStateStore: ChatListLocalStateStore = ChatListLocalStateStore()
     ) {
         self.repository = repository
         self.mediaTransferService = mediaTransferService
         self.apiClient = apiClient
         self.sessionRuntime = sessionRuntime
+        self.localStateStore = localStateStore
     }
 
     func load(token: String, chatID: String, chatType: String, deviceID: String) async {
@@ -39,9 +42,47 @@ final class ConversationViewModel: ObservableObject {
                 chatID: chatID,
                 lastReadMessageID: messages.last?.id
             )
+            updateLastMessagePreview(chatID: chatID)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func updateLastMessagePreview(chatID: String) {
+        guard let lastMessage = messages.last(where: { $0.deletedAt == nil }),
+              let preview = previewText(for: lastMessage)
+        else { return }
+
+        localStateStore.setLastMessagePreview(preview, chatID: chatID)
+        NotificationCenter.default.post(
+            name: .vostokLastMessagePreviewUpdated,
+            object: nil,
+            userInfo: ["chatID": chatID, "preview": preview]
+        )
+    }
+
+    private func previewText(for message: MessageDTO) -> String? {
+        guard message.deletedAt == nil else { return nil }
+
+        if let base64 = message.ciphertext,
+           let data = Data(base64Encoded: base64),
+           let payload = try? JSONDecoder().decode(AttachmentCipherPayload.self, from: data) {
+            switch payload.mediaKind {
+            case "audio": return "🎤 Voice message"
+            case "image": return "📷 Photo"
+            case "video": return "🎥 Video"
+            default: return "📎 \(payload.filename)"
+            }
+        }
+
+        if let base64 = message.ciphertext,
+           let data = Data(base64Encoded: base64),
+           let text = String(data: data, encoding: .utf8),
+           !text.isEmpty {
+            return text
+        }
+
+        return nil
     }
 
     func send(token: String, chatID: String, chatType: String, deviceID: String) async {

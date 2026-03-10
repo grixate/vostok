@@ -2,14 +2,16 @@ import Foundation
 
 @MainActor
 final class ContactListViewModel: ObservableObject {
-    @Published var contacts: [String] = []
+    @Published var members: [UserDTO] = []
     @Published var searchQuery = ""
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    private let apiClient: VostokAPIClientProtocol
     private let chatRepository: ChatRepository
 
-    init(chatRepository: ChatRepository) {
+    init(apiClient: VostokAPIClientProtocol, chatRepository: ChatRepository) {
+        self.apiClient = apiClient
         self.chatRepository = chatRepository
     }
 
@@ -18,8 +20,11 @@ final class ContactListViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let chats = try await chatRepository.fetchChats(token: token)
-            contacts = Self.deriveContacts(from: chats, currentUsername: currentUsername)
+            let response = try await apiClient.users(token: token)
+            let ownUsername = currentUsername?.lowercased()
+            members = response.users
+                .filter { $0.username.lowercased() != ownUsername }
+                .sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -29,28 +34,9 @@ final class ContactListViewModel: ObservableObject {
         try await chatRepository.createDirectChat(token: token, username: username)
     }
 
-    var filteredContacts: [String] {
+    var filteredMembers: [UserDTO] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return contacts }
-        return contacts.filter { $0.localizedCaseInsensitiveContains(query) }
-    }
-
-    static func deriveContacts(from chats: [ChatDTO], currentUsername: String?) -> [String] {
-        let ownUsername = currentUsername?.lowercased()
-        var seen = Set<String>()
-        var ordered: [String] = []
-
-        for chat in chats {
-            for username in chat.participantUsernames {
-                let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                if trimmed.lowercased() == ownUsername { continue }
-                if seen.contains(trimmed.lowercased()) { continue }
-                seen.insert(trimmed.lowercased())
-                ordered.append(trimmed)
-            }
-        }
-
-        return ordered.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        guard !query.isEmpty else { return members }
+        return members.filter { $0.username.localizedCaseInsensitiveContains(query) }
     }
 }

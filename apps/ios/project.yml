@@ -48,6 +48,7 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_OBJC_BRIDGING_HEADER: Vostok/Core/Vostok-Bridging-Header.h
 
   VostokNotificationService:
     type: app-extension

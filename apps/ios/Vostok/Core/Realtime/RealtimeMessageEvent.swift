@@ -67,4 +67,5 @@ struct RealtimeChatReadEvent {
 extension Notification.Name {
     static let vostokMessageEvent = Notification.Name("vostok.message.event")
     static let vostokChatReadEvent = Notification.Name("vostok.chat.read.event")
+    static let vostokLastMessagePreviewUpdated = Notification.Name("vostok.last_message_preview.updated")
 }

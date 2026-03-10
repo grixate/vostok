@@ -111,11 +111,11 @@ private struct MainTabView: View {
 
     var body: some View {
         TabView {
-            NavigationStack { ChatListView(container: container) }
+            ChatListView(container: container)
                 .tabItem { Label("Chats", systemImage: "message") }
 
             NavigationStack { ContactListView(container: container) }
-                .tabItem { Label("Contacts", systemImage: "person.2") }
+                .tabItem { Label("Members", systemImage: "person.2") }
 
             NavigationStack { SettingsView(container: container) }
                 .tabItem { Label("Settings", systemImage: "gearshape") }

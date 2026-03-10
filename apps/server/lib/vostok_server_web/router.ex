@@ -34,10 +34,12 @@ defmodule VostokServerWeb.Router do
     post "/devices/:device_id/revoke", DeviceController, :revoke
     post "/devices/push-token", DeviceController, :push_token
     post "/devices/prekeys", PrekeyController, :publish
+    get "/users", UserController, :index
     get "/users/:username/devices/prekeys", PrekeyController, :show
     get "/me", ChatController, :me
     get "/chats", ChatController, :index
     post "/chats/direct", ChatController, :create_direct
+    post "/chats/self", ChatController, :create_self
     post "/chats/group", ChatController, :create_group
     patch "/chats/:chat_id/group", ChatController, :update_group
     get "/chats/:chat_id/members", ChatController, :group_members

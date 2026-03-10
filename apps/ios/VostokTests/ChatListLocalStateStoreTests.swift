@@ -31,7 +31,8 @@ final class ChatListLocalStateStoreTests: XCTestCase {
             unreadCounts: ["chat-1": 3, "chat-2": 1],
             mutedChatIDs: ["chat-1"],
             pinnedChatIDs: ["chat-2", "chat-1"],
-            archivedChatIDs: ["chat-3"]
+            archivedChatIDs: ["chat-3"],
+            lastMessagePreviews: [:]
         )
 
         store.save(state)

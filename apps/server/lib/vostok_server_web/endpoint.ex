@@ -15,7 +15,7 @@ defmodule VostokServerWeb.Endpoint do
   #   websocket: [connect_info: [session: @session_options]],
   #   longpoll: [connect_info: [session: @session_options]]
   socket "/socket/device", VostokServerWeb.DeviceSocket,
-    websocket: true,
+    websocket: [serializer: [{Phoenix.Socket.V2.JSONSerializer, "~> 2.0.0"}, {Phoenix.Socket.V1.JSONSerializer, "~> 1.0.0"}]],
     longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.

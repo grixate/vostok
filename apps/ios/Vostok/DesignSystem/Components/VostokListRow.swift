@@ -10,6 +10,7 @@ struct VostokListRow: View {
     let isPinned: Bool
     let showsReadIndicator: Bool
     let showsSeparator: Bool
+    let leadingSystemImage: String?
 
     init(
         title: String,
@@ -20,7 +21,8 @@ struct VostokListRow: View {
         isMuted: Bool,
         isPinned: Bool = false,
         showsReadIndicator: Bool = false,
-        showsSeparator: Bool = true
+        showsSeparator: Bool = true,
+        leadingSystemImage: String? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -31,12 +33,26 @@ struct VostokListRow: View {
         self.isPinned = isPinned
         self.showsReadIndicator = showsReadIndicator
         self.showsSeparator = showsSeparator
+        self.leadingSystemImage = leadingSystemImage
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            VostokAvatar(title: title, size: 62)
-                .padding(.trailing, 10)
+            Group {
+                if let leadingSystemImage {
+                    Circle()
+                        .fill(VostokColors.accent)
+                        .frame(width: 62, height: 62)
+                        .overlay {
+                            Image(systemName: leadingSystemImage)
+                                .font(.system(size: 26, weight: .medium))
+                                .foregroundStyle(.white)
+                        }
+                } else {
+                    VostokAvatar(title: title, size: 62)
+                }
+            }
+            .padding(.trailing, 10)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(title)

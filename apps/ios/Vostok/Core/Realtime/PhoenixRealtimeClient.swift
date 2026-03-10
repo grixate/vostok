@@ -178,6 +178,7 @@ actor PhoenixRealtimeClient: PhoenixRealtimeClientProtocol {
         var components = URLComponents(url: socketURL, resolvingAgainstBaseURL: false)
         var items = components?.queryItems ?? []
         items.append(URLQueryItem(name: "token", value: token))
+        items.append(URLQueryItem(name: "vsn", value: "2.0.0"))
         components?.queryItems = items
 
         guard let url = components?.url else { return false }

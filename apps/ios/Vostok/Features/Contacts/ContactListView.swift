@@ -10,22 +10,25 @@ struct ContactListView: View {
     init(container: AppContainer) {
         self.container = container
         _viewModel = StateObject(
-            wrappedValue: ContactListViewModel(chatRepository: container.chatRepository)
+            wrappedValue: ContactListViewModel(
+                apiClient: container.apiClient,
+                chatRepository: container.chatRepository
+            )
         )
     }
 
     var body: some View {
         List {
-            ForEach(viewModel.filteredContacts, id: \.self) { username in
+            ForEach(viewModel.filteredMembers, id: \.id) { member in
                 Button {
-                    createDirectChat(username: username)
+                    createDirectChat(username: member.username)
                 } label: {
                     HStack(spacing: 10) {
-                        VostokAvatar(title: username)
+                        VostokAvatar(title: member.username)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(username)
+                            Text(member.username)
                                 .font(VostokTypography.bodyEmphasized)
-                            Text("@\(username)")
+                            Text("@\(member.username)")
                                 .font(VostokTypography.footnote)
                                 .foregroundStyle(VostokColors.labelSecondary)
                         }
@@ -43,19 +46,19 @@ struct ContactListView: View {
                 }
             }
         }
-        .searchable(text: $viewModel.searchQuery, prompt: "Search contacts")
+        .searchable(text: $viewModel.searchQuery, prompt: "Search members")
         .refreshable {
             await loadIfPossible()
         }
         .overlay {
             if viewModel.isLoading {
                 ProgressView()
-            } else if viewModel.contacts.isEmpty {
+            } else if viewModel.members.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .font(.system(size: 32))
                         .foregroundStyle(VostokColors.labelSecondary)
-                    Text("No Contacts")
+                    Text("No Members")
                         .font(VostokTypography.bodyEmphasized)
                         .foregroundStyle(VostokColors.labelSecondary)
                 }
@@ -68,7 +71,7 @@ struct ContactListView: View {
                 EmptyView()
             }
         }
-        .vostokNavBar(title: "Contacts", large: true)
+        .vostokNavBar(title: "Members", large: true)
         .task {
             await loadIfPossible()
         }

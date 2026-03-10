@@ -6,12 +6,14 @@ final class ChatListViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var searchQuery = ""
     @Published var errorMessage: String?
+    @Published private(set) var lastMessagePreviews: [String: String] = [:]
 
     private let chatRepository: ChatRepository
     private let messageRepository: MessageRepository
     private let realtime: PhoenixRealtimeClientProtocol
     private let localStateStore: ChatListLocalStateStore
     private var eventsTask: Task<Void, Never>?
+    private var previewUpdateObserver: NSObjectProtocol?
     private var sessionToken: String?
     private var allChats: [ChatDTO] = []
     private var joinedTopics = Set<String>()
@@ -38,13 +40,33 @@ final class ChatListViewModel: ObservableObject {
         mutedChatIDs = restored.mutedChatIDs
         pinnedChatIDs = restored.pinnedChatIDs
         archivedChatIDs = restored.archivedChatIDs
+        lastMessagePreviews = restored.lastMessagePreviews
+
+        previewUpdateObserver = NotificationCenter.default.addObserver(
+            forName: .vostokLastMessagePreviewUpdated,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let chatID = notification.userInfo?["chatID"] as? String,
+                  let preview = notification.userInfo?["preview"] as? String
+            else { return }
+            self.lastMessagePreviews[chatID] = preview
+        }
     }
 
     deinit {
         eventsTask?.cancel()
+        if let previewUpdateObserver {
+            NotificationCenter.default.removeObserver(previewUpdateObserver)
+        }
         Task {
             await realtime.disconnect()
         }
+    }
+
+    func lastMessagePreview(chatID: String) -> String? {
+        lastMessagePreviews[chatID]
     }
 
     func load(token: String) async {
@@ -54,6 +76,11 @@ final class ChatListViewModel: ObservableObject {
         do {
             await messageRepository.flushPendingOutgoing(token: token, chatID: nil)
             allChats = try await chatRepository.fetchChats(token: token)
+            if !allChats.contains(where: { $0.isSelfChat }) {
+                if let provisioned = try? await chatRepository.ensureSelfChat(token: token) {
+                    allChats.insert(provisioned, at: 0)
+                }
+            }
             applyChatPresentation()
             sessionToken = token
             await syncJoinedTopics()
@@ -156,6 +183,7 @@ final class ChatListViewModel: ObservableObject {
     }
 
     func archive(chatID: String) {
+        guard !(allChats.first { $0.id == chatID }?.isSelfChat ?? false) else { return }
         archivedChatIDs.insert(chatID)
         unreadCounts.removeValue(forKey: chatID)
         persistLocalState()
@@ -238,16 +266,23 @@ final class ChatListViewModel: ObservableObject {
             unreadCounts: normalizedUnread,
             mutedChatIDs: mutedChatIDs,
             pinnedChatIDs: pinnedChatIDs,
-            archivedChatIDs: archivedChatIDs
+            archivedChatIDs: archivedChatIDs,
+            lastMessagePreviews: lastMessagePreviews
         )
         localStateStore.save(state)
     }
 
     private func applyChatPresentation() {
-        let visible = allChats.filter { !archivedChatIDs.contains($0.id) }
+        let visible = allChats.filter {
+            !archivedChatIDs.contains($0.id) &&
+            ($0.isSelfChat || $0.latestMessageAt != nil)
+        }
+        let savedMessages = visible.filter { $0.isSelfChat }
+        let rest = visible.filter { !$0.isSelfChat }
+
         let pinnedOrder = Dictionary(uniqueKeysWithValues: pinnedChatIDs.enumerated().map { ($1, $0) })
 
-        chats = visible.sorted { lhs, rhs in
+        let sortedRest = rest.sorted { lhs, rhs in
             let leftPinnedIndex = pinnedOrder[lhs.id]
             let rightPinnedIndex = pinnedOrder[rhs.id]
 
@@ -271,5 +306,7 @@ final class ChatListViewModel: ObservableObject {
             }
             return lhs.id < rhs.id
         }
+
+        chats = savedMessages + sortedRest
     }
 }

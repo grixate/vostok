@@ -29,6 +29,7 @@ final class VoiceRecorder: ObservableObject {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try session.setActive(true)
             recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder?.isMeteringEnabled = true
             recorder?.record()
             isRecording = true
             outputURL = url
@@ -43,6 +44,19 @@ final class VoiceRecorder: ObservableObject {
         recorder?.stop()
         isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false)
+    }
+
+    func pause() {
+        recorder?.pause()
+    }
+
+    func resumeRecording() {
+        recorder?.record()
+    }
+
+    func averagePower(forChannel channel: Int = 0) -> Float {
+        recorder?.updateMeters()
+        return recorder?.averagePower(forChannel: channel) ?? -60
     }
 
     private func requestRecordPermission(session: AVAudioSession) async -> Bool {

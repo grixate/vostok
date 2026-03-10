@@ -25,11 +25,16 @@ struct ConversationView: View {
     @State private var showingPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showingFileImporter = false
-    @State private var showingRoundVideoCapture = false
+    @State private var isVideoMode = false
     @State private var voiceCache: [String: Data] = [:]
     @State private var activeVoiceUploadID: String?
-    @StateObject private var voiceRecorder = VoiceRecorder()
+    @State private var playedVoiceUploadIDs: Set<String> = []
+    @State private var roundVideoCache: [String: Data] = [:]
+    @StateObject private var voiceRecordingVM = VoiceRecordingViewModel()
+    @StateObject private var videoRecordingVM = RoundVideoRecordingViewModel()
     @StateObject private var voicePlayback = VoicePlaybackManager()
+    @StateObject private var roundVideoPlayback = RoundVideoPlaybackManager()
+    @State private var contextMenuMessage: MessageDTO?
 
     init(chat: ChatDTO, container: AppContainer) {
         self.chat = chat
@@ -52,40 +57,15 @@ struct ConversationView: View {
                 ScrollViewReader { reader in
                     ScrollView {
                         LazyVStack(spacing: 8) {
+                            if chat.isSelfChat && viewModel.messages.isEmpty {
+                                savedMessagesEmptyState
+                                    .padding(.top, 60)
+                            }
                             ForEach(viewModel.messages) { message in
                                 bubbleView(for: message)
                                     .id(message.id)
-                                    .contextMenu {
-                                        Button("Reply") {
-                                            viewModel.beginReply(to: message)
-                                        }
-                                        Button("Copy") {
-                                            UIPasteboard.general.string = decode(message.ciphertext) ?? ""
-                                        }
-                                        Menu("React") {
-                                            Button("👍") { react("thumbs_up", message.id) }
-                                            Button("❤️") { react("heart", message.id) }
-                                            Button("😂") { react("laugh", message.id) }
-                                            Button("🔥") { react("fire", message.id) }
-                                        }
-                                        Button(message.pinnedAt == nil ? "Pin" : "Unpin") {
-                                            if case let .authenticated(session) = appState.sessionState {
-                                                Task {
-                                                    await viewModel.togglePin(
-                                                        token: session.token,
-                                                        chatID: chat.id,
-                                                        messageID: message.id
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Button("Edit") {
-                                            editingMessage = message
-                                            editDraft = decode(message.ciphertext) ?? ""
-                                        }
-                                        Button("Delete", role: .destructive) {
-                                            deletingMessage = message
-                                        }
+                                    .longPressContextMenu {
+                                        contextMenuMessage = message
                                     }
                             }
                         }
@@ -105,30 +85,15 @@ struct ConversationView: View {
                     }
                 }
 
-                if voiceRecorder.isRecording {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(.red)
-                            .frame(width: 9, height: 9)
-                        Text("Recording voice message")
-                            .font(VostokTypography.footnote)
-                            .foregroundStyle(VostokColors.labelPrimary)
-                        Spacer(minLength: 0)
-                        Button("Stop") {
-                            Task {
-                                await toggleVoiceRecording()
-                            }
-                        }
-                        .font(VostokTypography.footnote)
-                        .foregroundStyle(VostokColors.accent)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(VostokColors.primaryBackground.opacity(0.75))
+                if voiceRecordingVM.isVisible {
+                    VoiceRecordingView(viewModel: voiceRecordingVM)
                 }
+                // VideoRecordingView is rendered inside RoundVideoPreviewOverlay
+                // so it isn't blocked by the full-screen blur layer.
 
                 VostokComposer(
                     text: $viewModel.composerText,
+                    isVideoMode: $isVideoMode,
                     replyTitle: replyTitle,
                     replyText: replyText,
                     onCancelReply: {
@@ -138,6 +103,27 @@ struct ConversationView: View {
                     onSend: {
                         Task {
                             await handleComposerSend()
+                        }
+                    },
+                    onStartRecording: {
+                        if isVideoMode {
+                            Task { await videoRecordingVM.startRecording() }
+                        } else {
+                            Task { await voiceRecordingVM.startRecording() }
+                        }
+                    },
+                    onEndRecording: {
+                        if isVideoMode {
+                            videoRecordingVM.handleRelease()
+                        } else {
+                            voiceRecordingVM.handleRelease()
+                        }
+                    },
+                    onDragChanged: { translation in
+                        if isVideoMode {
+                            videoRecordingVM.handleDrag(translation: translation)
+                        } else {
+                            voiceRecordingVM.handleDrag(translation: translation)
                         }
                     }
                 )
@@ -149,7 +135,9 @@ struct ConversationView: View {
                 subtitle: conversationSubtitle,
                 onBack: { dismiss() }
             ) {
-                if chat.type == "group" {
+                if chat.isSelfChat {
+                    EmptyView()
+                } else if chat.type == "group" {
                     HStack(spacing: 8) {
                         NavigationLink {
                             GroupInfoView(chatID: chat.id, container: container)
@@ -170,16 +158,72 @@ struct ConversationView: View {
                     }
                 } else {
                     NavigationLink {
-                        CallView(chatID: chat.id, container: container)
+                        ContactProfileView(chat: chat, container: container)
                     } label: {
-                        VostokAvatar(title: chat.title, size: 38, isOnline: true)
+                        VostokAvatar(title: chat.title, size: 38, isOnline: false)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open call")
-                    .accessibilityHint("Opens call controls for this chat")
+                    .accessibilityLabel("Open contact profile")
+                    .accessibilityHint("Opens the contact's profile")
                 }
             }
         }
+        .overlay {
+            ZStack {
+                if videoRecordingVM.isVisible {
+                    RoundVideoPreviewOverlay(viewModel: videoRecordingVM)
+                        .transition(.opacity)
+                }
+            }
+            .allowsHitTesting(videoRecordingVM.isVisible)
+            .animation(.easeInOut(duration: 0.25), value: videoRecordingVM.isVisible)
+        }
+        .overlay {
+            if let message = contextMenuMessage {
+                MessageActionOverlay(
+                    incoming: message.senderDeviceID != sessionDeviceID,
+                    messageContent: contextMenuContent(for: message),
+                    messageTimestamp: shortTime(message.insertedAt),
+                    isMedia: isMediaMessage(message),
+                    mediaLabel: contextMenuMediaLabel(for: message),
+                    isPinned: message.pinnedAt != nil,
+                    canEdit: !isMediaMessage(message),
+                    onReact: { key in
+                        react(key, message.id)
+                    },
+                    onReply: {
+                        viewModel.beginReply(to: message)
+                    },
+                    onCopy: {
+                        UIPasteboard.general.string = decode(message.ciphertext) ?? ""
+                    },
+                    onPin: {
+                        if case let .authenticated(session) = appState.sessionState {
+                            Task {
+                                await viewModel.togglePin(
+                                    token: session.token,
+                                    chatID: chat.id,
+                                    messageID: message.id
+                                )
+                            }
+                        }
+                    },
+                    onEdit: {
+                        editingMessage = message
+                        editDraft = decode(message.ciphertext) ?? ""
+                    },
+                    onDelete: {
+                        deletingMessage = message
+                    },
+                    onDismiss: {
+                        contextMenuMessage = nil
+                    }
+                )
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: contextMenuMessage?.id)
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .confirmationDialog("Delete Message", isPresented: Binding(get: {
@@ -208,23 +252,8 @@ struct ConversationView: View {
             Button("Photo or Video") {
                 showingPhotoPicker = true
             }
-            Button("Round Video") {
-                guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-                    viewModel.errorMessage = "Camera is not available on this device."
-                    return
-                }
-                showingRoundVideoCapture = true
-            }
             Button("File") {
                 showingFileImporter = true
-            }
-            Button(voiceRecorder.isRecording ? "Stop Voice Recording" : "Record Voice Message") {
-                Task {
-                    await toggleVoiceRecording()
-                }
-            }
-            Button("Attach Text File") {
-                sendTextAttachment()
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -239,16 +268,6 @@ struct ConversationView: View {
             allowedContentTypes: [.item],
             onCompletion: handleFileImport
         )
-        .fullScreenCover(isPresented: $showingRoundVideoCapture) {
-            RoundVideoCaptureView { url in
-                showingRoundVideoCapture = false
-                guard let url else { return }
-                Task {
-                    await importAndSendFile(at: url, suggestedFilename: "round-\(Int(Date().timeIntervalSince1970)).mov")
-                }
-            }
-            .ignoresSafeArea()
-        }
         .sheet(item: $editingMessage) { message in
             NavigationStack {
                 Form {
@@ -323,6 +342,21 @@ struct ConversationView: View {
         } message: {
             Text(viewModel.errorMessage ?? "Unknown error")
         }
+        .onAppear {
+            voiceRecordingVM.sendHandler = { [self] url in
+                Task { @MainActor in
+                    guard let session = currentSession else { return }
+                    await sendRecordedVoice(from: url, session: session)
+                }
+            }
+            videoRecordingVM.sendHandler = { [self] url in
+                Task { @MainActor in
+                    await importAndSendFile(at: url, suggestedFilename: "round-\(Int(Date().timeIntervalSince1970)).mov")
+                }
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: voiceRecordingVM.isVisible)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: videoRecordingVM.isVisible)
         .task(id: selectedPhotoItem?.itemIdentifier) {
             guard let item = selectedPhotoItem else { return }
             await handlePickedPhotoItem(item)
@@ -332,12 +366,17 @@ struct ConversationView: View {
                 activeVoiceUploadID = nil
             }
         }
-        .onChange(of: voiceRecorder.errorMessage) { error in
+        .onChange(of: voiceRecordingVM.errorMessage) { error in
             if let error {
                 viewModel.errorMessage = error
             }
         }
         .onChange(of: voicePlayback.errorMessage) { error in
+            if let error {
+                viewModel.errorMessage = error
+            }
+        }
+        .onChange(of: videoRecordingVM.errorMessage) { error in
             if let error {
                 viewModel.errorMessage = error
             }
@@ -378,8 +417,22 @@ struct ConversationView: View {
         return ""
     }
 
+    private static let iso8601Full: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601Short: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private func shortTime(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return "" }
+        let date = Self.iso8601Full.date(from: iso)
+            ?? Self.iso8601Short.date(from: iso)
+            ?? ISO8601DateFormatter().date(from: iso)
+        guard let date else { return "" }
         return date.formatted(date: .omitted, time: .shortened)
     }
 
@@ -405,6 +458,7 @@ struct ConversationView: View {
             )
             .opacity(0.75)
         } else if let payload, payload.mediaKind == "audio" {
+            let isActivePlaying = activeVoiceUploadID == payload.uploadID && voicePlayback.isPlaying
             VostokVoiceBubble(
                 duration: voiceDurationText(for: payload),
                 timestamp: shortTime(message.insertedAt),
@@ -412,9 +466,20 @@ struct ConversationView: View {
                 isEdited: message.editedAt != nil,
                 isPinned: message.pinnedAt != nil,
                 reactions: message.reactions,
-                isPlaying: activeVoiceUploadID == payload.uploadID && voicePlayback.isPlaying,
+                isPlaying: isActivePlaying,
+                isUnplayed: !playedVoiceUploadIDs.contains(payload.uploadID),
+                progress: activeVoiceUploadID == payload.uploadID ? voicePlayback.progress : 0,
+                playbackSpeed: voicePlayback.playbackSpeed,
                 onPlayToggle: {
                     toggleVoicePlayback(payload)
+                },
+                onSeek: { ratio in
+                    if activeVoiceUploadID == payload.uploadID {
+                        voicePlayback.seek(to: ratio)
+                    }
+                },
+                onSpeedChange: {
+                    voicePlayback.cycleSpeed()
                 }
             )
         } else if message.messageKind == "voice" {
@@ -426,6 +491,25 @@ struct ConversationView: View {
                 isPinned: message.pinnedAt != nil,
                 reactions: message.reactions,
                 isPlaying: false
+            )
+        } else if (message.messageKind == "media" || message.messageKind == "attachment"),
+                  let payload,
+                  payload.mediaKind == "video",
+                  payload.filename.hasPrefix("round-") {
+            // Circular (round) video message
+            VostokRoundVideoBubble(
+                filename: payload.filename,
+                timestamp: shortTime(message.insertedAt),
+                incoming: incoming,
+                reactions: message.reactions,
+                isActive: roundVideoPlayback.isActive(uploadID: payload.uploadID),
+                isPlaying: roundVideoPlayback.isActive(uploadID: payload.uploadID) && roundVideoPlayback.isPlaying,
+                isMuted: roundVideoPlayback.isMuted,
+                progress: roundVideoPlayback.isActive(uploadID: payload.uploadID) ? roundVideoPlayback.progress : 0,
+                duration: roundVideoPlayback.isActive(uploadID: payload.uploadID) ? roundVideoPlayback.duration : "0:00",
+                player: roundVideoPlayback.isActive(uploadID: payload.uploadID) ? roundVideoPlayback.player : nil,
+                onTap: { toggleRoundVideoPlayback(payload) },
+                onMuteTap: { roundVideoPlayback.toggleMute() }
             )
         } else if (message.messageKind == "media" || message.messageKind == "attachment"),
                   let payload {
@@ -513,6 +597,34 @@ struct ConversationView: View {
         }
     }
 
+    private func contextMenuContent(for message: MessageDTO) -> String {
+        if message.deletedAt != nil { return "Message deleted" }
+        return decode(message.ciphertext) ?? ""
+    }
+
+    private func contextMenuMediaLabel(for message: MessageDTO) -> String? {
+        if message.deletedAt != nil { return nil }
+        if let payload = decodeAttachmentPayload(message.ciphertext) {
+            switch payload.mediaKind {
+            case "audio": return "🎤 Voice message"
+            case "video":
+                return payload.filename.hasPrefix("round-") ? "📹 Video message" : "🎬 \(payload.filename)"
+            case "image": return "🖼 \(payload.filename)"
+            default: return "📎 \(payload.filename)"
+            }
+        }
+        if message.messageKind == "voice" { return "🎤 Voice message" }
+        return nil
+    }
+
+    private func isMediaMessage(_ message: MessageDTO) -> Bool {
+        if message.messageKind == "voice" { return true }
+        if let payload = decodeAttachmentPayload(message.ciphertext) {
+            return payload.mediaKind == "audio" || payload.mediaKind == "video"
+        }
+        return false
+    }
+
     private func decodeAttachmentPayload(_ base64: String?) -> AttachmentCipherPayload? {
         guard let base64, let data = Data(base64Encoded: base64) else { return nil }
         return try? JSONDecoder().decode(AttachmentCipherPayload.self, from: data)
@@ -574,35 +686,16 @@ struct ConversationView: View {
     @MainActor
     private func handleComposerSend() async {
         guard let session = currentSession else { return }
-
-        if viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            await toggleVoiceRecording()
-        } else {
-            await viewModel.send(
-                token: session.token,
-                chatID: chat.id,
-                chatType: chat.type,
-                deviceID: session.deviceID
-            )
-        }
+        await viewModel.send(
+            token: session.token,
+            chatID: chat.id,
+            chatType: chat.type,
+            deviceID: session.deviceID
+        )
     }
 
     @MainActor
-    private func toggleVoiceRecording() async {
-        guard let session = currentSession else { return }
-
-        if voiceRecorder.isRecording {
-            voiceRecorder.stop()
-            await sendRecordedVoiceIfNeeded(session: session)
-        } else {
-            await voiceRecorder.start()
-        }
-    }
-
-    @MainActor
-    private func sendRecordedVoiceIfNeeded(session: AppState.SessionContext) async {
-        guard let url = voiceRecorder.outputURL else { return }
-
+    private func sendRecordedVoice(from url: URL, session: AppState.SessionContext) async {
         do {
             let data = try Data(contentsOf: url)
             guard !data.isEmpty else { return }
@@ -702,6 +795,35 @@ struct ConversationView: View {
     }
 
     @MainActor
+    private func toggleRoundVideoPlayback(_ payload: AttachmentCipherPayload) {
+        // Already loaded & playing — pause
+        if roundVideoPlayback.isActive(uploadID: payload.uploadID) {
+            if roundVideoPlayback.isPlaying {
+                roundVideoPlayback.pause()
+            } else {
+                roundVideoPlayback.resume()
+            }
+            return
+        }
+        // Different video or first play — load
+        guard let session = currentSession else { return }
+        Task {
+            do {
+                let data: Data
+                if let cached = roundVideoCache[payload.uploadID] {
+                    data = cached
+                } else {
+                    data = try await viewModel.downloadAttachment(token: session.token, payload: payload)
+                    roundVideoCache[payload.uploadID] = data
+                }
+                roundVideoPlayback.play(data: data, uploadID: payload.uploadID)
+            } catch {
+                viewModel.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    @MainActor
     private func toggleVoicePlayback(_ payload: AttachmentCipherPayload) {
         if activeVoiceUploadID == payload.uploadID, voicePlayback.isPlaying {
             voicePlayback.stop()
@@ -722,6 +844,7 @@ struct ConversationView: View {
                 }
 
                 activeVoiceUploadID = payload.uploadID
+                playedVoiceUploadIDs.insert(payload.uploadID)
                 voicePlayback.play(data: data)
             } catch {
                 viewModel.errorMessage = error.localizedDescription
@@ -741,6 +864,9 @@ struct ConversationView: View {
     }
 
     private var conversationSubtitle: String {
+        if chat.isSelfChat {
+            return "Your Cloud Storage"
+        }
         if chat.type == "group" {
             let members = max(1, chat.participantUsernames.count)
             return "\(members) members"
@@ -759,6 +885,22 @@ struct ConversationView: View {
                     .stroke(VostokColors.separatorVibrant.opacity(0.45), lineWidth: 0.5)
             )
             .shadow(color: .black.opacity(0.08), radius: 10, y: 2)
+    }
+
+    private var savedMessagesEmptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "bookmark.fill")
+                .font(.system(size: 56, weight: .medium))
+                .foregroundStyle(VostokColors.accent)
+            Text("Your Cloud Storage")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(VostokColors.labelPrimary)
+            Text("Forward messages here to save them.\nAccess them from any of your devices.")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(VostokColors.labelSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
     }
 
     private var currentSession: AppState.SessionContext? {
