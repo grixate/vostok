@@ -13,8 +13,15 @@ type CallStateHandler = {
   onError?: () => void
 }
 
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
+
 let deviceSocket: Socket | null = null
 let deviceSocketToken: string | null = null
+let _onStatusChange: ((status: ConnectionStatus) => void) | null = null
+
+export function setConnectionStatusCallback(cb: (status: ConnectionStatus) => void) {
+  _onStatusChange = cb
+}
 
 export function subscribeToChatStream(
   token: string,
@@ -91,6 +98,12 @@ function ensureDeviceSocket(token: string): Socket {
     params: { token }
   })
   deviceSocketToken = token
+
+  deviceSocket.onOpen(() => _onStatusChange?.('connected'))
+  deviceSocket.onError(() => _onStatusChange?.('disconnected'))
+  deviceSocket.onClose(() => _onStatusChange?.('disconnected'))
+
+  _onStatusChange?.('connecting')
   deviceSocket.connect()
 
   return deviceSocket

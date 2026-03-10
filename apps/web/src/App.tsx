@@ -95,6 +95,12 @@ import {
   UnauthorizedError
 } from './lib/api'
 import {
+  subscribeToChatStream,
+  subscribeToCallStream,
+  setConnectionStatusCallback,
+  type ConnectionStatus
+} from './lib/realtime'
+import {
   generateDeviceIdentity,
   generateDevicePrekeys,
   signChallenge,
@@ -125,7 +131,6 @@ import {
   storeInboundGroupSenderKeys,
   wrapGroupSenderKeyForRecipients
 } from './lib/message-vault'
-import { subscribeToCallStream, subscribeToChatStream } from './lib/realtime'
 import {
   decryptAttachmentFile,
   encryptAttachmentFile,
@@ -380,6 +385,7 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
   const [newMessageMode, setNewMessageMode] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
   const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
   const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; tone: string }>>([])
@@ -1505,6 +1511,11 @@ function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     window.localStorage.setItem('vostok-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  useEffect(() => {
+    if (!storedDevice) return
+    setConnectionStatusCallback(setConnectionStatus)
+  }, [storedDevice])
 
   useEffect(() => {
     if (typeof window === 'undefined' || desktopWindowAlwaysOnTop === null) {
@@ -3543,6 +3554,20 @@ function App() {
     }
   }
 
+  async function handleToggleReactionOnMessage(messageId: string, reactionKey: string) {
+    if (!storedDevice || !activeChatId) return
+    setLoading(true)
+    try {
+      const response = await toggleMessageReaction(storedDevice.sessionToken, activeChatId, messageId, reactionKey)
+      await ingestMessageIntoActiveThread(response.message, activeChatId)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update reaction.'
+      setBanner({ tone: 'error', message: msg })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleReplyToMessage(message: CachedMessage) {
     if (message.side === 'system' || message.deletedAt) {
       return
@@ -4000,6 +4025,14 @@ function App() {
               </button>
             </div>
           )}
+          {connectionStatus !== 'connected' ? (
+            <div className="sidebar__status-row">
+              <span className={`connection-status-badge connection-status-badge--${connectionStatus}`}>
+                <span className="connection-status-badge__dot" />
+                {connectionStatus === 'connecting' ? 'Connecting…' : 'Offline'}
+              </span>
+            </div>
+          ) : null}
           {newMessageMode ? (
             <form className="new-message-search" onSubmit={handleCreateDirectChat}>
               <span className="new-message-search__to">To:</span>
@@ -4335,11 +4368,18 @@ function App() {
                     </button>
                   ) : null}
                   {message.reactions && message.reactions.length > 0 ? (
-                    <span className="message-thread__reactions">
-                      {message.reactions
-                        .map((reaction) => `${reaction.reactionKey} ${reaction.count}${reaction.reacted ? '*' : ''}`)
-                        .join(' • ')}
-                    </span>
+                    <div className="message-reactions">
+                      {message.reactions.map((reaction) => (
+                        <button
+                          key={reaction.reactionKey}
+                          type="button"
+                          className={`message-reaction-chip${reaction.reacted ? ' message-reaction-chip--active' : ''}`}
+                          onClick={() => { void handleToggleReactionOnMessage(message.id, reaction.reactionKey) }}
+                        >
+                          {emojiForReactionKey(reaction.reactionKey)} {reaction.count}
+                        </button>
+                      ))}
+                    </div>
                   ) : null}
                 </MessageBubble>
                 )
@@ -5105,6 +5145,11 @@ function readDesktopAlwaysOnTopPreference(): boolean | null {
   }
 
   return null
+}
+
+function emojiForReactionKey(key: string): string {
+  const map: Record<string, string> = { thumbs_up: '👍', heart: '❤️', laugh: '😂', fire: '🔥' }
+  return map[key] ?? key
 }
 
 function mergeChat(current: ChatSummary[], next: ChatSummary): ChatSummary[] {
