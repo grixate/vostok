@@ -55,6 +55,13 @@ defmodule VostokServer.Identity do
     end
   end
 
+  def list_all_users do
+    User
+    |> order_by([u], asc: u.username)
+    |> Repo.all()
+    |> Enum.map(fn user -> %{id: user.id, username: user.username} end)
+  end
+
   def link_device(user_id, attrs) when is_binary(user_id) and is_map(attrs) do
     with %User{} = user <- Repo.get(User, user_id),
          {:ok, normalized} <- normalize_linked_device(attrs),

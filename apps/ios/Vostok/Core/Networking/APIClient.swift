@@ -36,6 +36,7 @@ final class APIClient: VostokAPIClientProtocol {
         try await request(path: "/api/v1/auth/verify", method: "POST", body: payload)
     }
 
+    func users(token: String) async throws -> UsersResponse { try await authed(path: "/api/v1/users", method: "GET", token: token) }
     func me(token: String) async throws -> MeResponse { try await authed(path: "/api/v1/me", method: "GET", token: token) }
 
     func linkDevice(token: String, request: LinkDeviceRequest) async throws -> DeviceLinkResponse {
@@ -62,6 +63,10 @@ final class APIClient: VostokAPIClientProtocol {
 
     func createDirectChat(token: String, username: String) async throws -> ChatResponse {
         try await authed(path: "/api/v1/chats/direct", method: "POST", token: token, body: ["username": username])
+    }
+
+    func createSelfChat(token: String) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/self", method: "POST", token: token, body: EmptyBody())
     }
 
     func createGroup(token: String, request: CreateGroupRequest) async throws -> ChatResponse {
@@ -333,7 +338,7 @@ final class APIClient: VostokAPIClientProtocol {
 
             guard (200...299).contains(http.statusCode) else {
                 let envelope = try? decoder.decode(ErrorEnvelope.self, from: data)
-                let message = envelope?.message ?? "Request failed with status \(http.statusCode)"
+                let message = envelope?.bestMessage ?? "Request failed with status \(http.statusCode)"
                 if http.statusCode == 401 { throw VostokAPIError.unauthorized(message) }
                 if http.statusCode == 404 { throw VostokAPIError.notFound(message) }
                 throw VostokAPIError.validation(message)

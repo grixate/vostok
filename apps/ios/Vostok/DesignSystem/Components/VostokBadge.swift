@@ -2,8 +2,8 @@ import SwiftUI
 
 struct VostokBadge: View {
     enum Style {
-        case accent
-        case muted
+        case accent   // blue fill, white text — unread / active
+        case muted    // light gray fill, primary text — silenced / muted
     }
 
     let count: Int
@@ -17,11 +17,11 @@ struct VostokBadge: View {
     var body: some View {
         if count > 0 {
             Text("\(count)")
-                .font(VostokTypography.footnote)
-                .foregroundStyle(.white)
+                .font(VostokTypography.subheadlineEmphasis)   // spec §6.1: 15px Medium
+                .foregroundStyle(style == .accent ? .white : VostokColors.labelPrimary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(style == .accent ? VostokColors.accent : VostokColors.controlPrimary)
+                .background(style == .accent ? VostokColors.accent : VostokColors.fillSecondary)
                 .clipShape(Capsule())
                 .accessibilityLabel("\(count) unread")
         }

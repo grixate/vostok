@@ -10,14 +10,17 @@
 		00F6DC62237CFF2A65A796F8 /* AppRouteParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F84CC698D47AB4F748D145C /* AppRouteParser.swift */; };
 		05710F19285A55ED3155A1AD /* VostokApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA84C10E8CD165FC1FFD0875 /* VostokApp.swift */; };
 		097F5BCA844F20FF501BAE82 /* VostokAPIClientProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06125DD72EA7A193E1A1F425 /* VostokAPIClientProtocol.swift */; };
+		11079772D9194074CBFC7A63 /* MessageContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803DE1B11AF3B5A2B823CD49 /* MessageContextMenu.swift */; };
 		1356D9B37B941D52E95CE5DD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD4F1A192B6F2B4C4C8128F /* SettingsView.swift */; };
 		177C8E63DE34691881989B24 /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5597C37B87A0EF99E2630D7A /* Typography.swift */; };
 		1921FBBE5FFB75B20710DAE1 /* MediaTransferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 994FF4D5C2B564DDA796D4E8 /* MediaTransferService.swift */; };
 		1C6D8B1B1076297AC5AD3DCE /* VostokButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB95591A01C21FCCC2A5FA8 /* VostokButton.swift */; };
+		1D01D95DC0005710EFE2B428 /* VoiceRecordingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C1C6D28A3E83E36641C9B9 /* VoiceRecordingViewModel.swift */; };
 		240E6EDF869178718360AF8E /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EFDBD4FC3937E55D0A9CE13 /* ChatListView.swift */; };
 		2C312A4D1A6A24A4316B1746 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DC37503D954DEA7A5C68347 /* RootView.swift */; };
 		2E6770C8D4929885A2BFD011 /* MediaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C13E90CF5258235BA9A42B1 /* MediaViews.swift */; };
 		312D690E3C5A3AA9718DE008 /* VostokContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF5C5A25C2C9611960DDEFA /* VostokContractTests.swift */; };
+		34E5F913CACDBA8EB7FF0010 /* RoundVideoPlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5CE0E1D8BCFBCB8E5AE6C69 /* RoundVideoPlaybackManager.swift */; };
 		37DC41CF8B1EEB6AD8D383C7 /* CallViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFF15C92BBE0C7F9F97A4A3 /* CallViewModelTests.swift */; };
 		3918ED612711C9B20FEB75D0 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78CDAAEBB3AE07E05F75914 /* ProfileView.swift */; };
 		3D7C5FC555D16DE7F8C0FEF7 /* VostokNavBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695073329793126D7D80141 /* VostokNavBar.swift */; };
@@ -42,6 +45,7 @@
 		723665C15F969B3B265A0FCA /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 503405F44D220A34026C035B /* VoiceRecorder.swift */; };
 		727638B618935A8BE27A6E1E /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 024E38072778DC83BD57B904 /* MessageBubble.swift */; };
 		730CC36FCEC728A76EB32BC0 /* VostokAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899E4CEBDEEBAA543BA3C939 /* VostokAvatar.swift */; };
+		76F51170CC1962D08711636E /* ProfileMediaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12068A695156CA17CF3EFF0 /* ProfileMediaSection.swift */; };
 		7BC55AD29E580E2492FD8158 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCAF309CEDD2BE82AC8EF38 /* SettingsViewModel.swift */; };
 		83076C0AC52F3ADDE9191EB6 /* VostokComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C167E115FCE2DD192D98A8 /* VostokComposer.swift */; };
 		845A0D0D7E014CD8FF427481 /* GroupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3E485AF68BF89F85EF106C /* GroupViews.swift */; };
@@ -63,6 +67,7 @@
 		B34A621DF19E92AD692EDA2B /* MediaCryptoBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF0711B1B314F91EF2CBF49 /* MediaCryptoBox.swift */; };
 		BAF0F04005F8DC8E8F00D3A1 /* libsignal in Frameworks */ = {isa = PBXBuildFile; productRef = F2B6994083A23C727569B0F0 /* libsignal */; };
 		BCE08915792799FC4838B19B /* CallViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D540DCF21DBE9472E4DED /* CallViews.swift */; };
+		C20B539716B7E2B0B5D52517 /* VoiceRecordButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB478924569DA236BA945E05 /* VoiceRecordButton.swift */; };
 		C22D99EA526965AD9CAA90DC /* RoundVideoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */; };
 		C45F32E9A7CDDC1585B4BB76 /* VostokAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA0E88EE790C755630DAEF /* VostokAppDelegate.swift */; };
 		C586BFD315504D9572FBD47E /* ContactListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8808AD8E65990205D25BC2 /* ContactListView.swift */; };
@@ -74,10 +79,12 @@
 		CE88AB2922313C6AB37F682B /* SignalCryptoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFE0F36BA2666D1FB265E0C /* SignalCryptoProvider.swift */; };
 		CEE2CB23BB04D03D42F70E39 /* Environment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB5AFE5EECAB4881B674119 /* Environment.swift */; };
 		D1C683A0245C38E1C29537FA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = D6FEF7407AA2D10524BE9E66 /* GRDB */; };
+		D24FFD979F4B8C15DF2EA2CE /* ContactProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90B0CFAA71241005741A2885 /* ContactProfileView.swift */; };
 		D315BDCC036510CF69947494 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3591ED98675C141B5F53687A /* AppState.swift */; };
 		D406AC01EA047E94224F2C94 /* ChatListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22B73F295E43BC04F36E2DF9 /* ChatListViewModel.swift */; };
 		D9154960F3739B22351BBAC9 /* VostokAttachmentBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = E198484239A92A29E599AC68 /* VostokAttachmentBubble.swift */; };
 		D99FC11E5B79A065D53EE202 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3959DCACA90F1C87EEC50900 /* ConversationView.swift */; };
+		DDBBA4BEA154780E20C46021 /* VostokRoundVideoBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABB2ADD9604F30E4F7EE4DA /* VostokRoundVideoBubble.swift */; };
 		DDC065059198CA98E469F132 /* VostokTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744719F4376649726A6CB6B2 /* VostokTabBar.swift */; };
 		DDDE66FC82B7CB48BBBF4C41 /* AttachmentTypeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051B5845B1C33662A63B5B1E /* AttachmentTypeResolver.swift */; };
 		E3D9A0DE257E66C60438307E /* APIContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF2966277D628A2AD12E568 /* APIContracts.swift */; };
@@ -87,7 +94,9 @@
 		EEB1803F4606CB97FD56709F /* Database.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9965ABF7956BDE38CFB26A57 /* Database.swift */; };
 		F00D286BFF95976ADB77EA32 /* AttachmentCipherPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */; };
 		F2741111828906D99DE77DA2 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699C016BC27DAF6912CF5F61 /* APIClient.swift */; };
+		F2F1DE82B93405F49A49F169 /* VoiceRecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2541B92D2FC116C8527005D0 /* VoiceRecordingView.swift */; };
 		F3A69B66AB260E1870C10DB3 /* Environment.plist in Resources */ = {isa = PBXBuildFile; fileRef = D3C15430D2050E53C6139F71 /* Environment.plist */; };
+		F56B740B7877797EDCA58786 /* ObjCExceptionCatch.m in Sources */ = {isa = PBXBuildFile; fileRef = 02C1905E6B638F665F366A4E /* ObjCExceptionCatch.m */; };
 		FCA4CE88794CC2BAF2724D79 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EEB65E83815B4A53ADD965 /* AppContainer.swift */; };
 		FF6EC67021E12C50CAF4A829 /* PhoenixRealtimeClientProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545DFDFB41CC47293C53D15C /* PhoenixRealtimeClientProtocol.swift */; };
 		FF814D39FF277ACCE4708FF8 /* VoicePlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */; };
@@ -112,6 +121,7 @@
 
 /* Begin PBXFileReference section */
 		024E38072778DC83BD57B904 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		02C1905E6B638F665F366A4E /* ObjCExceptionCatch.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatch.m; sourceTree = "<group>"; };
 		0376251AD90382C74D994D7A /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		051B5845B1C33662A63B5B1E /* AttachmentTypeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTypeResolver.swift; sourceTree = "<group>"; };
 		06125DD72EA7A193E1A1F425 /* VostokAPIClientProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAPIClientProtocol.swift; sourceTree = "<group>"; };
@@ -121,10 +131,13 @@
 		0C13E90CF5258235BA9A42B1 /* MediaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaViews.swift; sourceTree = "<group>"; };
 		0EBA3CBA6F0A2689373ACB56 /* RealtimeMessageEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeMessageEventTests.swift; sourceTree = "<group>"; };
 		1082F80E31DA1864477BB699 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		11F11895F9FED073D62501A4 /* ObjCExceptionCatch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatch.h; sourceTree = "<group>"; };
 		13B7F19302E3DE4524ED82AE /* VostokVoiceBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokVoiceBubble.swift; sourceTree = "<group>"; };
+		17B65275BDB72147D912F498 /* Vostok-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Vostok-Bridging-Header.h"; sourceTree = "<group>"; };
 		17C167E115FCE2DD192D98A8 /* VostokComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokComposer.swift; sourceTree = "<group>"; };
 		22B73F295E43BC04F36E2DF9 /* ChatListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListViewModel.swift; sourceTree = "<group>"; };
 		22CD7F2B5E91A185687B59C4 /* libsignal */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libsignal; path = ThirdParty/libsignal; sourceTree = SOURCE_ROOT; };
+		2541B92D2FC116C8527005D0 /* VoiceRecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingView.swift; sourceTree = "<group>"; };
 		293FCFB34EEB5368519AF850 /* VostokMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokMessageBubble.swift; sourceTree = "<group>"; };
 		320CFC0D9628CD86BD3F7A37 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		3591ED98675C141B5F53687A /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -144,6 +157,7 @@
 		54ED52862BFD7928ED8B51EE /* GRDBSQLCipher */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GRDBSQLCipher; path = ThirdParty/GRDBSQLCipher; sourceTree = SOURCE_ROOT; };
 		5597C37B87A0EF99E2630D7A /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		59204B84C0C04F7FBC8A886D /* RealtimeMessageEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeMessageEvent.swift; sourceTree = "<group>"; };
+		5ABB2ADD9604F30E4F7EE4DA /* VostokRoundVideoBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokRoundVideoBubble.swift; sourceTree = "<group>"; };
 		5F84CC698D47AB4F748D145C /* AppRouteParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteParser.swift; sourceTree = "<group>"; };
 		651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		699C016BC27DAF6912CF5F61 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -154,10 +168,13 @@
 		744719F4376649726A6CB6B2 /* VostokTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokTabBar.swift; sourceTree = "<group>"; };
 		7CB4F9AEE96DB8B381080784 /* GroupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViewModel.swift; sourceTree = "<group>"; };
 		7F8808AD8E65990205D25BC2 /* ContactListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListView.swift; sourceTree = "<group>"; };
+		803DE1B11AF3B5A2B823CD49 /* MessageContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContextMenu.swift; sourceTree = "<group>"; };
 		8529914A3CA3A3FAD198B70D /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		85C1C6D28A3E83E36641C9B9 /* VoiceRecordingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingViewModel.swift; sourceTree = "<group>"; };
 		899681CAB4213A88B879D0F4 /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		899E4CEBDEEBAA543BA3C939 /* VostokAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAvatar.swift; sourceTree = "<group>"; };
 		8ADF126F7B74AA0A06003CDF /* VostokUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokUITests.swift; sourceTree = "<group>"; };
+		90B0CFAA71241005741A2885 /* ContactProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactProfileView.swift; sourceTree = "<group>"; };
 		97EEB65E83815B4A53ADD965 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		984D540DCF21DBE9472E4DED /* CallViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViews.swift; sourceTree = "<group>"; };
 		990CD6AD393E9DDFA11D5973 /* AttachmentCipherPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentCipherPayload.swift; sourceTree = "<group>"; };
@@ -166,6 +183,7 @@
 		99E34757A243F24BB871AF9C /* ChatListLocalStateStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListLocalStateStoreTests.swift; sourceTree = "<group>"; };
 		9DF5C5A25C2C9611960DDEFA /* VostokContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokContractTests.swift; sourceTree = "<group>"; };
 		9EFDBD4FC3937E55D0A9CE13 /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		A12068A695156CA17CF3EFF0 /* ProfileMediaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileMediaSection.swift; sourceTree = "<group>"; };
 		A215625B00F291682C3255B8 /* VostokBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokBadge.swift; sourceTree = "<group>"; };
 		A89AAD4414093D1F1932DF55 /* MessageRepositoryOutboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepositoryOutboxTests.swift; sourceTree = "<group>"; };
 		A979F3AF98BF4B802FBF8097 /* RegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistrationView.swift; sourceTree = "<group>"; };
@@ -173,6 +191,7 @@
 		AEF2966277D628A2AD12E568 /* APIContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIContracts.swift; sourceTree = "<group>"; };
 		B02ED9CFAD40D5DC050EAF1B /* Vostok.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Vostok.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B23DB1E67CBB34B926874948 /* RecipientEnvelopeBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientEnvelopeBuilder.swift; sourceTree = "<group>"; };
+		BB478924569DA236BA945E05 /* VoiceRecordButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordButton.swift; sourceTree = "<group>"; };
 		BD6C64D8F46034204FBE63EA /* CryptoProviderProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoProviderProtocol.swift; sourceTree = "<group>"; };
 		BE3E485AF68BF89F85EF106C /* GroupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupViews.swift; sourceTree = "<group>"; };
 		C1969ED999B1CEF14D9FF92B /* ContactListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListViewModelTests.swift; sourceTree = "<group>"; };
@@ -190,6 +209,7 @@
 		DEF0711B1B314F91EF2CBF49 /* MediaCryptoBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCryptoBox.swift; sourceTree = "<group>"; };
 		E198484239A92A29E599AC68 /* VostokAttachmentBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VostokAttachmentBubble.swift; sourceTree = "<group>"; };
 		E3DC9BC8EA3DE4FE27850FC0 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		E5CE0E1D8BCFBCB8E5AE6C69 /* RoundVideoPlaybackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundVideoPlaybackManager.swift; sourceTree = "<group>"; };
 		E8C73EF6A892112F2B646E95 /* PushNotificationPayloadParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationPayloadParserTests.swift; sourceTree = "<group>"; };
 		EE039B708707FE946148B58F /* CallViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewModel.swift; sourceTree = "<group>"; };
 		EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundVideoRecorder.swift; sourceTree = "<group>"; };
@@ -322,9 +342,14 @@
 				651AE59259602A1754B8AFC8 /* ConversationViewModel.swift */,
 				024E38072778DC83BD57B904 /* MessageBubble.swift */,
 				4A83C488A72FCA2470A23D6E /* MessageComposer.swift */,
+				803DE1B11AF3B5A2B823CD49 /* MessageContextMenu.swift */,
+				E5CE0E1D8BCFBCB8E5AE6C69 /* RoundVideoPlaybackManager.swift */,
 				EEC708FDDB5058D09DF62727 /* RoundVideoRecorder.swift */,
 				FEBE1E7163B09C84A4632A4D /* VoicePlaybackManager.swift */,
+				BB478924569DA236BA945E05 /* VoiceRecordButton.swift */,
 				503405F44D220A34026C035B /* VoiceRecorder.swift */,
+				2541B92D2FC116C8527005D0 /* VoiceRecordingView.swift */,
+				85C1C6D28A3E83E36641C9B9 /* VoiceRecordingViewModel.swift */,
 			);
 			path = Conversation;
 			sourceTree = "<group>";
@@ -381,6 +406,7 @@
 				F4ACF52010D346B459E53418 /* VostokListRow.swift */,
 				293FCFB34EEB5368519AF850 /* VostokMessageBubble.swift */,
 				0695073329793126D7D80141 /* VostokNavBar.swift */,
+				5ABB2ADD9604F30E4F7EE4DA /* VostokRoundVideoBubble.swift */,
 				744719F4376649726A6CB6B2 /* VostokTabBar.swift */,
 				13B7F19302E3DE4524ED82AE /* VostokVoiceBubble.swift */,
 			);
@@ -402,6 +428,8 @@
 		A1F07C6636D9FC60631DDD43 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
+				90B0CFAA71241005741A2885 /* ContactProfileView.swift */,
+				A12068A695156CA17CF3EFF0 /* ProfileMediaSection.swift */,
 				F78CDAAEBB3AE07E05F75914 /* ProfileView.swift */,
 			);
 			path = Profile;
@@ -447,6 +475,9 @@
 		BE4DD8B390DAB7F3189F78D2 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				11F11895F9FED073D62501A4 /* ObjCExceptionCatch.h */,
+				02C1905E6B638F665F366A4E /* ObjCExceptionCatch.m */,
+				17B65275BDB72147D912F498 /* Vostok-Bridging-Header.h */,
 				C4A63BAF0EE500FF62C3A56F /* Crypto */,
 				545384798C079921903C92A0 /* Media */,
 				0B0DC07FC5AAF7FC0DA54940 /* Networking */,
@@ -687,6 +718,7 @@
 				4DB44D015A62185A59467FA6 /* Colors.swift in Sources */,
 				C586BFD315504D9572FBD47E /* ContactListView.swift in Sources */,
 				6C6539CF0EE05987DF85EF52 /* ContactListViewModel.swift in Sources */,
+				D24FFD979F4B8C15DF2EA2CE /* ContactProfileView.swift in Sources */,
 				4A52A9F0FEB586F2F1114DEB /* ContainerEnvironment.swift in Sources */,
 				D99FC11E5B79A065D53EE202 /* ConversationView.swift in Sources */,
 				A3D3584387122E1054C4C893 /* ConversationViewModel.swift in Sources */,
@@ -703,8 +735,11 @@
 				2E6770C8D4929885A2BFD011 /* MediaViews.swift in Sources */,
 				727638B618935A8BE27A6E1E /* MessageBubble.swift in Sources */,
 				AF6BB171B5BDBF2B39C83BDE /* MessageComposer.swift in Sources */,
+				11079772D9194074CBFC7A63 /* MessageContextMenu.swift in Sources */,
+				F56B740B7877797EDCA58786 /* ObjCExceptionCatch.m in Sources */,
 				5B308689934398D310DE2C2E /* PhoenixRealtimeClient.swift in Sources */,
 				FF6EC67021E12C50CAF4A829 /* PhoenixRealtimeClientProtocol.swift in Sources */,
+				76F51170CC1962D08711636E /* ProfileMediaSection.swift in Sources */,
 				3918ED612711C9B20FEB75D0 /* ProfileView.swift in Sources */,
 				8F677C92DF050DBF97CCB3CF /* PushManager.swift in Sources */,
 				87EF12156EBC399589F2DD77 /* PushNotificationPayloadParser.swift in Sources */,
@@ -714,6 +749,7 @@
 				9EEE0BE22DDA05FEEBA5B421 /* RegistrationView.swift in Sources */,
 				9DF738B4E3E8D9BB1F65055E /* Repositories.swift in Sources */,
 				2C312A4D1A6A24A4316B1746 /* RootView.swift in Sources */,
+				34E5F913CACDBA8EB7FF0010 /* RoundVideoPlaybackManager.swift in Sources */,
 				C22D99EA526965AD9CAA90DC /* RoundVideoRecorder.swift in Sources */,
 				1356D9B37B941D52E95CE5DD /* SettingsView.swift in Sources */,
 				7BC55AD29E580E2492FD8158 /* SettingsViewModel.swift in Sources */,
@@ -722,7 +758,10 @@
 				57AF06D02D9A91EC71725289 /* Theme.swift in Sources */,
 				177C8E63DE34691881989B24 /* Typography.swift in Sources */,
 				FF814D39FF277ACCE4708FF8 /* VoicePlaybackManager.swift in Sources */,
+				C20B539716B7E2B0B5D52517 /* VoiceRecordButton.swift in Sources */,
 				723665C15F969B3B265A0FCA /* VoiceRecorder.swift in Sources */,
+				F2F1DE82B93405F49A49F169 /* VoiceRecordingView.swift in Sources */,
+				1D01D95DC0005710EFE2B428 /* VoiceRecordingViewModel.swift in Sources */,
 				097F5BCA844F20FF501BAE82 /* VostokAPIClientProtocol.swift in Sources */,
 				05710F19285A55ED3155A1AD /* VostokApp.swift in Sources */,
 				C45F32E9A7CDDC1585B4BB76 /* VostokAppDelegate.swift in Sources */,
@@ -734,6 +773,7 @@
 				A63C82B083CBF15E46B5D641 /* VostokListRow.swift in Sources */,
 				C987EE1FB71CB61070D90C22 /* VostokMessageBubble.swift in Sources */,
 				3D7C5FC555D16DE7F8C0FEF7 /* VostokNavBar.swift in Sources */,
+				DDBBA4BEA154780E20C46021 /* VostokRoundVideoBubble.swift in Sources */,
 				DDC065059198CA98E469F132 /* VostokTabBar.swift in Sources */,
 				AA7B34E05EDAD2D121991045 /* VostokVoiceBubble.swift in Sources */,
 			);
@@ -1010,6 +1050,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios;
 				PRODUCT_NAME = Vostok;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Vostok/Core/Vostok-Bridging-Header.h";
 				SWIFT_VERSION = 5.1;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -1032,6 +1073,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = chat.vostok.ios;
 				PRODUCT_NAME = Vostok;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Vostok/Core/Vostok-Bridging-Header.h";
 				SWIFT_VERSION = 5.1;
 				TARGETED_DEVICE_FAMILY = 1;
 			};

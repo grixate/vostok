@@ -22,7 +22,21 @@ enum VostokAPIError: Error, LocalizedError {
 
 struct ErrorEnvelope: Codable {
     let error: String
-    let message: String
+    /// Top-level message (e.g. from {:validation, "reason"} errors).
+    let message: String?
+    /// Field-level changeset errors (e.g. {"username": ["is too short"]}).
+    let details: [String: [String]]?
+
+    /// Best human-readable description available from either field.
+    var bestMessage: String {
+        if let m = message, !m.isEmpty { return m }
+        if let d = details, !d.isEmpty {
+            return d.sorted(by: { $0.key < $1.key })
+                .flatMap { field, msgs in msgs.map { "\(field): \($0)" } }
+                .joined(separator: "\n")
+        }
+        return "Request failed (\(error))"
+    }
 }
 
 enum JSONValue: Codable, Equatable {
@@ -80,6 +94,10 @@ struct GenericMessageResponse: Codable {
 struct UserDTO: Codable, Equatable {
     let id: String
     let username: String
+}
+
+struct UsersResponse: Codable {
+    let users: [UserDTO]
 }
 
 struct DeviceDTO: Codable, Equatable {

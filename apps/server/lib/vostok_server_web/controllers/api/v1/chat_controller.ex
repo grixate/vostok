@@ -54,6 +54,18 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     render_error(conn, :validation, "username is required.")
   end
 
+  def create_self(conn, _params) do
+    case Messaging.ensure_self_chat(conn.assigns.current_user) do
+      {:ok, chat} ->
+        conn
+        |> put_status(:created)
+        |> json(%{chat: chat})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   def create_group(conn, params) do
     case Messaging.create_group_chat(conn.assigns.current_user.id, params) do
       {:ok, chat} ->

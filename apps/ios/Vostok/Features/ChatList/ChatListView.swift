@@ -21,11 +21,13 @@ struct ChatListView: View {
     private let container: AppContainer
 
     @StateObject private var viewModel: ChatListViewModel
+    @State private var navigationPath = NavigationPath()
     @State private var routedChat: ChatDTO?
     @State private var isRoutedChatPresented = false
     @State private var isCreateGroupPresented = false
+    @State private var isNewDirectChatPresented = false
+    @State private var showCreateActionSheet = false
     @State private var selectedFolder: ChatFolder = .all
-    @State private var showsSearch = false
     @State private var realtimeSnapshot = RealtimeDiagnosticsSnapshot()
 
     private static let isoFormatter = ISO8601DateFormatter()
@@ -58,109 +60,186 @@ struct ChatListView: View {
     }
 
     var body: some View {
-        List {
-            ForEach(Array(folderFilteredChats.enumerated()), id: \.element.id) { index, chat in
-                NavigationLink(value: chat) {
-                    VostokListRow(
-                        title: chat.title,
-                        subtitle: rowSubtitle(for: chat),
-                        subtitleSymbol: rowSubtitleSymbol(for: chat),
-                        trailing: relativeDate(chat.latestMessageAt),
-                        unreadCount: viewModel.unreadCount(chatID: chat.id),
-                        isMuted: viewModel.isMuted(chatID: chat.id),
-                        isPinned: viewModel.isPinned(chatID: chat.id),
-                        showsReadIndicator: shouldShowReadIndicator(for: chat),
-                        showsSeparator: index != 0
-                    )
-                }
-                .simultaneousGesture(TapGesture().onEnded {
-                    guard case let .authenticated(session) = appState.sessionState else {
-                        viewModel.markChatRead(chatID: chat.id)
-                        return
+        NavigationStack(path: $navigationPath) {
+            List {
+                ForEach(Array(folderFilteredChats.enumerated()), id: \.element.id) { index, chat in
+                    Button {
+                        if case let .authenticated(session) = appState.sessionState {
+                            Task {
+                                await viewModel.syncReadState(token: session.token, chatID: chat.id)
+                            }
+                        } else {
+                            viewModel.markChatRead(chatID: chat.id)
+                        }
+                        navigationPath.append(chat)
+                    } label: {
+                        let isSaved = chat.isSelfChat
+                        VostokListRow(
+                            title: chat.title,
+                            subtitle: isSaved ? (viewModel.lastMessagePreview(chatID: chat.id) ?? "Your Cloud Storage") : rowSubtitle(for: chat),
+                            subtitleSymbol: isSaved ? nil : rowSubtitleSymbol(for: chat),
+                            trailing: isSaved ? "" : relativeDate(chat.latestMessageAt),
+                            unreadCount: isSaved ? 0 : viewModel.unreadCount(chatID: chat.id),
+                            isMuted: viewModel.isMuted(chatID: chat.id),
+                            isPinned: viewModel.isPinned(chatID: chat.id),
+                            showsReadIndicator: isSaved ? false : shouldShowReadIndicator(for: chat),
+                            showsSeparator: index != 0,
+                            leadingSystemImage: isSaved ? "bookmark.fill" : nil
+                        )
                     }
-                    Task {
-                        await viewModel.syncReadState(token: session.token, chatID: chat.id)
-                    }
-                })
-                .listRowInsets(EdgeInsets())
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(viewModel.isPinned(chatID: chat.id) ? "Unpin" : "Pin") {
-                        viewModel.togglePin(chatID: chat.id)
-                    }
-                    .tint(.orange)
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets())
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !chat.isSelfChat {
+                            Button(viewModel.isPinned(chatID: chat.id) ? "Unpin" : "Pin") {
+                                viewModel.togglePin(chatID: chat.id)
+                            }
+                            .tint(.orange)
 
-                    Button(viewModel.isMuted(chatID: chat.id) ? "Unmute" : "Mute") {
-                        viewModel.toggleMute(chatID: chat.id)
-                    }
-                        .tint(.gray)
+                            Button(viewModel.isMuted(chatID: chat.id) ? "Unmute" : "Mute") {
+                                viewModel.toggleMute(chatID: chat.id)
+                            }
+                            .tint(.gray)
 
-                    Button("Archive") {
-                        viewModel.archive(chatID: chat.id)
+                            Button("Archive") {
+                                viewModel.archive(chatID: chat.id)
+                            }
+                            .tint(.indigo)
+                        }
                     }
-                    .tint(.indigo)
                 }
             }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(VostokColors.secondaryBackground)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ChatListHeader(
-                selectedFolder: selectedFolder,
-                channelCount: channelCount,
-                showsSearchField: showsSearch,
-                realtimeSnapshot: realtimeSnapshot,
-                searchQuery: $viewModel.searchQuery,
-                onSelectFolder: { selectedFolder = $0 },
-                onEditTap: {},
-                onCreateGroupTap: { isCreateGroupPresented = true },
-                onSearchTap: { withAnimation(.easeInOut(duration: 0.2)) { showsSearch.toggle() } }
-            )
-        }
-        .refreshable {
-            if case let .authenticated(session) = appState.sessionState {
-                await viewModel.load(token: session.token)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(VostokColors.secondaryBackground)
+            .refreshable {
+                if case let .authenticated(session) = appState.sessionState {
+                    await viewModel.load(token: session.token)
+                }
             }
-        }
-        .overlay {
-            if viewModel.isLoading {
-                ProgressView()
+            .overlay {
+                if viewModel.isLoading {
+                    ProgressView()
+                }
             }
-        }
-        .navigationDestination(for: ChatDTO.self) { chat in
-            ConversationView(chat: chat, container: container)
-        }
-        .navigationDestination(isPresented: $isRoutedChatPresented) {
-            if let chat = routedChat {
+            .confirmationDialog("New Conversation", isPresented: $showCreateActionSheet, titleVisibility: .visible) {
+                Button("New Chat") { isNewDirectChatPresented = true }
+                Button("New Group") { isCreateGroupPresented = true }
+                Button("Cancel", role: .cancel) {}
+            }
+            .navigationDestination(for: ChatDTO.self) { chat in
                 ConversationView(chat: chat, container: container)
-            } else {
-                EmptyView()
             }
-        }
-        .navigationDestination(isPresented: $isCreateGroupPresented) {
-            CreateGroupView(container: container)
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .task {
-            if case let .authenticated(session) = appState.sessionState {
-                await viewModel.load(token: session.token)
-                viewModel.connectRealtime(token: session.token, userID: session.userID)
-                await routeIfNeeded()
+            .navigationDestination(isPresented: $isRoutedChatPresented) {
+                if let chat = routedChat {
+                    ConversationView(chat: chat, container: container)
+                } else {
+                    EmptyView()
+                }
             }
-        }
-        .onChange(of: appState.selectedChatID) { _ in
-            Task {
-                await routeIfNeeded()
+            .navigationDestination(isPresented: $isCreateGroupPresented) {
+                CreateGroupView(container: container)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .vostokChatReadEvent)) { notification in
-            guard let event = RealtimeChatReadEvent(notification: notification) else { return }
-            viewModel.markChatRead(chatID: event.chatID)
-        }
-        .task {
-            await monitorRealtimeDiagnostics()
+            .sheet(isPresented: $isNewDirectChatPresented, onDismiss: {
+                if routedChat != nil {
+                    isRoutedChatPresented = true
+                }
+            }) {
+                NewDirectChatView(container: container) { chat in
+                    routedChat = chat
+                    isNewDirectChatPresented = false
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $viewModel.searchQuery,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search"
+            )
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 2) {
+                        Text("Chats")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VostokColors.labelPrimary)
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(realtimeStatusColor)
+                                .frame(width: 7, height: 7)
+                            Text(realtimeStatusText)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(VostokColors.labelSecondary)
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Chats, \(realtimeStatusText)")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: { showCreateActionSheet = true }) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(VostokColors.accent)
+                    }
+                    .accessibilityLabel("New conversation")
+                }
+            }
+            .task {
+                if case let .authenticated(session) = appState.sessionState {
+                    await viewModel.load(token: session.token)
+                    viewModel.connectRealtime(token: session.token, userID: session.userID)
+                    await routeIfNeeded()
+                }
+            }
+            .onChange(of: appState.selectedChatID) { _ in
+                Task {
+                    await routeIfNeeded()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .vostokChatReadEvent)) { notification in
+                guard let event = RealtimeChatReadEvent(notification: notification) else { return }
+                viewModel.markChatRead(chatID: event.chatID)
+            }
+            .task {
+                await monitorRealtimeDiagnostics()
+            }
         }
     }
+
+    // MARK: - Realtime status
+
+    private var realtimeStatusText: String {
+        if !realtimeSnapshot.networkAvailable {
+            return "Offline"
+        }
+        switch realtimeSnapshot.connectionState {
+        case .connected:
+            return "Connected"
+        case .reconnecting:
+            return "Reconnecting"
+        case .connecting:
+            return "Connecting"
+        case .paused:
+            return "Paused"
+        case .disconnected:
+            return "Disconnected"
+        }
+    }
+
+    private var realtimeStatusColor: Color {
+        if !realtimeSnapshot.networkAvailable {
+            return VostokColors.danger
+        }
+        switch realtimeSnapshot.connectionState {
+        case .connected:
+            return VostokColors.online
+        case .reconnecting, .connecting:
+            return .orange
+        case .paused, .disconnected:
+            return VostokColors.labelSecondary
+        }
+    }
+
+    // MARK: - Helpers
 
     private var channelCount: Int {
         viewModel.filteredChats.filter { $0.type == "channel" }.count
@@ -181,6 +260,9 @@ struct ChatListView: View {
     }
 
     private func rowSubtitle(for chat: ChatDTO) -> String {
+        if let preview = viewModel.lastMessagePreview(chatID: chat.id) {
+            return preview
+        }
         if !chat.participantUsernames.isEmpty {
             return chat.participantUsernames.joined(separator: ", ")
         }
@@ -251,222 +333,97 @@ struct ChatListView: View {
     }
 }
 
-private struct ChatListHeader: View {
-    let selectedFolder: ChatFolder
-    let channelCount: Int
-    let showsSearchField: Bool
-    let realtimeSnapshot: RealtimeDiagnosticsSnapshot
-    @Binding var searchQuery: String
-    let onSelectFolder: (ChatFolder) -> Void
-    let onEditTap: () -> Void
-    let onCreateGroupTap: () -> Void
-    let onSearchTap: () -> Void
+// MARK: - New Direct Chat Sheet
+
+struct NewDirectChatView: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    private let container: AppContainer
+    let onChatCreated: (ChatDTO) -> Void
+
+    @StateObject private var viewModel: ContactListViewModel
+
+    init(container: AppContainer, onChatCreated: @escaping (ChatDTO) -> Void) {
+        self.container = container
+        self.onChatCreated = onChatCreated
+        _viewModel = StateObject(
+            wrappedValue: ContactListViewModel(
+                apiClient: container.apiClient,
+                chatRepository: container.chatRepository
+            )
+        )
+    }
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center) {
-                Button(action: onEditTap) {
-                    Text("Edit")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(VostokColors.controlPrimary)
-                        .padding(.horizontal, 16)
-                        .frame(height: 44)
-                }
-                .buttonStyle(.plain)
-                .background(glassCapsuleBackground)
-                .accessibilityLabel("Edit chats")
-
-                Spacer(minLength: 8)
-
-                VStack(spacing: 3) {
-                    HStack(spacing: 4) {
-                        storiesBadge
-                        Text("Chats")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(VostokColors.labelPrimary)
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(VostokColors.accent)
-                    }
-
-                    realtimeStatusBadge
-                }
-
-                Spacer(minLength: 8)
-
-                HStack(spacing: 8) {
-                    buttonCircle(systemName: "plus", action: onCreateGroupTap, label: "Create group")
-                    buttonCircle(systemName: "square.and.pencil", action: onSearchTap, label: "Search")
-                }
-            }
-            .padding(.horizontal, 16)
-
-            folderControl
-                .padding(.horizontal, 16)
-
-            if showsSearchField {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VostokColors.labelSecondary)
-                    TextField("Search", text: $searchQuery)
-                        .font(.system(size: 15, weight: .regular))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                .padding(.horizontal, 12)
-                .frame(height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(VostokColors.surfaceTertiary)
-                )
-                .padding(.horizontal, 16)
-            }
-        }
-        .padding(.top, 8)
-        .padding(.bottom, 10)
-        .background(
-            LinearGradient(
-                colors: [VostokColors.primaryBackground, VostokColors.primaryBackground.opacity(0)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var folderControl: some View {
-        HStack(spacing: 0) {
-            ForEach(ChatFolder.allCases) { folder in
-                Button {
-                    onSelectFolder(folder)
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(folder.title)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(VostokColors.labelPrimary)
-                        if folder == .channels && channelCount > 0 {
-                            Text("\(channelCount)")
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundStyle(.black)
-                                .frame(minWidth: 18)
-                                .padding(.horizontal, 4)
-                                .frame(height: 18)
-                                .background(VostokColors.accent, in: Capsule())
+        NavigationStack {
+            List {
+                ForEach(viewModel.filteredMembers, id: \.id) { member in
+                    Button {
+                        startChat(with: member.username)
+                    } label: {
+                        HStack(spacing: 10) {
+                            VostokAvatar(title: member.username)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(member.username)
+                                    .font(VostokTypography.bodyEmphasized)
+                                Text("@\(member.username)")
+                                    .font(VostokTypography.footnote)
+                                    .foregroundStyle(VostokColors.labelSecondary)
+                            }
+                            Spacer()
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 35)
-                    .background {
-                        if selectedFolder == folder {
-                            Capsule(style: .continuous)
-                                .fill(VostokColors.surfaceTertiary)
-                                .padding(1)
-                        }
+                    .buttonStyle(.plain)
+                }
+
+                if let error = viewModel.errorMessage {
+                    Section {
+                        Text(error)
+                            .font(VostokTypography.footnote)
+                            .foregroundStyle(VostokColors.danger)
                     }
                 }
-                .buttonStyle(.plain)
             }
-        }
-        .padding(3)
-        .background(glassCapsuleBackground)
-        .clipShape(Capsule(style: .continuous))
-    }
-
-    private var storiesBadge: some View {
-        HStack(spacing: -8) {
-            Circle()
-                .fill(.cyan.opacity(0.9))
-                .frame(width: 24, height: 24)
-                .overlay(Circle().stroke(.white, lineWidth: 1.4))
-            Circle()
-                .fill(.yellow.opacity(0.9))
-                .frame(width: 24, height: 24)
-                .overlay(Circle().stroke(.white, lineWidth: 1.4))
-            Circle()
-                .fill(.pink.opacity(0.9))
-                .frame(width: 24, height: 24)
-                .overlay(Circle().stroke(.white, lineWidth: 1.4))
-        }
-    }
-
-    private var realtimeStatusBadge: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 7, height: 7)
-            Text(statusText)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(VostokColors.labelSecondary)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 20)
-        .background(
-            Capsule(style: .continuous)
-                .fill(VostokColors.surfaceTertiary.opacity(0.9))
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Realtime status")
-        .accessibilityValue(statusText)
-    }
-
-    private var glassCapsuleBackground: some View {
-        Capsule(style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                Capsule(style: .continuous)
-                    .fill(VostokColors.glassLight.opacity(0.6))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(VostokColors.separatorVibrant.opacity(0.5), lineWidth: 0.5)
-            )
-            .shadow(color: .black.opacity(0.08), radius: 16, y: 4)
-    }
-
-    private func buttonCircle(systemName: String, action: @escaping () -> Void, label: String) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(VostokColors.controlPrimary)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .background(glassCapsuleBackground)
-        .clipShape(Circle())
-        .accessibilityLabel(label)
-    }
-
-    private var statusText: String {
-        if !realtimeSnapshot.networkAvailable {
-            return "Offline"
-        }
-
-        switch realtimeSnapshot.connectionState {
-        case .connected:
-            return "Connected"
-        case .reconnecting:
-            return "Reconnecting"
-        case .connecting:
-            return "Connecting"
-        case .paused:
-            return "Paused"
-        case .disconnected:
-            return "Disconnected"
+            .searchable(text: $viewModel.searchQuery, prompt: "Search members")
+            .overlay {
+                if viewModel.isLoading {
+                    ProgressView()
+                } else if viewModel.members.isEmpty && !viewModel.isLoading {
+                    VStack(spacing: 8) {
+                        Image(systemName: "person.crop.circle.badge.questionmark")
+                            .font(.system(size: 32))
+                            .foregroundStyle(VostokColors.labelSecondary)
+                        Text("No Members")
+                            .font(VostokTypography.bodyEmphasized)
+                            .foregroundStyle(VostokColors.labelSecondary)
+                    }
+                }
+            }
+            .navigationTitle("New Chat")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .task { await loadMembers() }
         }
     }
 
-    private var statusColor: Color {
-        if !realtimeSnapshot.networkAvailable {
-            return VostokColors.danger
-        }
+    private func loadMembers() async {
+        guard case let .authenticated(session) = appState.sessionState else { return }
+        await viewModel.load(token: session.token, currentUsername: session.username)
+    }
 
-        switch realtimeSnapshot.connectionState {
-        case .connected:
-            return VostokColors.online
-        case .reconnecting, .connecting:
-            return .orange
-        case .paused, .disconnected:
-            return VostokColors.labelSecondary
+    private func startChat(with username: String) {
+        guard case let .authenticated(session) = appState.sessionState else { return }
+        Task {
+            do {
+                let chat = try await viewModel.createDirectChat(token: session.token, username: username)
+                onChatCreated(chat)
+            } catch {
+                viewModel.errorMessage = error.localizedDescription
+            }
         }
     }
 }

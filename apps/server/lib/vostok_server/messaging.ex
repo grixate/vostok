@@ -36,6 +36,10 @@ defmodule VostokServer.Messaging do
     |> Enum.map(&hydrate_chat_summary(&1, user_id))
   end
 
+  def ensure_self_chat(%User{} = user) do
+    ensure_direct_chat(user.id, user.username)
+  end
+
   def ensure_direct_chat(current_user_id, target_username)
       when is_binary(current_user_id) and is_binary(target_username) do
     with %User{} = current_user <- Repo.get(User, current_user_id),

@@ -3,45 +3,131 @@ import SwiftUI
 struct CreateGroupView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    private let container: AppContainer
+
     @State private var title = ""
-    @State private var members = ""
-    @StateObject private var viewModel: GroupViewModel
+    @State private var searchQuery = ""
+    @State private var selectedUsernames: Set<String> = []
+    @StateObject private var membersViewModel: ContactListViewModel
+    @StateObject private var groupViewModel: GroupViewModel
 
     init(container: AppContainer) {
-        _viewModel = StateObject(
+        self.container = container
+        _membersViewModel = StateObject(
+            wrappedValue: ContactListViewModel(
+                apiClient: container.apiClient,
+                chatRepository: container.chatRepository
+            )
+        )
+        _groupViewModel = StateObject(
             wrappedValue: GroupViewModel(repository: container.chatRepository, apiClient: container.apiClient)
         )
     }
 
-    var body: some View {
-        Form {
-            TextField("Group title", text: $title)
-            TextField("Members (comma-separated)", text: $members)
-            Button("Create") {
-                guard case let .authenticated(session) = appState.sessionState else { return }
-                let list = members
-                    .split(separator: ",")
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                Task {
-                    await viewModel.create(token: session.token, title: title, members: list)
-                }
-            }
-                .buttonStyle(VostokPrimaryButtonStyle())
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isLoading)
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-            if let created = viewModel.createdGroup {
-                Section {
-                    Text("Created: \(created.title)")
-                        .font(VostokTypography.footnote)
-                        .foregroundStyle(VostokColors.online)
-                    Button("Done") {
-                        dismiss()
+    private var canCreate: Bool {
+        !trimmedTitle.isEmpty && !selectedUsernames.isEmpty && !groupViewModel.isLoading
+    }
+
+    private var filteredMembers: [UserDTO] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return membersViewModel.members }
+        return membersViewModel.members.filter { $0.username.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                TextField("Group name", text: $title)
+                    .textInputAutocapitalization(.sentences)
+            }
+
+            Section {
+                if !selectedUsernames.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(selectedUsernames).sorted(), id: \.self) { username in
+                                VStack(spacing: 4) {
+                                    ZStack(alignment: .topTrailing) {
+                                        VostokAvatar(title: username, size: 48)
+                                        Button {
+                                            selectedUsernames.remove(username)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 18))
+                                                .foregroundStyle(VostokColors.labelSecondary)
+                                                .background(Circle().fill(VostokColors.primaryBackground))
+                                        }
+                                        .offset(x: 4, y: -4)
+                                    }
+                                    Text(username)
+                                        .font(VostokTypography.caption)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
                     }
                 }
+            } header: {
+                Text(selectedUsernames.isEmpty
+                     ? "Add Members"
+                     : "Members (\(selectedUsernames.count) selected)")
             }
 
-            if let error = viewModel.lastError {
+            Section {
+                if membersViewModel.isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else {
+                    ForEach(filteredMembers, id: \.id) { member in
+                        Button {
+                            if selectedUsernames.contains(member.username) {
+                                selectedUsernames.remove(member.username)
+                            } else {
+                                selectedUsernames.insert(member.username)
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                VostokAvatar(title: member.username)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(member.username)
+                                        .font(VostokTypography.bodyEmphasized)
+                                        .foregroundStyle(VostokColors.labelPrimary)
+                                    Text("@\(member.username)")
+                                        .font(VostokTypography.footnote)
+                                        .foregroundStyle(VostokColors.labelSecondary)
+                                }
+                                Spacer()
+                                if selectedUsernames.contains(member.username) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(VostokColors.accent)
+                                } else {
+                                    Image(systemName: "circle")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(VostokColors.labelSecondary.opacity(0.4))
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if let error = membersViewModel.errorMessage {
+                    Text(error)
+                        .font(VostokTypography.footnote)
+                        .foregroundStyle(VostokColors.danger)
+                }
+            }
+
+            if let error = groupViewModel.lastError {
                 Section {
                     Text(error)
                         .font(VostokTypography.footnote)
@@ -49,7 +135,38 @@ struct CreateGroupView: View {
                 }
             }
         }
+        .searchable(text: $searchQuery, prompt: "Search members")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                if groupViewModel.isLoading {
+                    ProgressView()
+                } else {
+                    Button("Create") {
+                        createGroup()
+                    }
+                    .disabled(!canCreate)
+                    .fontWeight(.semibold)
+                }
+            }
+        }
         .vostokNavBar(title: "New Group", large: false)
+        .task { await loadMembers() }
+    }
+
+    private func loadMembers() async {
+        guard case let .authenticated(session) = appState.sessionState else { return }
+        await membersViewModel.load(token: session.token, currentUsername: session.username)
+    }
+
+    private func createGroup() {
+        guard case let .authenticated(session) = appState.sessionState else { return }
+        let memberList = Array(selectedUsernames)
+        Task {
+            await groupViewModel.create(token: session.token, title: trimmedTitle, members: memberList)
+            if groupViewModel.createdGroup != nil {
+                dismiss()
+            }
+        }
     }
 }
 

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/grigorymikhailov/Documents/vostok/.claude/worktrees/upbeat-mendeleev/apps/server && VOSTOK_REGISTRATION_MODE=open mix phx.server"],
+      "port": 4000
+    }
+  ]
+}

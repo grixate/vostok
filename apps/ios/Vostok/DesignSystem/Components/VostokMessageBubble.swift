@@ -135,13 +135,7 @@ struct VostokMessageBubble: View {
     }
 
     private func reactionSymbol(for key: String) -> String {
-        switch key {
-        case "thumbs_up": return "👍"
-        case "heart": return "❤️"
-        case "laugh": return "😂"
-        case "fire": return "🔥"
-        default: return key
-        }
+        reactionEmoji(for: key)
     }
 
     private var accessibilitySummary: String {

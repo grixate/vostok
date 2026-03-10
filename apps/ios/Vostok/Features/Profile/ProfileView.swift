@@ -4,7 +4,6 @@ import UIKit
 @MainActor
 final class ProfileViewModel: ObservableObject {
     @Published var user: UserDTO?
-    @Published var devices: [DeviceDTO] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -18,12 +17,8 @@ final class ProfileViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            async let meTask = apiClient.me(token: token)
-            async let devicesTask = apiClient.devices(token: token)
-            let me = try await meTask
-            let devices = try await devicesTask
+            let me = try await apiClient.me(token: token)
             user = me.user
-            self.devices = devices.devices
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -34,60 +29,76 @@ final class ProfileViewModel: ObservableObject {
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ProfileViewModel
-    private let instanceLabel: String
+    @StateObject private var settingsViewModel = SettingsViewModel()
+    private let container: AppContainer
+    @State private var savedMessagesChat: ChatDTO?
+    @State private var navigateToSaved = false
 
     init(container: AppContainer) {
         _viewModel = StateObject(wrappedValue: ProfileViewModel(apiClient: container.apiClient))
-        self.instanceLabel = container.environment.instanceLabel
+        self.container = container
     }
 
     var body: some View {
         List {
+            // Avatar section
             Section {
-                HStack(spacing: 14) {
-                    VostokAvatar(title: avatarTitle, size: 74, isOnline: true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(displayName)
-                            .font(VostokTypography.title)
-                            .foregroundStyle(VostokColors.labelPrimary)
-                        Text("@\(usernameValue)")
-                            .font(VostokTypography.body)
-                            .foregroundStyle(VostokColors.labelSecondary)
+                VStack(spacing: 10) {
+                    Button {
+                        Task {
+                            guard case let .authenticated(session) = appState.sessionState else { return }
+                            savedMessagesChat = try? await container.chatRepository.ensureSelfChat(token: session.token)
+                            if savedMessagesChat != nil { navigateToSaved = true }
+                        }
+                    } label: {
+                        VostokAvatar(title: avatarTitle, size: 100, isOnline: true)
                     }
+                    .buttonStyle(.plain)
+                    Text(displayName)
+                        .font(VostokTypography.title)
+                        .foregroundStyle(VostokColors.labelPrimary)
+                    Text("@\(usernameValue)")
+                        .font(VostokTypography.body)
+                        .foregroundStyle(VostokColors.labelSecondary)
                 }
-                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .listRowBackground(Color.clear)
             }
 
-            Section("Account") {
-                profileRow(title: "User ID", value: viewModel.user?.id ?? "Unknown", canCopy: true)
-                profileRow(title: "Username", value: "@\(usernameValue)", canCopy: true)
-                profileRow(title: "Current Device", value: currentDeviceName, canCopy: false)
-                profileRow(title: "Linked Devices", value: "\(viewModel.devices.count)", canCopy: false)
-                profileRow(title: "Instance", value: instanceLabel, canCopy: false)
-            }
-
+            // Shared media
             Section {
-                Button("Reload") {
-                    withSession { token in
-                        Task { await viewModel.load(token: token) }
-                    }
-                }
-                .buttonStyle(VostokPrimaryButtonStyle())
+                ProfileMediaSection(items: [])
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
 
-            if let error = viewModel.errorMessage {
-                Section {
-                    Text(error)
-                        .font(VostokTypography.footnote)
-                        .foregroundStyle(VostokColors.danger)
+            // Navigation
+            Section {
+                NavigationLink("Linked Devices") {
+                    DevicesView(container: container)
+                }
+                NavigationLink("Privacy & Security") {
+                    PrivacySettingsView(viewModel: settingsViewModel)
+                }
+            }
+
+            // Logout
+            Section {
+                Button("Log Out", role: .destructive) {
+                    appState.logout()
                 }
             }
         }
         .vostokNavBar(title: "Profile", large: false)
-        .task {
-            withSession { token in
-                Task { await viewModel.load(token: token) }
+        .navigationDestination(isPresented: $navigateToSaved) {
+            if let chat = savedMessagesChat {
+                ConversationView(chat: chat, container: container)
             }
+        }
+        .task {
+            guard case let .authenticated(session) = appState.sessionState else { return }
+            await viewModel.load(token: session.token)
         }
         .overlay {
             if viewModel.isLoading {
@@ -102,7 +113,7 @@ struct ProfileView: View {
     }
 
     private var displayName: String {
-        "@\(usernameValue)"
+        usernameValue
     }
 
     private var usernameValue: String {
@@ -113,45 +124,5 @@ struct ProfileView: View {
             return session.username
         }
         return "unknown"
-    }
-
-    private var currentDeviceName: String {
-        guard case let .authenticated(session) = appState.sessionState else {
-            return "Unknown"
-        }
-
-        if let match = viewModel.devices.first(where: { $0.id == session.deviceID }) {
-            return match.deviceName ?? match.id
-        }
-        return session.deviceID
-    }
-
-    private func profileRow(title: String, value: String, canCopy: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .foregroundStyle(VostokColors.labelSecondary)
-            Spacer(minLength: 8)
-            Text(value)
-                .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(VostokColors.labelPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-            if canCopy {
-                Button {
-                    UIPasteboard.general.string = value
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .foregroundStyle(VostokColors.accent)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy \(title)")
-            }
-        }
-    }
-
-    private func withSession(_ action: (String) -> Void) {
-        guard case let .authenticated(session) = appState.sessionState else { return }
-        action(session.token)
     }
 }

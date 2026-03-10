@@ -2,11 +2,15 @@ import SwiftUI
 
 struct VostokComposer: View {
     @Binding var text: String
+    @Binding var isVideoMode: Bool
     var replyTitle: String? = nil
     var replyText: String? = nil
     var onCancelReply: (() -> Void)? = nil
     var onAttach: () -> Void
     var onSend: () -> Void
+    var onStartRecording: () -> Void = {}
+    var onEndRecording: () -> Void = {}
+    var onDragChanged: (CGSize) -> Void = { _ in }
 
     @FocusState private var isFocused: Bool
 
@@ -28,7 +32,7 @@ struct VostokComposer: View {
                     replyPreview(title: replyTitle, text: replyText)
                 }
 
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     TextField("Message", text: $text, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.system(size: 17, weight: .regular))
@@ -43,24 +47,17 @@ struct VostokComposer: View {
                         .accessibilityLabel("Message")
                         .accessibilityHint("Type your message")
 
-                    HStack(spacing: 8) {
-                        Image(systemName: isSendMode ? "face.smiling" : "moon")
-                            .font(.system(size: 18, weight: .regular))
-                            .foregroundStyle(VostokColors.controlSecondary)
-                            .accessibilityHidden(true)
-
-                        if isSendMode {
-                            Button(action: onSend) {
-                                Image(systemName: "paperplane.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(.black.opacity(0.95))
-                                    .frame(width: 44, height: 44)
-                                    .background(VostokColors.accent, in: Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Send message")
-                            .accessibilityHint("Sends the typed message")
+                    if isSendMode {
+                        Button(action: onSend) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(VostokColors.accent, in: Circle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Send message")
+                        .accessibilityHint("Sends the typed message")
                     }
                 }
                 .padding(.leading, 9)
@@ -73,16 +70,12 @@ struct VostokComposer: View {
             .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
 
             if !isSendMode {
-                Button(action: onSend) {
-                    Image(systemName: "mic")
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(VostokColors.controlPrimary)
-                }
-                .frame(width: 44, height: 44)
-                .background(glassCircleBackground)
-                .clipShape(Circle())
-                .accessibilityLabel("Record voice message")
-                .accessibilityHint("Starts or stops recording")
+                VoiceRecordButton(
+                    isVideoMode: $isVideoMode,
+                    onStartRecording: onStartRecording,
+                    onEndRecording: onEndRecording,
+                    onDragChanged: onDragChanged
+                )
             }
         }
         .padding(.horizontal, 8)
@@ -98,7 +91,7 @@ struct VostokComposer: View {
     }
 
     private var isSendMode: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || replyTitle != nil || isFocused
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || replyTitle != nil
     }
 
     private var glassFieldBackground: some View {

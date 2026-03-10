@@ -4,6 +4,7 @@ protocol ChatRepository {
     func fetchChats(token: String) async throws -> [ChatDTO]
     func createDirectChat(token: String, username: String) async throws -> ChatDTO
     func createGroup(token: String, title: String, members: [String]) async throws -> ChatDTO
+    func ensureSelfChat(token: String) async throws -> ChatDTO
 }
 
 protocol MessageRepository {
@@ -78,6 +79,14 @@ actor InMemoryChatRepository: ChatRepository {
 
     func createGroup(token: String, title: String, members: [String]) async throws -> ChatDTO {
         let chat = try await apiClient.createGroup(token: token, request: .init(title: title, members: members)).chat
+        cache.removeAll { $0.id == chat.id }
+        cache.insert(chat, at: 0)
+        database.saveChats(cache)
+        return chat
+    }
+
+    func ensureSelfChat(token: String) async throws -> ChatDTO {
+        let chat = try await apiClient.createSelfChat(token: token).chat
         cache.removeAll { $0.id == chat.id }
         cache.insert(chat, at: 0)
         database.saveChats(cache)
