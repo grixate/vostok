@@ -156,7 +156,6 @@ export function MessageBubble({
       <div className="message-bubble__content">
         {side !== 'system' ? (
           <div className="message-bubble__state">
-            {timestamp && <span>{timestamp}</span>}
             {side === 'outgoing' && state === 'read' && (
               <svg width="17" height="10" viewBox="0 0 17 10" fill="none" aria-hidden="true">
                 <path d="M1 5L4.5 8.5L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -170,6 +169,7 @@ export function MessageBubble({
             )}
             {state === 'sending' && <span>sending</span>}
             {state === 'failed' && <span style={{ color: '#FF3B30' }}>failed</span>}
+            {timestamp && <span>{timestamp}</span>}
           </div>
         ) : null}
         {children}

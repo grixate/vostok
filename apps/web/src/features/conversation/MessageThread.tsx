@@ -302,7 +302,11 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
             const isActiveSearchMatch = searchHighlight?.activeMessageId === message.id
             const { isFirstInGroup } = groupInfo[index]
             const isGroup = activeChat.type === 'group'
-            const senderName = message.senderUsername ?? ''
+            // For incoming messages in a 1:1 DM, senderUsername may be null — fall back to the chat title
+            const rawSenderName = message.senderUsername ?? ''
+            const senderName = (message.side === 'incoming' && !rawSenderName && !activeChat.is_self_chat)
+              ? activeChat.title
+              : rawSenderName
             const showSenderName = isGroup && isFirstInGroup && !!senderName
             const avatarColor = avatarColorForSender(senderName)
 
