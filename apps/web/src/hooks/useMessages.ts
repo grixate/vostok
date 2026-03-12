@@ -23,7 +23,7 @@ import { encryptMessageWithSessions } from '../lib/chat-session-vault.ts'
 import { encryptMessageWithGroupSenderKey, getActiveGroupSenderKey } from '../lib/message-vault.ts'
 import { outboxRetryDelayMs } from '@vostok/crypto-core'
 import { subscribeToChatStream } from '../lib/realtime.ts'
-import { projectMessage } from '../utils/message-helpers.ts'
+import { projectMessage, cacheSentPlaintext } from '../utils/message-helpers.ts'
 import { mergeMessageThread } from '../utils/message-helpers.ts'
 import { syncChatSummary } from '../utils/chat-helpers.ts'
 import { extractFirstHttpUrl } from '../utils/format.ts'
@@ -464,6 +464,7 @@ export function useMessages(
       decryptable: true
     }
 
+    cacheSentPlaintext(clientId, plainText)
     replaceActiveMessages(activeChatId, mergeMessageThread(messageItemsRef.current, optimisticMessage), true)
     setDraft('')
     setReplyTargetMessageId(null)

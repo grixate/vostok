@@ -5,6 +5,18 @@ import { decryptMessageText } from '../lib/message-vault.ts'
 import { base64ToBytes } from '../lib/base64.ts'
 import { compareMessageOrder } from './chat-helpers.ts'
 
+// Local plaintext cache for outgoing messages so the sender can read their own
+// messages even when the E2E envelope is not decryptable on the same device.
+const sentPlaintextByClientId = new Map<string, { text: string; attachment?: CachedMessage['attachment'] }>()
+
+export function cacheSentPlaintext(clientId: string, text: string, attachment?: CachedMessage['attachment']) {
+  sentPlaintextByClientId.set(clientId, { text, attachment })
+}
+
+function lookupSentPlaintext(clientId: string | undefined) {
+  return clientId ? sentPlaintextByClientId.get(clientId) ?? null : null
+}
+
 export function parseDecryptedPayload(plaintext: string): {
   text: string
   attachment?: CachedMessage['attachment']
@@ -150,19 +162,23 @@ export async function projectMessage(
       }))
     }
   } catch {
+    const isOutgoing = message.sender_device_id === currentDeviceId
+    const cached = isOutgoing ? lookupSentPlaintext(message.client_id) : null
+
     return {
       id: message.id,
       clientId: message.client_id,
       replyToMessageId: message.reply_to_message_id ?? undefined,
-      text: '[Encrypted envelope available but not decryptable on this device]',
+      text: cached?.text ?? '[Encrypted envelope available but not decryptable on this device]',
       sentAt: message.inserted_at,
       pinnedAt: message.pinned_at ?? undefined,
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
-      side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      side: isOutgoing ? 'outgoing' : 'incoming',
       senderId: message.sender_device_id,
       senderUsername: message.sender_username ?? undefined,
-      decryptable: false,
+      decryptable: !!cached,
+      attachment: cached?.attachment,
       reactions: message.reactions.map((reaction) => ({
         reactionKey: reaction.reaction_key,
         count: reaction.count,
