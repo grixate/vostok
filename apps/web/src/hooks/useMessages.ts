@@ -503,6 +503,7 @@ export function useMessages(
         throw error
       }
     } catch (error) {
+      console.error('[sendDraftMessage] FAILED:', error)
       const message = error instanceof Error ? error.message : 'Failed to send message.'
       setBanner({ tone: 'error', message })
       setDraft(plainText)

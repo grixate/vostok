@@ -46,6 +46,7 @@ export function useChatSessions(
       .filter((device) => {
         const existingSession = chatSessions.find(
           (session) =>
+            session.chat_id === chatId &&
             session.initiator_device_id === storedDevice.deviceId &&
             session.recipient_device_id === device.device_id &&
             session.session_state !== 'superseded'
