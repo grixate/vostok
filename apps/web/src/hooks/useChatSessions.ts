@@ -55,10 +55,21 @@ export function useChatSessions(
         return !existingSession || existingSession.establishment_state !== 'established'
       })
       .map((device) => device.device_id)
-    const initiatorEphemeralKeys =
-      bootstrapTargetDeviceIds.length > 0
-        ? await prepareSessionBootstrap(bootstrapTargetDeviceIds)
-        : {}
+    // All sessions are already established — skip the bootstrap API call entirely.
+    // Calling bootstrap with an empty initiator_ephemeral_keys map is rejected by the
+    // server, and there is nothing new to synchronise anyway.
+    if (bootstrapTargetDeviceIds.length === 0) {
+      const establishedSessions = chatSessions.filter(
+        (session) =>
+          session.chat_id === chatId &&
+          session.initiator_device_id === storedDevice.deviceId &&
+          session.session_state !== 'superseded' &&
+          session.establishment_state === 'established'
+      )
+      return establishedSessions
+    }
+
+    const initiatorEphemeralKeys = await prepareSessionBootstrap(bootstrapTargetDeviceIds)
     const response = await bootstrapChatSessions(storedDevice.sessionToken, chatId, {
       initiator_ephemeral_keys: initiatorEphemeralKeys
     })
