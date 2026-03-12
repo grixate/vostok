@@ -21,5 +21,8 @@ declare module 'phoenix' {
     channel(topic: string, chanParams?: Record<string, unknown>): Channel
     connect(): void
     disconnect(callback?: () => void, code?: number, reason?: string): void
+    onOpen(callback: () => void): void
+    onClose(callback: () => void): void
+    onError(callback: (error: unknown) => void): void
   }
 }

@@ -15,6 +15,7 @@ export type ChatListItemProps = {
   avatarInitial?: string
   online?: boolean
   isFirst?: boolean
+  previewClassName?: string
 }
 
 export function ChatListItem({
@@ -28,7 +29,8 @@ export function ChatListItem({
   avatarColor,
   avatarInitial,
   online,
-  isFirst
+  isFirst,
+  previewClassName
 }: ChatListItemProps) {
   return (
     <div
@@ -51,7 +53,7 @@ export function ChatListItem({
           <span>{timestamp}</span>
         </div>
         <div className="chat-list-item__meta">
-          <span>{preview}</span>
+          <span className={previewClassName}>{preview}</span>
           <div className="chat-list-item__flags">
             {pinned && !unreadCount && (
               <span className="chat-list-item__flag" aria-label="Pinned">

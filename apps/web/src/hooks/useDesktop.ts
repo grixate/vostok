@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import { DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY, DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY } from '../constants.ts'
+import { DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY, DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY, DESKTOP_WINDOW_MAXIMIZED_STORAGE_KEY } from '../constants.ts'
 import { readDesktopWindowGeometry } from '../utils/storage.ts'
-import { readDesktopAlwaysOnTopPreference } from '../utils/desktop-helpers.ts'
+import { readDesktopAlwaysOnTopPreference, readDesktopMaximizedPreference as readSavedMaximizedPreference } from '../utils/desktop-helpers.ts'
 import {
   applyDesktopWindowGeometry,
   closeDesktopWindow,
@@ -45,6 +45,18 @@ export function useDesktop() {
     )
   }, [desktopWindowAlwaysOnTop])
 
+  // Persist maximized state to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined' || desktopWindowMaximized === null) {
+      return
+    }
+
+    window.localStorage.setItem(
+      DESKTOP_WINDOW_MAXIMIZED_STORAGE_KEY,
+      String(desktopWindowMaximized)
+    )
+  }, [desktopWindowMaximized])
+
   useEffect(() => {
     if (!isDesktopShell()) {
       setDesktopRuntime(null)
@@ -64,6 +76,7 @@ export function useDesktop() {
       try {
         const savedGeometry = readDesktopWindowGeometry()
         const savedAlwaysOnTop = readDesktopAlwaysOnTopPreference()
+        const savedMaximized = readSavedMaximizedPreference()
 
         if (savedGeometry) {
           await applyDesktopWindowGeometry(savedGeometry)
@@ -92,13 +105,19 @@ export function useDesktop() {
           })
         ])
 
-        const windowState =
+        let windowState =
           savedAlwaysOnTop === null || savedAlwaysOnTop === initialWindowState.alwaysOnTop
             ? initialWindowState
             : {
                 ...initialWindowState,
                 alwaysOnTop: await applyDesktopWindowAlwaysOnTop(savedAlwaysOnTop)
               }
+
+        // Restore maximized state if it was saved as maximized but the window is not currently maximized
+        if (savedMaximized === true && !windowState.maximized) {
+          const nextMaximized = await toggleDesktopWindowMaximize()
+          windowState = { ...windowState, maximized: nextMaximized }
+        }
 
         if (!cancelled) {
           setDesktopRuntime(runtime)

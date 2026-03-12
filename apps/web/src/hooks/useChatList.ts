@@ -1,24 +1,67 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
 import type { ChatSummary } from '../lib/api.ts'
 import {
   listChats,
   createDirectChat,
+  createSelfChat,
   listDevices,
   fetchMe
 } from '../lib/api.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
 import type { AuthView } from '../types.ts'
 
+const ACTIVE_CHAT_STORAGE_KEY = 'vostok.layout.active_chat_id'
+
+function readPersistedActiveChatId(): string | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return window.localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY) ?? null
+  } catch {
+    return null
+  }
+}
+
+function persistActiveChatId(chatId: string | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (chatId) {
+      window.localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, chatId)
+    } else {
+      window.localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY)
+    }
+  } catch {
+    // Ignore storage errors gracefully.
+  }
+}
+
 export function useChatList(view: AuthView) {
   const { storedDevice, setLoading, setBanner, loading } = useAppContext()
   const [chatItems, setChatItems] = useState<ChatSummary[]>([])
   const [chatFilter, setChatFilter] = useState('')
-  const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [activeChatId, _setActiveChatId] = useState<string | null>(() => readPersistedActiveChatId())
   const [newChatUsername, setNewChatUsername] = useState('')
   const [newGroupTitle, setNewGroupTitle] = useState('')
   const [newGroupMembers, setNewGroupMembers] = useState('')
   const [newMessageMode, setNewMessageMode] = useState(false)
+
+  // Wrap setActiveChatId to persist the selection to localStorage
+  const setActiveChatId = useCallback(
+    (valueOrUpdater: string | null | ((current: string | null) => string | null)) => {
+      _setActiveChatId((current) => {
+        const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(current) : valueOrUpdater
+        persistActiveChatId(next)
+        return next
+      })
+    },
+    []
+  )
 
   useEffect(() => {
     if (view !== 'chat' || !storedDevice) {
@@ -40,16 +83,29 @@ export function useChatList(view: AuthView) {
         let nextChats = chatResponse.chats
 
         if (!nextChats.some((c) => c.is_self_chat)) {
-          const created = await createDirectChat(sessionToken, me.user.username)
+          const created = await createSelfChat(sessionToken)
           nextChats = [created.chat, ...nextChats]
         }
+
+        // Always sort: self-chat first, then everything else by latest_message_at descending
+        nextChats = [
+          ...nextChats.filter((c) => c.is_self_chat),
+          ...nextChats.filter((c) => !c.is_self_chat)
+        ]
 
         if (cancelled) {
           return
         }
 
         setChatItems(nextChats)
-        setActiveChatId((current) => current ?? nextChats[0]?.id ?? null)
+        // Validate the persisted active chat ID: use it if the chat still exists,
+        // otherwise fall back to the first chat in the list.
+        setActiveChatId((current) => {
+          if (current && nextChats.some((c) => c.id === current)) {
+            return current
+          }
+          return nextChats[0]?.id ?? null
+        })
         setNewChatUsername((current) => (current === '' ? me.user.username : current))
 
         if (me.device.prekeys?.replenish_recommended) {
@@ -106,6 +162,24 @@ export function useChatList(view: AuthView) {
       ? chatItems
       : chatItems.filter((chat) => chat.title.toLowerCase().includes(normalizedChatFilter))
 
+  // Contacts derived from existing direct chats (excludes self-chat).
+  // Used by NewMessagePanel to show a searchable list of recent contacts.
+  const recentContacts = useMemo(
+    () =>
+      chatItems
+        .filter((c) => c.type === 'direct' && !c.is_self_chat)
+        .map((c) => ({ username: c.title, chatId: c.id, latestMessageAt: c.latest_message_at }))
+        .sort((a, b) => {
+          if (a.latestMessageAt && b.latestMessageAt) {
+            return b.latestMessageAt.localeCompare(a.latestMessageAt)
+          }
+          if (a.latestMessageAt) return -1
+          if (b.latestMessageAt) return 1
+          return a.username.localeCompare(b.username)
+        }),
+    [chatItems]
+  )
+
   return {
     chatItems,
     setChatItems,
@@ -122,6 +196,7 @@ export function useChatList(view: AuthView) {
     newMessageMode,
     setNewMessageMode,
     visibleChatItems,
+    recentContacts,
     startDirectChatWith,
     handleCreateDirectChat
   }

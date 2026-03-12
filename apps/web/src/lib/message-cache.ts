@@ -19,6 +19,8 @@ export type CachedMessage = {
   editedAt?: string
   deletedAt?: string
   side: 'incoming' | 'outgoing' | 'system'
+  senderId?: string
+  senderUsername?: string
   decryptable: boolean
   attachment?: CachedAttachment
   reactions?: Array<{

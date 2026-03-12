@@ -110,6 +110,8 @@ export async function projectMessage(
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      senderId: message.sender_device_id,
+      senderUsername: message.sender_username ?? undefined,
       decryptable: true,
       reactions: message.reactions.map((reaction) => ({
         reactionKey: reaction.reaction_key,
@@ -137,6 +139,8 @@ export async function projectMessage(
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      senderId: message.sender_device_id,
+      senderUsername: message.sender_username ?? undefined,
       decryptable: true,
       attachment: parsedPayload.attachment,
       reactions: message.reactions.map((reaction) => ({
@@ -156,6 +160,8 @@ export async function projectMessage(
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
       side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      senderId: message.sender_device_id,
+      senderUsername: message.sender_username ?? undefined,
       decryptable: false,
       reactions: message.reactions.map((reaction) => ({
         reactionKey: reaction.reaction_key,

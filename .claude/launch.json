@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "vostok-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=apps/web", "--", "--host", "0.0.0.0"],
+      "port": 5173
+    },
+    {
       "name": "backend",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd /Users/grigorymikhailov/Documents/vostok/.claude/worktrees/upbeat-mendeleev/apps/server && VOSTOK_REGISTRATION_MODE=open mix phx.server"],
+      "runtimeArgs": ["-c", "cd /Users/grixate/Documents/vostok/apps/server && VOSTOK_REGISTRATION_MODE=open CFLAGS='-I/opt/homebrew/opt/openssl@3/include' LDFLAGS='-L/opt/homebrew/opt/openssl@3/lib' mix phx.server"],
       "port": 4000
     }
   ]

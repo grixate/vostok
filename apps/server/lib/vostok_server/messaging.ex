@@ -454,7 +454,7 @@ defmodule VostokServer.Messaging do
       from(message in Message,
         where: message.chat_id == ^chat_id,
         order_by: [asc: message.inserted_at],
-        preload: [recipient_envelopes: ^recipient_query(), reactions: ^reaction_query()]
+        preload: [recipient_envelopes: ^recipient_query(), reactions: ^reaction_query(), sender_device: [:user]]
       )
       |> Repo.all()
       |> Enum.map(&present_message(&1, current_device_id, user_id))
@@ -688,7 +688,7 @@ defmodule VostokServer.Messaging do
         {:ok, %{message: message}} ->
           message =
             message
-            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query())
+            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query(), sender_device: [:user])
             |> Map.from_struct()
             |> Map.take([
               :id,
@@ -883,7 +883,7 @@ defmodule VostokServer.Messaging do
         {:ok, %{message: updated_message}} ->
           updated_message =
             updated_message
-            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query())
+            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query(), sender_device: [:user])
             |> present_message(current_device_id, user_id)
 
           broadcast_message(chat_id, updated_message.id)
@@ -937,7 +937,7 @@ defmodule VostokServer.Messaging do
         {:ok, %{message: deleted_message}} ->
           deleted_message =
             deleted_message
-            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query())
+            |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query(), sender_device: [:user])
             |> present_message(current_device_id, user_id)
 
           broadcast_message(chat_id, deleted_message.id)
@@ -983,7 +983,7 @@ defmodule VostokServer.Messaging do
         message
         |> Message.changeset(%{pinned_at: next_pinned_at})
         |> Repo.update!()
-        |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query())
+        |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query(), sender_device: [:user])
         |> present_message(current_device_id, user_id)
       end)
       |> case do
@@ -1032,7 +1032,7 @@ defmodule VostokServer.Messaging do
         end
 
         message
-        |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query())
+        |> Repo.preload(recipient_envelopes: recipient_query(), reactions: reaction_query(), sender_device: [:user])
         |> present_message(current_device_id, user_id)
       end)
       |> case do
@@ -1921,6 +1921,7 @@ defmodule VostokServer.Messaging do
       sender_key_id: message.sender_key_id,
       sender_key_epoch: message.sender_key_epoch,
       sender_device_id: message.sender_device_id,
+      sender_username: sender_username_for(message),
       inserted_at: DateTime.to_iso8601(message.inserted_at),
       pinned_at: iso_or_nil(message.pinned_at),
       header: encode_binary(message.header),
@@ -1951,6 +1952,9 @@ defmodule VostokServer.Messaging do
   end
 
   defp summarize_reactions(_, _current_user_id), do: []
+
+  defp sender_username_for(%{sender_device: %{user: %{username: username}}}), do: username
+  defp sender_username_for(_), do: nil
 
   defp chat_member_username(%ChatMember{user: %User{username: username}}), do: username
   defp chat_member_username(%{user: %User{username: username}}), do: username

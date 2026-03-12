@@ -1,0 +1,415 @@
+/* ─── Dropdown Menu (Three-dots / Attach popover) ────────────────────────── */
+
+.dropdown-anchor {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  background: var(--bg);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-dropdown);
+  padding: 6px;
+  z-index: 100;
+  animation: dropdown-in 0.15s ease;
+}
+
+.dropdown-menu--bottom {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropdown-menu__item:hover {
+  background: var(--fill);
+}
+
+.dropdown-menu__item--danger {
+  color: var(--danger);
+}
+
+.dropdown-menu__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+/* ─── Right-click Context Menu ───────────────────────────────────────────── */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.overlay-backdrop--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.msg-context-menu {
+  position: fixed;
+  z-index: 201;
+  min-width: 180px;
+  background: var(--bg);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-dropdown);
+  padding: 6px;
+  animation: dropdown-in 0.12s ease;
+}
+
+.msg-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--label);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.msg-context-menu button:hover {
+  background: var(--fill);
+}
+
+.msg-context-menu__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+.msg-context-menu__danger {
+  color: var(--danger) !important;
+}
+
+.msg-context-menu__item--focused {
+  background: var(--fill);
+}
+
+.msg-context-menu__item--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.msg-context-menu__reactions {
+  display: flex;
+  gap: 2px;
+  padding: 4px 4px 2px;
+}
+
+.msg-context-menu__reaction-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.1s;
+}
+
+.msg-context-menu__reaction-btn:hover {
+  background: var(--fill);
+  transform: scale(1.2);
+}
+
+.msg-context-menu button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.msg-context-menu button:disabled:hover {
+  background: none;
+}
+
+/* ─── Profile Overlay (Burger Menu) ──────────────────────────────────────── */
+
+.profile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 320px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.10);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms ease;
+}
+
+.profile-overlay--visible {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-theme="dark"] .profile-overlay {
+  background: rgba(28, 28, 30, 0.85);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.30);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .profile-overlay {
+    background: rgba(28, 28, 30, 0.85);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.30);
+  }
+}
+
+.profile-overlay__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 0.5px solid var(--sep);
+}
+
+.profile-overlay__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  font-weight: var(--emphasis-weight);
+  flex-shrink: 0;
+}
+
+.profile-overlay__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-overlay__info strong {
+  font-size: 16px;
+  font-weight: var(--emphasis-weight);
+}
+
+.profile-overlay__info span {
+  font-size: 13px;
+  color: var(--label2);
+}
+
+.profile-overlay__close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--label2);
+  cursor: pointer;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.profile-overlay__close:hover {
+  background: var(--fill);
+}
+
+.profile-overlay__actions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+
+.profile-overlay__actions button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--label);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-overlay__actions button:hover {
+  background: var(--fill);
+}
+
+.profile-overlay__sep {
+  height: 0.5px;
+  background: var(--sep);
+  margin: 4px 12px;
+}
+
+.profile-overlay__danger {
+  color: var(--danger) !important;
+}
+
+/* ─── Settings Overlay ───────────────────────────────────────────────────── */
+
+.settings-overlay__title {
+  font-size: 17px;
+  font-weight: var(--emphasis-weight);
+  flex: 1;
+}
+
+.settings-overlay__section {
+  padding: 8px 8px 4px;
+  border-bottom: 0.5px solid var(--sep);
+}
+
+.settings-overlay__section:last-child {
+  border-bottom: none;
+}
+
+.settings-overlay__section-title {
+  font-size: 12px;
+  font-weight: var(--emphasis-weight);
+  color: var(--label3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 12px 6px;
+}
+
+.settings-overlay__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--label);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-overlay__row:hover {
+  background: var(--fill);
+}
+
+.settings-overlay__row--info {
+  cursor: default;
+  align-items: flex-start;
+}
+
+.settings-overlay__row--info:hover {
+  background: none;
+}
+
+.settings-overlay__row--danger {
+  color: var(--danger);
+}
+
+/* ─── Reaction / Context / Call ────────────────────────────────────────────── */
+
+.reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg) !important;
+  border-radius: 12px !important;
+}
+
+.reaction-bar__chip {
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--label);
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.context-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  background: var(--bg) !important;
+  border-radius: 12px !important;
+}
+
+.context-menu__item {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--label);
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 15px;
+}
+
+.context-menu__item:hover {
+  background: var(--fill);
+}
+
+.call-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg2) !important;
+  border-radius: 12px !important;
+}
+
+.call-surface__mode {
+  font-size: 11px;
+  font-weight: var(--emphasis-weight);
+  text-transform: uppercase;
+  color: var(--label2);
+}
+
+.call-surface__copy {
+  color: var(--label2);
+  font-size: 13px;
+}

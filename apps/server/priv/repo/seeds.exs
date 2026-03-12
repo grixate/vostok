@@ -112,10 +112,11 @@ user_specs = [
 users_data =
   Enum.map(user_specs, fn spec ->
     {identity_pub, _identity_priv} = generate_keypair.()
-    {device_pub, _device_priv} = generate_keypair.()
-    {enc_pub, _enc_priv} = :crypto.generate_key(:ecdh, :x25519)
-    signed_prekey = :crypto.strong_rand_bytes(32)
-    signed_prekey_sig = :crypto.strong_rand_bytes(64)
+    {device_pub, device_priv} = generate_keypair.()
+    {enc_pub, _enc_priv} = :crypto.generate_key(:ecdh, :prime256v1)
+    {spk_pub, _spk_priv} = :crypto.generate_key(:ecdh, :prime256v1)
+    signed_prekey = spk_pub
+    signed_prekey_sig = :crypto.sign(:eddsa, :none, spk_pub, [device_priv, :ed25519])
 
     user =
       %User{}
@@ -137,6 +138,16 @@ users_data =
         last_active_at: now
       })
       |> Repo.insert!()
+
+    # Generate 20 one-time prekeys (ECDH P-256)
+    for _i <- 1..20 do
+      {otpk_pub, _otpk_priv} = :crypto.generate_key(:ecdh, :prime256v1)
+
+      %OneTimePrekey{}
+      |> OneTimePrekey.changeset(%{public_key: otpk_pub})
+      |> Ecto.Changeset.put_assoc(:device, device)
+      |> Repo.insert!()
+    end
 
     token = create_session.(device)
 
@@ -241,16 +252,17 @@ IO.puts("")
 # ── 4. Create Messages ────────────────────────────────────────────────
 
 # Helper: insert a message with a given offset in minutes from `now`
-insert_message = fn chat, sender_username, message_kind, minutes_ago, opts ->
+# Uses message_kind "system" so the client can decode text without E2EE decryption.
+insert_message = fn chat, sender_username, _message_kind, minutes_ago, opts ->
   sender = users[sender_username]
   ts = DateTime.add(now, -minutes_ago * 60, :second)
-  # Dummy ciphertext – the server treats this as opaque
-  dummy_ciphertext = :crypto.strong_rand_bytes(64)
+  text = opts[:text] || "Hello"
+  ciphertext = text
 
   attrs = %{
     client_id: Ecto.UUID.generate(),
-    ciphertext: dummy_ciphertext,
-    message_kind: message_kind,
+    ciphertext: ciphertext,
+    message_kind: "system",
     pinned_at: opts[:pinned] && ts,
     edited_at: opts[:edited] && DateTime.add(ts, 120, :second),
     deleted_at: opts[:deleted] && DateTime.add(ts, 300, :second)
@@ -265,52 +277,108 @@ end
 
 # Group 1 conversation (Project Alpha)
 g1_messages = [
-  insert_message.(group1, "alice", "text", 120, %{}),
-  insert_message.(group1, "bob", "text", 115, %{}),
-  insert_message.(group1, "carol", "text", 110, %{}),
-  insert_message.(group1, "alice", "text", 100, %{}),
-  insert_message.(group1, "dave", "text", 95, %{}),
-  insert_message.(group1, "bob", "media", 90, %{}),
-  insert_message.(group1, "alice", "text", 85, %{pinned: true}),
-  insert_message.(group1, "carol", "attachment", 80, %{}),
-  insert_message.(group1, "dave", "text", 75, %{}),
-  insert_message.(group1, "alice", "text", 60, %{edited: true}),
-  insert_message.(group1, "bob", "text", 50, %{}),
-  insert_message.(group1, "carol", "media", 40, %{}),
-  insert_message.(group1, "dave", "text", 30, %{}),
-  insert_message.(group1, "alice", "text", 20, %{}),
-  insert_message.(group1, "bob", "text", 10, %{})
+  insert_message.(group1, "alice", "text", 120, %{text: "Hey everyone, just pushed the new auth module. Can you review before EOD?"}),
+  insert_message.(group1, "bob", "text", 115, %{text: "On it. Anything specific you want me to focus on?"}),
+  insert_message.(group1, "carol", "text", 110, %{text: "I'll check the edge cases around token expiry — that was buggy last sprint."}),
+  insert_message.(group1, "alice", "text", 100, %{text: "Yes, especially the refresh logic. And make sure the rate limiting tests pass."}),
+  insert_message.(group1, "dave", "text", 95, %{text: "Heads up — CI is red on main right now. Looks like a flaky integration test."}),
+  insert_message.(group1, "bob", "text", 90, %{text: "Found it — the test was using a hardcoded port that conflicts. I'll fix."}),
+  insert_message.(group1, "alice", "text", 85, %{text: "📌 Sprint goal: ship the auth refactor + logging pipeline before Friday.", pinned: true}),
+  insert_message.(group1, "carol", "text", 80, %{text: "Review done. Left 3 comments, mostly minor. LGTM overall 👍"}),
+  insert_message.(group1, "dave", "text", 75, %{text: "Merged. Thanks Carol. Deploy to staging in ~10 min."}),
+  insert_message.(group1, "alice", "text", 60, %{text: "Staging looks good. Latency is actually down 15ms on the auth endpoints.", edited: true}),
+  insert_message.(group1, "bob", "text", 50, %{text: "Nice. Production deploy scheduled for tomorrow 10am UTC. Everyone available to monitor?"}),
+  insert_message.(group1, "carol", "text", 40, %{text: "I'll be online. Setting up Grafana alerts now."}),
+  insert_message.(group1, "dave", "text", 30, %{text: "Same. I'll keep an eye on the DB connection pool."}),
+  insert_message.(group1, "alice", "text", 20, %{text: "Great. Let's do a quick sync at 9:45 before the deploy window."}),
+  insert_message.(group1, "bob", "text", 10, %{text: "👋 Just a reminder — standup is async today, drop notes in the thread."}),
 ]
 
 # Group 2 conversation (Weekend Plans)
 g2_messages = [
-  insert_message.(group2, "eve", "text", 200, %{}),
-  insert_message.(group2, "frank", "text", 190, %{}),
-  insert_message.(group2, "alice", "text", 180, %{}),
-  insert_message.(group2, "bob", "text", 170, %{}),
-  insert_message.(group2, "eve", "media", 160, %{}),
-  insert_message.(group2, "frank", "text", 150, %{}),
-  insert_message.(group2, "alice", "attachment", 140, %{}),
-  insert_message.(group2, "eve", "text", 130, %{}),
-  insert_message.(group2, "bob", "text", 120, %{}),
-  insert_message.(group2, "frank", "text", 100, %{pinned: true}),
-  insert_message.(group2, "eve", "text", 80, %{}),
-  insert_message.(group2, "alice", "media", 60, %{})
+  insert_message.(group2, "eve", "text", 200, %{text: "Anyone up for hiking this Saturday? Trail conditions look good after the rain."}),
+  insert_message.(group2, "frank", "text", 190, %{text: "I'm in! Which trail are you thinking?"}),
+  insert_message.(group2, "alice", "text", 180, %{text: "The ridge loop? It's about 12km with good views at the top."}),
+  insert_message.(group2, "bob", "text", 170, %{text: "Sounds perfect. What time? Morning start is better before it gets hot."}),
+  insert_message.(group2, "eve", "text", 160, %{text: "Let's meet at the trailhead parking lot at 8am. I'll bring snacks."}),
+  insert_message.(group2, "frank", "text", 150, %{text: "I can bring coffee and the portable speaker 🎵"}),
+  insert_message.(group2, "alice", "text", 140, %{text: "Amazing. I'll pack extra water and a first aid kit just in case."}),
+  insert_message.(group2, "eve", "text", 130, %{text: "Frank — remember to bring actual hiking boots this time 😂"}),
+  insert_message.(group2, "bob", "text", 120, %{text: "Haha the sandal incident. Still a legend."}),
+  insert_message.(group2, "frank", "text", 100, %{text: "📌 Saturday 8am — Ridge loop trailhead. Bring boots. 🥾", pinned: true}),
+  insert_message.(group2, "eve", "text", 80, %{text: "Weather forecast looks clear 🌤 Can't wait!"}),
+  insert_message.(group2, "alice", "text", 60, %{text: "See you all Saturday! This is going to be a great weekend."}),
 ]
 
-# Direct chat messages
+# Direct chat messages — each pair gets a contextually appropriate conversation
+dm_texts = %{
+  {"alice", "bob"} => [
+    "Hey Bob, did you get a chance to look at the spec I sent over?",
+    "Yeah, read it this morning. I have a few questions about the API design.",
+    "Sure, shoot. I'm free to chat for the next hour.",
+    "The pagination approach — are we going cursor-based or offset?",
+    "Cursor-based. Offset doesn't scale well with our data volume.",
+    "Makes sense. I'll update my implementation accordingly.",
+    "Let me know if you need me to review your PR when it's ready.",
+    "Will do. Should be up by end of day. Thanks Alice!"
+  ],
+  {"alice", "carol"} => [
+    "Carol, can you take a look at the load testing results when you get a chance?",
+    "Just pulled them up. P99 looks a bit high on the /auth endpoint.",
+    "Yeah, we're seeing spikes under concurrent load. Any ideas?",
+    "Might be connection pool exhaustion. What's the pool size set to?",
+    "20 connections. We might need to bump it.",
+    "Try 50 and see if it stabilizes. Also check for any N+1 queries.",
+    "Good call — found one in the user sessions query. Fixing now.",
+    "Nice catch. Let me know how the next load test goes!"
+  ],
+  {"bob", "dave"} => [
+    "Dave, are you blocked on anything? Haven't seen any commits from you today.",
+    "Yeah, the Docker environment is broken. Can't get the db to connect inside the container.",
+    "Check your docker-compose.yml — the service name needs to match the DB_HOST env var.",
+    "Oh! It was DATABASE_URL pointing to localhost instead of the service name. Fixed.",
+    "Classic mistake. Glad it's sorted. What are you working on?",
+    "The new import pipeline. Should have a draft PR up tomorrow.",
+    "Cool, tag me for review. I know that code well.",
+    "Will do. Also — are we doing code review pairing this week?"
+  ],
+  {"eve", "frank"} => [
+    "Frank! Did you see the new design mockups Figma sent over?",
+    "Not yet — are they for the dashboard redesign?",
+    "Yes! They look really clean. The sidebar especially.",
+    "Okay I'm looking now... wow these are nice. Much better than the current layout.",
+    "Right? I want to get started on the implementation ASAP.",
+    "Let's split it — I can take the sidebar and you do the main content area?",
+    "Perfect split. I'll create tickets in Linear.",
+    "Sounds like a plan. Let's sync tomorrow morning to align on the approach."
+  ],
+  {"carol", "eve"} => [
+    "Eve, quick question — what's the status on the API documentation?",
+    "About 80% done. Just finishing the WebSocket events section.",
+    "We need it by Thursday for the partner integration call.",
+    "I'll have it done Wednesday evening. Want me to send you a draft first?",
+    "Yes please! I'd like to review the auth section especially.",
+    "On it. I'll ping you when the draft is ready — probably later today.",
+    "Great, thanks Eve. The partners are really excited about this integration.",
+    "Me too! It's a solid use case. Talk soon 😊"
+  ]
+}
+
 dm_messages =
   Enum.flat_map(direct_chats, fn {u1, u2, chat} ->
-    [
-      insert_message.(chat, u1, "text", 300, %{}),
-      insert_message.(chat, u2, "text", 290, %{}),
-      insert_message.(chat, u1, "text", 280, %{}),
-      insert_message.(chat, u2, "media", 250, %{}),
-      insert_message.(chat, u1, "text", 200, %{}),
-      insert_message.(chat, u2, "text", 150, %{}),
-      insert_message.(chat, u1, "attachment", 100, %{}),
-      insert_message.(chat, u2, "text", 50, %{})
-    ]
+    key = {u1, u2}
+    texts = Map.get(dm_texts, key, [
+      "Hey!", "Hi there!", "How's it going?", "Pretty good, thanks.",
+      "Working on some interesting stuff.", "Same here.", "Let's catch up soon.", "Definitely!"
+    ])
+
+    texts
+    |> Enum.with_index()
+    |> Enum.map(fn {text, idx} ->
+      sender = if rem(idx, 2) == 0, do: u1, else: u2
+      minutes_ago = 300 - idx * 30
+      insert_message.(chat, sender, "text", minutes_ago, %{text: text})
+    end)
   end)
 
 total_messages = length(g1_messages) + length(g2_messages) + length(dm_messages)

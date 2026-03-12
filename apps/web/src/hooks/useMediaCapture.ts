@@ -593,11 +593,12 @@ export function useMediaCapture(
     fileInputRef,
     voiceNoteRecorderRef,
     voiceRecordingTimerRef,
+    roundVideoStreamRef,
     cleanupVoiceNoteCapture,
     sendAttachmentFile,
     handleAttachmentPick,
     handleVoiceNoteToggle,
-    _handleRoundVideoToggle,
+    handleRoundVideoToggle: _handleRoundVideoToggle,
     ensureAttachmentPlaybackUrl,
     handleDownloadAttachment
   }

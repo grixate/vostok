@@ -20,8 +20,20 @@
         "resizable": true
       }
     ],
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/icon.png",
+      "tooltip": "Vostok"
+    },
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["vostok"]
+      }
     }
   },
   "bundle": {

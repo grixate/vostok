@@ -94,6 +94,7 @@ export type ChatMessage = {
   sender_key_id: string | null
   sender_key_epoch: number | null
   sender_device_id: string
+  sender_username: string | null
   inserted_at: string
   pinned_at: string | null
   edited_at: string | null
@@ -368,6 +369,13 @@ export async function listDevices(token: string): Promise<{ devices: DeviceInfo[
   })
 }
 
+export async function listUsers(token: string): Promise<{ users: { id: string; username: string }[] }> {
+  return apiRequest<{ users: { id: string; username: string }[] }>('/users', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
 export async function revokeDevice(
   token: string,
   deviceId: string
@@ -428,6 +436,13 @@ export async function createDirectChat(token: string, username: string): Promise
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({ username })
+  })
+}
+
+export async function createSelfChat(token: string): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>('/chats/self', {
+    method: 'POST',
+    headers: authHeader(token)
   })
 }
 

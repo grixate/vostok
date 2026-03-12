@@ -20,15 +20,37 @@ export type ColorTokens = {
 
 export type TypographyTokens = {
   family: string
+  heading: string
   title: string
   body: string
   caption: string
+  micro: string
 }
 
 export type MotionTokens = {
   fast: string
   base: string
   slow: string
+}
+
+export const darkColors: ColorTokens = {
+  bg: '#1C1C1E',
+  bgSecondary: '#2C2C2E',
+  bgTertiary: '#3A3A3C',
+  accent: '#0A84FF',
+  accentSoft: 'rgba(10, 132, 255, 0.15)',
+  label: '#FFFFFF',
+  labelSecondary: 'rgba(235, 235, 245, 0.60)',
+  labelTertiary: 'rgba(235, 235, 245, 0.30)',
+  fill: 'rgba(120, 120, 128, 0.24)',
+  separator: '#38383A',
+  separatorOpaque: '#48484A',
+  bubbleIncoming: '#2C2C2E',
+  bubbleOutgoing: '#1A472A',
+  bubbleSystem: 'rgba(0, 0, 0, 0.30)',
+  online: '#30D158',
+  danger: '#FF453A',
+  success: '#30D158',
 }
 
 export const colors: ColorTokens = {
@@ -52,11 +74,17 @@ export const colors: ColorTokens = {
 }
 
 export const radius = {
-  sm: "10px",
-  md: "14px",
-  lg: "18px",
+  sm: "8px",
+  md: "12px",
+  lg: "17px",
   xl: "20px",
   pill: "999px"
+} as const
+
+export const shadows = {
+  separator: "1px 0 0 0 rgba(0,0,0,0.06)",
+  panel: "0 4px 24px rgba(0,0,0,0.08)",
+  dropdown: "0 4px 24px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06)"
 } as const
 
 export const spacing = {
@@ -70,9 +98,11 @@ export const spacing = {
 
 export const typography: TypographyTokens = {
   family: "-apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
-  title: "600 17px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
-  body: "400 15px/1.4 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
-  caption: "400 13px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif"
+  heading: "700 20px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  title: "510 15px/1.2 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  body: "400 14px/1.4 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  caption: "400 12px/1.3 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif",
+  micro: "510 11px/1.15 -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif"
 }
 
 export const motion: MotionTokens = {
@@ -83,8 +113,11 @@ export const motion: MotionTokens = {
 
 export const viewport = {
   chatRowHeight: 78,
-  avatarList: 52,
-  avatarHeader: 36,
-  sidebarWidth: 320,
+  avatarList: 62,
+  avatarHeader: 48,
+  avatarCompact: 40,
+  sidebarWidth: 380,
+  settingsRowHeight: 52,
+  detailRailWidth: 360,
   desktopBreakpoint: 960
 } as const

@@ -60,6 +60,16 @@ fn main() {
             desktop_window_maximized,
             desktop_close_window
         ])
+        // TODO: Add system tray when tauri-plugin-tray is installed:
+        // .plugin(tauri_plugin_tray::init())
+        // Tray menu items: Open, Mute All, separator, Quit
+        //
+        // TODO: Add notification support when tauri-plugin-notification is installed:
+        // .plugin(tauri_plugin_notification::init())
+        //
+        // TODO: Add deep link support when tauri-plugin-deep-link is installed:
+        // .plugin(tauri_plugin_deep_link::init())
+        // Protocol: vostok:// (configured in tauri.conf.json)
         .run(tauri::generate_context!())
         .expect("failed to run Vostok desktop shell");
 }

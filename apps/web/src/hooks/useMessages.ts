@@ -629,6 +629,17 @@ export function useMessages(
     }
   }
 
+  async function handleToggleReaction(messageId: string, activeChatId: string | null, reactionKey: string) {
+    if (!storedDevice || !activeChatId) return
+    try {
+      const response = await toggleMessageReaction(storedDevice.sessionToken, activeChatId, messageId, reactionKey)
+      await ingestMessageIntoActiveThread(response.message, activeChatId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update reaction.'
+      setBanner({ tone: 'error', message })
+    }
+  }
+
   // This is a no-op placeholder used where chat session clearing was needed in the original
   function setChatSessions_noop() {
     // Chat sessions are managed by useChatSessions hook
@@ -652,6 +663,7 @@ export function useMessages(
     handleDeleteExistingMessage,
     handleToggleMessagePin,
     _handleQuickReaction,
+    handleToggleReaction,
     buildEncryptedMessagePayload,
     replaceActiveMessages,
     ingestMessageIntoActiveThread,

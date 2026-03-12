@@ -1,4 +1,4 @@
-import { DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY } from '../constants.ts'
+import { DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY, DESKTOP_WINDOW_MAXIMIZED_STORAGE_KEY } from '../constants.ts'
 
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -20,6 +20,24 @@ export function readDesktopAlwaysOnTopPreference(): boolean | null {
   }
 
   const raw = window.localStorage.getItem(DESKTOP_ALWAYS_ON_TOP_STORAGE_KEY)
+
+  if (raw === 'true') {
+    return true
+  }
+
+  if (raw === 'false') {
+    return false
+  }
+
+  return null
+}
+
+export function readDesktopMaximizedPreference(): boolean | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(DESKTOP_WINDOW_MAXIMIZED_STORAGE_KEY)
 
   if (raw === 'true') {
     return true

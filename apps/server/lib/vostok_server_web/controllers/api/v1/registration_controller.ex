@@ -4,10 +4,12 @@ defmodule VostokServerWeb.Api.V1.RegistrationController do
   alias Ecto.Changeset
   alias VostokServer.Auth
   alias VostokServer.Identity
+  alias VostokServer.Messaging
 
   def create(conn, params) do
     with {:ok, registration} <- Identity.register_device(params),
-         {:ok, session} <- Auth.issue_session_for_device(registration.device) do
+         {:ok, session} <- Auth.issue_session_for_device(registration.device),
+         _ <- Messaging.ensure_self_chat(registration.user) do
       conn
       |> put_status(:created)
       |> json(%{

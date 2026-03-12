@@ -13,6 +13,23 @@ type CallStateHandler = {
   onError?: () => void
 }
 
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+let connectionStatus: ConnectionStatus = 'disconnected'
+const statusListeners = new Set<(s: ConnectionStatus) => void>()
+
+function notifyStatusListeners() {
+  for (const cb of statusListeners) {
+    cb(connectionStatus)
+  }
+}
+
+export function subscribeToConnectionStatus(cb: (s: ConnectionStatus) => void): () => void {
+  statusListeners.add(cb)
+  cb(connectionStatus)
+  return () => statusListeners.delete(cb)
+}
+
 let deviceSocket: Socket | null = null
 let deviceSocketToken: string | null = null
 
@@ -91,6 +108,14 @@ function ensureDeviceSocket(token: string): Socket {
     params: { token }
   })
   deviceSocketToken = token
+
+  connectionStatus = 'connecting'
+  notifyStatusListeners()
+
+  deviceSocket.onOpen(() => { connectionStatus = 'connected'; notifyStatusListeners() })
+  deviceSocket.onClose(() => { connectionStatus = 'disconnected'; notifyStatusListeners() })
+  deviceSocket.onError(() => { connectionStatus = 'error'; notifyStatusListeners() })
+
   deviceSocket.connect()
 
   return deviceSocket
