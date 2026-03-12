@@ -250,6 +250,7 @@
 }
 
 .message-bubble__content {
+  flex: 1;
   padding: 0;
   background: none;
   border-radius: 0;
@@ -257,12 +258,6 @@
   font: var(--type-body);
   letter-spacing: -0.08px;
   word-break: break-word;
-}
-
-.message-bubble__content::after {
-  content: '';
-  display: block;
-  clear: both;
 }
 
 .message-bubble--incoming .message-bubble__content {
@@ -347,13 +342,11 @@
 }
 
 .message-bubble__state {
-  float: right;
-  clear: none;
-  display: inline-flex;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 3px;
-  margin-left: 12px;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 12px;
   line-height: 16px;
   color: var(--label2);

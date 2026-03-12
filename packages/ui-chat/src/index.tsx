@@ -154,6 +154,7 @@ export function MessageBubble({
   return (
     <div className={cx('message-bubble', `message-bubble--${side}`, className)} {...props}>
       <div className="message-bubble__content">
+        {children}
         {side !== 'system' ? (
           <div className="message-bubble__state">
             {side === 'outgoing' && state === 'read' && (
@@ -172,7 +173,6 @@ export function MessageBubble({
             {timestamp && <span>{timestamp}</span>}
           </div>
         ) : null}
-        {children}
       </div>
     </div>
   )
