@@ -1,3 +1,5 @@
+import { ChatCircle, Users, GearSix } from '@phosphor-icons/react'
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react'
 import type { SidebarTab } from '../../contexts/UIContext.tsx'
 
 type BottomTabBarProps = {
@@ -6,10 +8,10 @@ type BottomTabBarProps = {
 }
 
 export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
-  const tabs: { id: SidebarTab; label: string; icon: string }[] = [
-    { id: 'chats', label: 'Chats', icon: '💬' },
-    { id: 'members', label: 'Members', icon: '👥' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  const tabs: { id: SidebarTab; label: string; Icon: PhosphorIcon }[] = [
+    { id: 'chats', label: 'Chats', Icon: ChatCircle },
+    { id: 'members', label: 'Members', Icon: Users },
+    { id: 'settings', label: 'Settings', Icon: GearSix },
   ]
 
   return (
@@ -22,7 +24,7 @@ export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
           onClick={() => onTabChange(tab.id)}
           aria-label={tab.label}
         >
-          <span className="sidebar__tab-icon">{tab.icon}</span>
+          <tab.Icon size={24} weight={activeTab === tab.id ? 'fill' : 'regular'} className="sidebar__tab-icon" />
           <span className="sidebar__tab-label">{tab.label}</span>
         </button>
       ))}

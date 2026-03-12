@@ -5,10 +5,8 @@
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  background: var(--bg2);
+  background: var(--bg);
 }
-
-/* Detail rail visibility is now handled by .detail-rail--hidden with animated transitions */
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 
@@ -18,7 +16,7 @@
   }
 }
 
-@media (max-width: 959px) {
+@media (max-width: 899px) {
   .app-shell {
     flex-direction: column;
   }

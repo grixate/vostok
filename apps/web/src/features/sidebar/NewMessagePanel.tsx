@@ -1,16 +1,10 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
 import { SearchIcon } from '../../icons/index.tsx'
+import { peerColor } from '../../utils/avatar-colors.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 
 type NewMessagePanelProps = {
   chatList: ReturnType<typeof useChatList>
-}
-
-function avatarColor(username: string): string {
-  const colors = ['#5C7CFF', '#FF6B6B', '#51CF66', '#FF922B', '#CC5DE8', '#22B8CF', '#F06595']
-  let hash = 0
-  for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash)
-  return colors[Math.abs(hash) % colors.length]
 }
 
 function ContactRow({
@@ -41,7 +35,7 @@ function ContactRow({
     >
       <span
         className="new-message-contact__avatar"
-        style={{ background: avatarColor(username) }}
+        style={{ background: peerColor(username) }}
         aria-hidden="true"
       >
         {username[0]?.toUpperCase() ?? '?'}

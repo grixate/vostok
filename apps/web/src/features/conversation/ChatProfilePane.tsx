@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { ChatSummary } from '../../lib/api.ts'
 import { ChevronLeftIcon } from '../../icons/index.tsx'
+import { chatAvatarColor, peerColor } from '../../utils/avatar-colors.ts'
 
 type ChatProfilePaneProps = {
   activeChat: ChatSummary
@@ -19,11 +20,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const avatarColor = activeChat.is_self_chat
-    ? '#007AFF'
-    : activeChat.type === 'group'
-      ? '#4CD964'
-      : '#5856D6'
+  const avatarColor = chatAvatarColor(activeChat.title, activeChat.is_self_chat)
 
   const avatarInitial = activeChat.is_self_chat
     ? '\uD83D\uDD16'
@@ -70,7 +67,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
               <div key={member.username} className="chat-profile-pane__member">
                 <div
                   className="chat-profile-pane__member-avatar"
-                  style={{ background: '#5856D6' }}
+                  style={{ background: peerColor(member.username) }}
                 >
                   {member.username.slice(0, 1).toUpperCase()}
                 </div>

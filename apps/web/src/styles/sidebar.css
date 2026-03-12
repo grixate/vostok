@@ -3,9 +3,8 @@
 .sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--bg) 92%, var(--accent) 8%);
-  border-right: none;
-  box-shadow: var(--shadow-separator);
+  background: var(--bg2);
+  border-right: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -32,9 +31,9 @@
 }
 
 .sidebar__title {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.43px;
+  font-size: 16px;
+  font-weight: var(--emphasis-weight);
+  letter-spacing: -0.3px;
   color: var(--label);
 }
 
@@ -42,52 +41,60 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--accent);
+  color: var(--label2);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: opacity 0.1s;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background 100ms ease, color 100ms ease;
 }
 
 .sidebar__compose-btn:hover {
-  opacity: 0.7;
+  background: var(--bg-hover);
+  color: var(--label);
 }
 
 .sidebar__hamburger-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--accent);
+  color: var(--label2);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
-  border-radius: 8px;
-  transition: background 0.12s;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background 100ms ease, color 100ms ease;
 }
 
 .sidebar__hamburger-btn:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
+  color: var(--label);
 }
 
 .sidebar__back-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--accent);
+  color: var(--label2);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  transition: background 0.12s;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background 100ms ease, color 100ms ease;
   padding: 0;
 }
 
 .sidebar__back-btn:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
+  color: var(--label);
 }
 
 /* ─── New Message inline search ─────────────────────────────────────────── */
@@ -97,12 +104,12 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 16px;
-  border-bottom: 1px solid var(--sep);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .new-message-search__to {
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: var(--emphasis-weight);
   color: var(--label2);
   white-space: nowrap;
 }
@@ -111,7 +118,7 @@
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--label);
   outline: none;
   padding: 4px 0;
@@ -132,9 +139,9 @@
   display: inline-block;
   margin-bottom: 0.25rem;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: var(--emphasis-weight);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -144,34 +151,22 @@
   overflow-x: hidden;
 }
 
-.sidebar__list::-webkit-scrollbar {
-  width: 3px;
-}
-
-.sidebar__list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar__list::-webkit-scrollbar-thumb {
-  background: var(--label3);
-  border-radius: 2px;
-}
-
 /* ─── Search Bar ──────────────────────────────────────────────────────────── */
 
 .search-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--fill);
-  border-radius: var(--input-radius);
-  padding: 7px 10px;
+  gap: 8px;
+  background: var(--bg-input);
+  border-radius: 18px;
+  padding: 0 12px;
+  height: 36px;
   margin-bottom: 8px;
   cursor: text;
 }
 
 .search-bar__icon {
-  color: var(--label2);
+  color: var(--label3);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -181,16 +176,16 @@
   border: none;
   background: transparent;
   flex: 1;
-  font-size: 15px;
+  font-size: 13px;
   font-family: var(--font);
   color: var(--label);
   outline: none;
-  letter-spacing: -0.23px;
+  letter-spacing: -0.08px;
   -webkit-appearance: none;
 }
 
 .search-bar__input::placeholder {
-  color: var(--label2);
+  color: var(--label3);
 }
 
 /* ─── Chat List Item ──────────────────────────────────────────────────────── */
@@ -207,45 +202,39 @@
 }
 
 .chat-list-button:hover {
-  background: rgba(0, 0, 0, 0.015);
-}
-
-[data-theme="dark"] .chat-list-button:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] .chat-list-button:hover {
-    background: rgba(255, 255, 255, 0.03);
-  }
+  background: var(--bg-hover);
 }
 
 .chat-list-button:focus-visible {
-  outline: 2px solid rgba(0, 139, 255, 0.5);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .chat-list-item {
   display: flex;
   align-items: center;
-  height: 78px;
-  padding: 0 16px 0 10px;
+  height: 72px;
+  padding: 8px 12px;
+  gap: 12px;
   background: transparent;
-  border-left: 3px solid transparent;
-  transition: background 0.1s ease;
-}
-
-.chat-list-item:hover {
-  background: rgba(0, 0, 0, 0.03);
+  transition: background 100ms ease;
 }
 
 .chat-list-item--active {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
+  background: var(--bg-active);
 }
 
 .chat-list-item--active:hover {
-  background: var(--accent-soft);
+  background: var(--bg-active-hover);
+}
+
+.chat-list-item--active .chat-list-item__topline strong,
+.chat-list-item--active .chat-list-item__topline span,
+.chat-list-item--active .chat-list-item__meta span {
+  color: var(--text-on-accent);
+}
+
+.chat-list-item--active .chat-list-item__meta span {
+  opacity: 0.75;
 }
 
 .chat-list-item--pinned {
@@ -253,25 +242,7 @@
 }
 
 .chat-list-item--pinned:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .chat-list-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-[data-theme="dark"] .chat-list-item--pinned:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] .chat-list-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  [data-theme="system"] .chat-list-item--pinned:hover {
-    background: rgba(255, 255, 255, 0.06);
-  }
+  background: var(--bg-hover);
 }
 
 .chat-list-item__avatar {
@@ -282,22 +253,21 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 10px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: var(--emphasis-weight);
   color: white;
   position: relative;
 }
 
 .chat-list-item__online-dot {
   position: absolute;
-  bottom: 1px;
-  right: 1px;
-  width: 13px;
-  height: 13px;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--green);
-  border: 2.5px solid var(--bg);
+  border: 2px solid var(--bg2);
   z-index: 1;
 }
 
@@ -308,12 +278,10 @@
 .chat-list-item__body {
   flex: 1;
   min-width: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
-  border-top: 0.5px solid var(--sep);
+  gap: 4px;
 }
 
 .chat-list-item__body--first {
@@ -323,13 +291,12 @@
 .chat-list-item__topline {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .chat-list-item__topline strong {
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.43px;
+  font-size: 14px;
+  font-weight: var(--emphasis-weight);
   color: var(--label);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -342,7 +309,6 @@
   font-size: 13px;
   font-weight: 400;
   color: var(--label2);
-  letter-spacing: -0.08px;
   white-space: nowrap;
   flex-shrink: 0;
   margin-left: auto;
@@ -361,8 +327,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
-  letter-spacing: -0.23px;
+  font-size: 13px;
   color: var(--label2);
 }
 
@@ -382,7 +347,7 @@
 }
 
 .chat-list-item__badge {
-  border-radius: 100px;
+  border-radius: 10px;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
@@ -391,15 +356,13 @@
   justify-content: center;
   font-size: 12px;
   font-weight: var(--emphasis-weight);
-  letter-spacing: -0.08px;
   background: var(--accent);
-  color: #fff;
-  transition: transform 0.15s ease;
+  color: var(--text-on-accent);
+  transition: transform 150ms ease;
 }
 
 .chat-list-item__badge--muted {
-  background: var(--fill);
-  color: var(--label2);
+  background: var(--label3);
 }
 
 /* ─── User List Overlay (New Message) ────────────────────────────────────── */
@@ -411,14 +374,14 @@
   transform: translate(-50%, -50%);
   width: 400px;
   max-height: 500px;
-  background: var(--bg);
+  background: var(--bg3);
   border-radius: var(--card-radius);
-  box-shadow: var(--shadow-dropdown);
+  box-shadow: var(--shadow-modal);
   z-index: 201;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dropdown-in 0.15s ease;
+  animation: dropdown-in 150ms ease;
 }
 
 .user-list-overlay__header {
@@ -435,8 +398,8 @@
 }
 
 .user-list-overlay__header button {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -444,11 +407,12 @@
   background: none;
   color: var(--label2);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 50%;
+  transition: background 100ms ease;
 }
 
 .user-list-overlay__header button:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .user-list-overlay__search {
@@ -459,14 +423,18 @@
 
 .user-list-overlay__search input {
   flex: 1;
-  border: none;
-  background: var(--fill);
-  border-radius: 8px;
+  border: 1px solid var(--border-input);
+  background: var(--bg-input);
+  border-radius: var(--input-radius);
   padding: 8px 12px;
   font: inherit;
   font-size: 14px;
   color: var(--label);
   outline: none;
+}
+
+.user-list-overlay__search input:focus {
+  border-color: var(--accent);
 }
 
 .user-list-overlay__search input::placeholder {
@@ -488,26 +456,27 @@
   border: none;
   background: none;
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--label);
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
+  transition: background 100ms ease;
 }
 
 .user-list-overlay__item:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .user-list-overlay__avatar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: var(--emphasis-weight);
   flex-shrink: 0;
 }
@@ -539,22 +508,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.15s, color 0.15s;
+  transition: background 150ms ease, color 150ms ease;
   flex-shrink: 0;
 }
 
 .folder-tab:hover {
-  background: rgba(120, 120, 128, 0.30);
+  background: var(--bg-hover);
+  color: var(--label);
 }
 
 .folder-tab--active {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .folder-tab--active:hover {
-  background: var(--accent);
-  opacity: 0.9;
+  background: var(--accent-hover);
 }
 
 .folder-tab__badge {
@@ -563,7 +532,7 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   font: var(--type-micro);
   display: inline-flex;
   align-items: center;
@@ -573,7 +542,7 @@
 /* ─── Draft Indicator ──────────────────────────────────────────────────── */
 
 .chat-list-item__draft {
-  color: var(--green);
+  color: var(--color-warning);
   font-weight: var(--emphasis-weight);
 }
 
@@ -591,7 +560,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .new-message-panel__to {
@@ -622,7 +591,6 @@
   color: var(--label3);
 }
 
-/* Hide search cancel button in WebKit */
 .new-message-panel__input::-webkit-search-cancel-button {
   display: none;
 }
@@ -651,12 +619,12 @@
   border: none;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s ease;
+  transition: background 100ms ease;
 }
 
 .new-message-contact:hover,
 .new-message-contact--highlighted {
-  background: var(--hover-bg);
+  background: var(--bg-hover);
 }
 
 .new-message-contact__avatar {
@@ -667,8 +635,8 @@
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: var(--emphasis-weight);
   flex-shrink: 0;
 }
 
@@ -694,19 +662,14 @@
   flex-shrink: 0;
 }
 
-[data-theme="dark"] .new-message-contact:hover,
-[data-theme="dark"] .new-message-contact--highlighted {
-  background: rgba(255, 255, 255, 0.06);
-}
-
 /* ─── Bottom Tab Bar ──────────────────────────────────────────────────────── */
 
 .sidebar__bottom-tab-bar {
   display: flex;
   height: 56px;
   flex-shrink: 0;
-  border-top: 0.5px solid var(--sep);
-  background: color-mix(in srgb, var(--bg) 96%, var(--accent) 4%);
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg2);
 }
 
 .sidebar__tab-btn {
@@ -720,7 +683,7 @@
   background: none;
   cursor: pointer;
   color: var(--label2);
-  transition: color 0.15s;
+  transition: color 150ms ease;
   padding: 6px 0;
 }
 
@@ -733,15 +696,14 @@
 }
 
 .sidebar__tab-icon {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
 }
 
 .sidebar__tab-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--emphasis-weight);
   letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 /* ─── Members Pane ────────────────────────────────────────────────────────── */
@@ -755,13 +717,13 @@
 
 .members-pane__search {
   padding: 8px 12px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .members-pane__search .search-bar__input {
   width: 100%;
-  background: var(--fill);
-  border-radius: var(--input-radius);
+  background: var(--bg-input);
+  border-radius: 18px;
   padding: 8px 12px;
   border: none;
   font: var(--type-body);
@@ -782,11 +744,11 @@
   background: none;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 100ms ease;
 }
 
 .members-pane__item:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .members-pane__avatar {
@@ -798,7 +760,7 @@
   justify-content: center;
   color: white;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: var(--emphasis-weight);
   flex-shrink: 0;
 }
 

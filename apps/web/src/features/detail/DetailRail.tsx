@@ -1,4 +1,5 @@
 import { ChatInfoPanel } from '@vostok/ui-chat'
+import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import { MediaGallery } from './MediaGallery.tsx'
 import { RemoteMembraneTrackPreview } from '../../components/RemoteMembraneTrackPreview.tsx'
 import {
@@ -47,7 +48,7 @@ export function DetailRail({
       <ChatInfoPanel
         title={activeChat?.title ?? auth.profileUsername ?? 'User'}
         handle={`@${activeChat?.title?.toLowerCase().replace(/\s+/g, '_') ?? auth.profileUsername ?? 'user'}`}
-        avatarColor={activeChat?.is_self_chat ? '#007AFF' : activeChat?.type === 'group' ? '#4CD964' : '#5856D6'}
+        avatarColor={chatAvatarColor(activeChat?.title ?? '', activeChat?.is_self_chat ?? false)}
       />
       <div className="settings-card">
         <div className="settings-card__header">

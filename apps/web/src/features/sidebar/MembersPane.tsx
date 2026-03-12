@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { listUsers } from '../../lib/api.ts'
+import { peerColor } from '../../utils/avatar-colors.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 
 type MembersPaneProps = {
@@ -50,7 +51,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
           >
             <div
               className="members-pane__avatar"
-              style={{ background: '#5856D6' }}
+              style={{ background: peerColor(user.username) }}
             >
               {user.username.slice(0, 1).toUpperCase()}
             </div>

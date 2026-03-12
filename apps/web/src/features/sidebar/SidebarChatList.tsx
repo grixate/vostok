@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { ChatListItem } from '@vostok/ui-chat'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { formatRelativeTime } from '../../utils/format.ts'
+import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useChatFolders } from '../../hooks/useChatFolders.ts'
 import type { ChatSummary } from '../../lib/api.ts'
@@ -37,7 +38,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
                 title={chat.title}
                 preview={chat.is_self_chat ? 'Saved Messages' : chat.type === 'group' ? 'Group' : 'Direct message'}
                 timestamp=""
-                avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
+                avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
                 avatarInitial={chat.is_self_chat ? '\uD83D\uDD16' : chat.title.slice(0, 1)}
               />
             </button>
@@ -94,7 +95,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
               unreadCount={chat.is_self_chat ? undefined : chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
               active={chat.id === activeChat?.id}
               pinned={chat.is_self_chat}
-              avatarColor={chat.is_self_chat ? '#007AFF' : chat.type === 'group' ? '#4CD964' : '#5856D6'}
+              avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
               avatarInitial={chat.is_self_chat ? '\uD83D\uDD16' : chat.title.slice(0, 1)}
               isFirst={index === 0}
             />

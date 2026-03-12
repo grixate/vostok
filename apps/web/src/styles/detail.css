@@ -4,8 +4,7 @@
   width: 360px;
   flex-shrink: 0;
   background: var(--bg);
-  border-left: none;
-  box-shadow: -1px 0 0 0 rgba(0,0,0,0.06);
+  border-left: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -13,16 +12,6 @@
               opacity 200ms ease,
               width 200ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform, opacity;
-}
-
-[data-theme="dark"] .detail-rail {
-  box-shadow: -1px 0 0 0 rgba(255,255,255,0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] .detail-rail {
-    box-shadow: -1px 0 0 0 rgba(255,255,255,0.06);
-  }
 }
 
 .detail-rail--hidden {
@@ -40,7 +29,7 @@
   padding: 10px 16px;
   background: none;
   border: none;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--border-primary);
   cursor: pointer;
   font-size: 13px;
   color: var(--accent);
@@ -191,6 +180,7 @@
   align-items: center;
   gap: 8px;
   padding: 24px 16px;
+  position: relative;
 }
 
 .chat-info-panel__avatar {
@@ -202,7 +192,7 @@
   justify-content: center;
   font-size: 28px;
   font-weight: 700;
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .chat-info-panel__title {
@@ -242,24 +232,21 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--fill);
+  background: none;
   color: var(--label2);
   border-radius: 50%;
   cursor: pointer;
+  transition: background 100ms ease;
 }
 
 .chat-info-panel__close:hover {
-  background: var(--sep);
-}
-
-.chat-info-panel {
-  position: relative;
+  background: var(--bg-hover);
 }
 
 /* ─── Tabbed Media Gallery ──────────────────────────────────────────────── */
@@ -272,7 +259,7 @@
 .media-gallery__tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--sep);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .media-gallery__tab {
@@ -284,7 +271,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
+  transition: color 100ms ease, border-color 100ms ease;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -334,11 +321,11 @@
   font: inherit;
   color: var(--label);
   text-decoration: none;
-  transition: background 0.1s;
+  transition: background 100ms ease;
 }
 
 .media-gallery__list-item:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .media-gallery__file-icon,
@@ -400,7 +387,7 @@
 }
 
 .media-gallery__show-more:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .media-gallery__sentinel {
@@ -423,8 +410,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  box-shadow: 1px 0 0 var(--sep);
+  background: var(--bg2);
+  border-right: 1px solid var(--border-primary);
   overflow-y: auto;
 }
 
@@ -433,7 +420,7 @@
   align-items: center;
   gap: 12px;
   padding: 20px 16px 16px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--border-primary);
 }
 
 .settings-pane__profile-avatar {
@@ -441,7 +428,7 @@
   height: 44px;
   border-radius: 50%;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   font-size: 18px;
   font-weight: var(--emphasis-weight);
   display: flex;
@@ -493,11 +480,11 @@
   cursor: pointer;
   text-align: left;
   position: relative;
-  transition: background 0.1s;
+  transition: background 100ms ease;
 }
 
 .settings-pane__nav-item:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .settings-pane__nav-item--active {
@@ -539,7 +526,7 @@
 
 .settings-pane__nav-footer {
   padding: 8px;
-  border-top: 0.5px solid var(--sep);
+  border-top: 0.5px solid var(--border-primary);
 }
 
 .settings-pane__sign-out {
@@ -556,10 +543,11 @@
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
+  transition: background 100ms ease;
 }
 
 .settings-pane__sign-out:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 /* Right content area */
@@ -578,41 +566,30 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 0.5px solid var(--sep);
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--border-primary);
   position: sticky;
   top: 0;
   z-index: 10;
-}
-
-[data-theme="dark"] .settings-pane__header {
-  background: rgba(28, 28, 30, 0.85);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] .settings-pane__header {
-    background: rgba(28, 28, 30, 0.85);
-  }
 }
 
 .settings-pane__back {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border: none;
   background: none;
   color: var(--accent);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
+  transition: background 100ms ease;
 }
 
 .settings-pane__back:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .settings-pane__title {
@@ -665,11 +642,11 @@
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
+  transition: background 100ms ease;
 }
 
 .settings-section__row:hover {
-  background: var(--fill);
+  background: var(--bg-hover);
 }
 
 .settings-section__row--info {
@@ -707,7 +684,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid var(--border-primary);
   position: sticky;
   top: 0;
   background: var(--bg);
@@ -741,7 +718,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-on-accent);
   font-size: 36px;
   font-weight: var(--emphasis-weight);
   flex-shrink: 0;
@@ -762,7 +739,7 @@
 }
 
 .chat-profile-pane__section {
-  background: var(--bg2);
+  background: var(--bg3);
   border-radius: var(--card-radius);
   overflow: hidden;
 }
@@ -781,7 +758,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  border-top: 0.5px solid var(--sep);
+  border-top: 0.5px solid var(--border-primary);
 }
 
 .chat-profile-pane__member:first-of-type {
@@ -795,7 +772,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-on-accent);
   font-size: 14px;
   font-weight: var(--emphasis-weight);
   flex-shrink: 0;

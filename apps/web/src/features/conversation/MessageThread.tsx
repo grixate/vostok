@@ -249,12 +249,15 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
     return { isFirstInGroup: !sameGroup }
   })
 
-  // Derive avatar color from sender username
+  // Derive avatar color from sender using Telegram 8-color peer ring
   const avatarColorForSender = (username: string) => {
-    const colors = ['#5856D6', '#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE']
+    const peerColors = [
+      'var(--peer-1)', 'var(--peer-2)', 'var(--peer-3)', 'var(--peer-4)',
+      'var(--peer-5)', 'var(--peer-6)', 'var(--peer-7)', 'var(--peer-8)',
+    ]
     let hash = 0
     for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) | 0
-    return colors[Math.abs(hash) % colors.length]
+    return peerColors[Math.abs(hash) % peerColors.length]
   }
 
   return (
