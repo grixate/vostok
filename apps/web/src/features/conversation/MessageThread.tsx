@@ -207,7 +207,7 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
   const { contextMenuMessage } = useUIContext()
 
   // Build class name for each message wrapper
-  const getWrapperClassName = (message: typeof messages.messageItems[number], isSelected: boolean, isActiveSearchMatch: boolean) => {
+  const getWrapperClassName = (message: typeof messages.messageItems[number], isSelected: boolean, isActiveSearchMatch: boolean, isFirstInGroup: boolean, index: number) => {
     const classes = ['message-bubble-wrapper']
 
     if (isSelected) {
@@ -230,6 +230,10 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
 
     if (contextMenuMessage?.message.id === message.id) {
       classes.push('message-bubble-wrapper--context-active')
+    }
+
+    if (isFirstInGroup && index > 0) {
+      classes.push('message-bubble-wrapper--group-start')
     }
 
     return classes.join(' ')
@@ -298,7 +302,6 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
             const isActiveSearchMatch = searchHighlight?.activeMessageId === message.id
             const { isFirstInGroup } = groupInfo[index]
             const isGroup = activeChat.type === 'group'
-            const showAvatar = message.side === 'incoming'
             const senderName = message.senderUsername ?? ''
             const showSenderName = isGroup && isFirstInGroup && !!senderName
             const avatarColor = avatarColorForSender(senderName)
@@ -307,20 +310,29 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
             <div
               key={message.id}
               ref={(el) => { messageRefsMap.current[message.id] = el }}
-              className={getWrapperClassName(message, isSelected, isActiveSearchMatch)}
+              className={getWrapperClassName(message, isSelected, isActiveSearchMatch, isFirstInGroup, index)}
               onClick={(e) => handleMessageClick(message.id, e)}
               onDoubleClick={() => handleDoubleClick(message)}
             >
             {message.side !== 'system' ? (
               <div className={`message-row${message.side === 'outgoing' ? ' message-row--outgoing' : ''}`}>
-                {showAvatar ? (
-                  <div
-                    className={`message-row__avatar${isFirstInGroup ? '' : ' message-row__avatar--spacer'}`}
-                    style={{ background: isFirstInGroup ? avatarColor : undefined }}
-                  >
-                    {isFirstInGroup ? senderName.slice(0, 1).toUpperCase() : ''}
-                  </div>
-                ) : null}
+                <div
+                  className={`message-row__avatar${
+                    (message.side === 'outgoing' || !isFirstInGroup)
+                      ? ' message-row__avatar--spacer'
+                      : ''
+                  }`}
+                  style={{
+                    background:
+                      message.side === 'incoming' && isFirstInGroup
+                        ? avatarColor
+                        : undefined,
+                  }}
+                >
+                  {message.side === 'incoming' && isFirstInGroup
+                    ? senderName.slice(0, 1).toUpperCase()
+                    : ''}
+                </div>
                 <div className="message-row__body">
                   {showSenderName ? (
                     <span className="message-row__sender">{senderName}</span>

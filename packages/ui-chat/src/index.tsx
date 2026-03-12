@@ -154,7 +154,6 @@ export function MessageBubble({
   return (
     <div className={cx('message-bubble', `message-bubble--${side}`, className)} {...props}>
       <div className="message-bubble__content">
-        {children}
         {side !== 'system' ? (
           <div className="message-bubble__state">
             {timestamp && <span>{timestamp}</span>}
@@ -173,6 +172,7 @@ export function MessageBubble({
             {state === 'failed' && <span style={{ color: '#FF3B30' }}>failed</span>}
           </div>
         ) : null}
+        {children}
       </div>
     </div>
   )

@@ -7,7 +7,6 @@
   gap: 8px;
   padding: 8px 12px;
   background: var(--bg);
-  border-top: 1px solid var(--border-primary);
 }
 
 .live-composer__btn {

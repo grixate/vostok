@@ -14,12 +14,15 @@ export function syncChatSummary(current: ChatSummary[], chatId: string, messages
   }
 
   const latestMessageAt = messages.at(-1)?.sentAt ?? chat.latest_message_at
+  const updated = { ...chat, latest_message_at: latestMessageAt, message_count: messages.length }
 
-  return mergeChat(current, {
-    ...chat,
-    latest_message_at: latestMessageAt,
-    message_count: messages.length
-  })
+  // Only reorder to top when a genuinely new message arrived.
+  // If latest_message_at didn't change, update in-place to avoid jumpy sidebar.
+  if (latestMessageAt === chat.latest_message_at) {
+    return current.map((c) => (c.id === chatId ? updated : c))
+  }
+
+  return mergeChat(current, updated)
 }
 
 export function compareMessageOrder(left: CachedMessage, right: CachedMessage): number {
