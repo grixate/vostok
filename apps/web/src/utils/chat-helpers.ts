@@ -14,7 +14,8 @@ export function syncChatSummary(current: ChatSummary[], chatId: string, messages
   }
 
   const latestMessageAt = messages.at(-1)?.sentAt ?? chat.latest_message_at
-  const updated = { ...chat, latest_message_at: latestMessageAt, message_count: messages.length }
+  // The chat is currently being viewed, so there are no unread messages.
+  const updated = { ...chat, latest_message_at: latestMessageAt, message_count: 0 }
 
   // Only reorder to top when a genuinely new message arrived.
   // If latest_message_at didn't change, update in-place to avoid jumpy sidebar.

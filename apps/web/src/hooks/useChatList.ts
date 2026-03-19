@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
 import type { ChatSummary } from '../lib/api.ts'
 import {
@@ -9,6 +9,7 @@ import {
   fetchMe
 } from '../lib/api.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
+import { subscribeToUserStream } from '../lib/realtime.ts'
 import type { AuthView } from '../types.ts'
 
 const ACTIVE_CHAT_STORAGE_KEY = 'vostok.layout.active_chat_id'
@@ -41,7 +42,11 @@ function persistActiveChatId(chatId: string | null) {
   }
 }
 
-export function useChatList(view: AuthView) {
+type ChatListOptions = {
+  onExistingChatActivity?: (chatId: string) => void
+}
+
+export function useChatList(view: AuthView, options?: ChatListOptions) {
   const { storedDevice, setLoading, setBanner, loading } = useAppContext()
   const [chatItems, setChatItems] = useState<ChatSummary[]>([])
   const [chatFilter, setChatFilter] = useState('')
@@ -62,6 +67,10 @@ export function useChatList(view: AuthView) {
     },
     []
   )
+
+  // Track the user ID obtained from fetchMe so the user-channel subscription
+  // effect can reference it without re-running the bootstrap.
+  const userIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (view !== 'chat' || !storedDevice) {
@@ -97,6 +106,7 @@ export function useChatList(view: AuthView) {
           return
         }
 
+        userIdRef.current = me.user.id
         setChatItems(nextChats)
         // Validate the persisted active chat ID: use it if the chat still exists,
         // otherwise fall back to the first chat in the list.
@@ -132,6 +142,63 @@ export function useChatList(view: AuthView) {
       cancelled = true
     }
   }, [storedDevice, view, setLoading, setBanner])
+
+  // Subscribe to the user channel for real-time chat activity notifications.
+  // When another user sends the first message in a new chat, the server
+  // broadcasts `chat:activity` to every member's `user:#{user_id}` channel.
+  // If the chat isn't in our list yet, we refresh the full chat list.
+  useEffect(() => {
+    if (view !== 'chat' || !storedDevice || !userIdRef.current) {
+      return
+    }
+
+    const userId = userIdRef.current
+    const { sessionToken } = storedDevice
+
+    const onExistingChatActivity = options?.onExistingChatActivity
+
+    const unsubscribe = subscribeToUserStream(sessionToken, userId, {
+      onChatActivity(chatId) {
+        setChatItems((currentChats) => {
+          // If the chat is already in the list, notify the parent so it can
+          // update the sidebar preview (e.g. decrypt the latest message for
+          // non-active chats).  The existing `chat:${chatId}` subscription
+          // handles message updates for the active chat.
+          if (currentChats.some((c) => c.id === chatId)) {
+            onExistingChatActivity?.(chatId)
+            return currentChats
+          }
+
+          // New chat we haven't seen — fetch the full list so we pick up
+          // the chat summary (title, type, members, etc.).
+          listChats(sessionToken)
+            .then((response) => {
+              setChatItems((prev) => {
+                const existingIds = new Set(prev.map((c) => c.id))
+                const newChats = response.chats.filter((c) => !existingIds.has(c.id))
+
+                if (newChats.length === 0) {
+                  return prev
+                }
+
+                return [
+                  ...prev.filter((c) => c.is_self_chat),
+                  ...newChats,
+                  ...prev.filter((c) => !c.is_self_chat)
+                ]
+              })
+            })
+            .catch(() => {
+              // Silently ignore — the user can always manually refresh.
+            })
+
+          return currentChats
+        })
+      }
+    })
+
+    return unsubscribe
+  }, [storedDevice, view, chatItems.length])
 
   async function startDirectChatWith(username: string) {
     if (!storedDevice) return

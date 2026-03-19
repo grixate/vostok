@@ -153,12 +153,18 @@ export async function synchronizeChatSessions(
 
   for (const session of sessions) {
     if (!(await verifyChatDeviceSession(session))) {
+      console.warn(
+        `[synchronizeChatSessions] Session ${session.id} failed device verification (initiator=${session.initiator_device_id}, recipient=${session.recipient_device_id})`
+      )
       continue
     }
 
     const expectedHandshakeHash = await computeSessionHandshakeHash(session)
 
     if (session.handshake_hash !== expectedHandshakeHash) {
+      console.warn(
+        `[synchronizeChatSessions] Session ${session.id} handshake hash mismatch`
+      )
       continue
     }
 
@@ -166,6 +172,25 @@ export async function synchronizeChatSessions(
     const previousHandshakeHash = readStoredSessionHandshakeHash(session.id)
     const existingKeyBytes = readStoredSessionKeyBytes(session.id)
     const existingRatchetState = readStoredSessionRatchetState(session.id)
+
+    // Migration: repair sessions corrupted by a previous bug that stored the
+    // remote ratchet public key without performing the receive-side DH ratchet.
+    // The telltale sign is: remote key is present, epoch is 0, and
+    // pendingLocalRotation is false — an impossible state under the correct
+    // protocol.  Reset by clearing the stale remote key and marking
+    // pendingLocalRotation so the next send triggers a proper ratchet rotation.
+    if (existingRatchetState) {
+      const staleRemoteKey = readStoredRemoteRatchetPublicKey(session.id)
+
+      if (staleRemoteKey && existingRatchetState.epoch === 0 && !existingRatchetState.pendingLocalRotation) {
+        console.info(
+          `[synchronizeChatSessions] Repairing stale ratchet state for session ${session.id} — ` +
+          `clearing orphaned remote ratchet key (epoch=0, pendingLocalRotation=false)`
+        )
+        removeSecureStoreValue(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${session.id}`)
+      }
+    }
+
     const shouldReuseExistingKey =
       !!existingKeyBytes && previousHandshakeHash === session.handshake_hash
     let keyBytes: Uint8Array | null = shouldReuseExistingKey ? existingKeyBytes : null
@@ -175,18 +200,40 @@ export async function synchronizeChatSessions(
       const nextTranscriptRootKeyBytes = await deriveSessionKeyBytes(currentDevice, session)
 
       if (!nextTranscriptRootKeyBytes) {
+        const role = currentDevice.deviceId === session.initiator_device_id ? 'initiator'
+          : currentDevice.deviceId === session.recipient_device_id ? 'recipient' : 'unknown'
+        console.warn(
+          `[synchronizeChatSessions] Key derivation returned null for session ${session.id} (role=${role}, hasEphemeral=${!!session.initiator_ephemeral_public_key})`
+        )
         continue
       }
 
       if (existingKeyBytes && previousHandshakeHash && previousHandshakeHash !== session.handshake_hash) {
-        keyBytes = await deriveDhRatchetRootKey(
-          existingKeyBytes,
-          nextTranscriptRootKeyBytes,
-          previousHandshakeHash,
-          session.handshake_hash,
-          session.id
+        // The handshake hash changed.  This is almost always caused by a
+        // re-bootstrap on page reload: chatSessions React state is empty →
+        // prepareSessionBootstrap generates new ephemeral keys → the server
+        // updates the session and returns a new handshake hash.
+        //
+        // We must NOT re-derive keys or advance the epoch here because:
+        //   1. Old messages were encrypted with the root key derived from
+        //      the original handshake hash — re-deriving would make them
+        //      undecryptable.
+        //   2. The peer derived their keys from the original handshake hash
+        //      and epoch — advancing would desync us.
+        //
+        // Instead, keep the existing key material and ratchet state intact.
+        // Update only the stored handshake hash so future checks see a match.
+        // Legitimate rekeying uses the dedicated rekey endpoint which
+        // supersedes the old session and creates a brand new one (different
+        // session ID), so this path is never reached for rekeys.
+        console.info(
+          `[synchronizeChatSessions] Handshake hash changed for session ${session.id} ` +
+          `(send=${existingRatchetState?.send ?? 0}, receive=${existingRatchetState?.receive ?? 0}) — ` +
+          `keeping existing key material at epoch ${existingRatchetState?.epoch ?? 0} to avoid ` +
+          `breaking decryption of old messages.`
         )
-        nextEpoch = (existingRatchetState?.epoch ?? 0) + 1
+        keyBytes = existingKeyBytes
+        nextEpoch = existingRatchetState?.epoch ?? 0
       } else {
         keyBytes = nextTranscriptRootKeyBytes
         nextEpoch = 0
@@ -197,10 +244,17 @@ export async function synchronizeChatSessions(
       continue
     }
 
-    writeStoredSessionKeyBytes(session.id, keyBytes)
+    // When keeping existing key material (hash changed but keys retained to
+    // preserve decryptability), only update the stored handshake hash — do NOT
+    // overwrite the key bytes or rebuild the ratchet state.
+    const keptExistingKeys = keyBytes === existingKeyBytes && previousHandshakeHash !== session.handshake_hash
+
+    if (!keptExistingKeys) {
+      writeStoredSessionKeyBytes(session.id, keyBytes)
+    }
     persistSecureStoreValue(`${SESSION_HANDSHAKE_PREFIX}${session.id}`, session.handshake_hash)
 
-    if (previousHandshakeHash !== session.handshake_hash || !existingKeyBytes) {
+    if (!keptExistingKeys && (previousHandshakeHash !== session.handshake_hash || !existingKeyBytes)) {
       const ratchetState = await buildInitialRatchetState(
         keyBytes,
         session.id,
@@ -212,6 +266,10 @@ export async function synchronizeChatSessions(
 
       writeStoredSessionRatchetState(session.id, ratchetState)
       writeStoredSkippedMessageKeys(session.id, {})
+      // Clear stale remote ratchet key so the first inbound ratchet key from the
+      // peer is treated as "first key" and doesn't incorrectly trigger a DH
+      // ratchet step that would advance the epoch prematurely.
+      removeSecureStoreValue(`${SESSION_REMOTE_RATCHET_PUBLIC_KEY_PREFIX}${session.id}`)
       await ensureStoredLocalRatchetKey(session.id)
     }
 
@@ -260,6 +318,9 @@ export async function encryptMessageWithSessions(
     }
 
     let ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
+    const beforeEpoch = ratchetState.epoch
+    const beforePending = ratchetState.pendingLocalRotation
+    const hasRemoteKey = !!readStoredRemoteRatchetPublicKey(sessionId)
     const outboundState = await prepareOutboundRatchetState(
       sessionId,
       rootKeyBytes,
@@ -268,6 +329,11 @@ export async function encryptMessageWithSessions(
     )
 
     ratchetState = outboundState.ratchetState
+    console.info(
+      `[encryptMessageWithSessions] Session ${sessionId} for device ${deviceId}: ` +
+      `beforeEpoch=${beforeEpoch}, pendingLocalRotation=${beforePending}, ` +
+      `hasRemoteKey=${hasRemoteKey}, afterEpoch=${ratchetState.epoch}`
+    )
     const counter = ratchetState.send
     const ratchetStep = await deriveRatchetStep(
       base64ToBytes(ratchetState.sendChainKeyBase64),
@@ -324,6 +390,15 @@ export async function decryptMessageWithSessions(
   message: ChatMessage,
   currentDeviceId: string
 ): Promise<string> {
+  // The self-session encrypts with the send chain key but decryption uses the
+  // receive chain key — these are intentionally different in the Double Ratchet
+  // protocol.  A device cannot decrypt its own outbound messages through the
+  // session crypto path; the caller (projectMessage) handles this via the
+  // plaintext cache for outgoing messages.
+  if (message.sender_device_id === currentDeviceId) {
+    throw new Error('Cannot decrypt own outbound message via session — use plaintext cache.')
+  }
+
   const header = parseSessionHeader(message.header)
 
   if (!header) {
@@ -1014,7 +1089,16 @@ async function applyInboundRemoteRatchetStepIfNeeded(
   const ratchetState = await readOrBuildSessionRatchetState(sessionId, rootKeyBytes, handshakeHash)
   const currentRemoteRatchetPublicKeyBase64 = readStoredRemoteRatchetPublicKey(sessionId)
 
+  // If the remote ratchet key hasn't changed, there's nothing to do.
+  if (currentRemoteRatchetPublicKeyBase64 === normalizedRemoteRatchetPublicKeyBase64) {
+    return
+  }
+
   if (!currentRemoteRatchetPublicKeyBase64) {
+    // First inbound remote key — store it and mark pendingLocalRotation so the
+    // next outbound message will perform a send-side DH ratchet.  Do NOT advance
+    // the epoch or derive a new root key: the message was sent at the current
+    // epoch and must be decryptable with the current chain key.
     writeStoredRemoteRatchetPublicKey(sessionId, normalizedRemoteRatchetPublicKeyBase64)
 
     if (!ratchetState.pendingLocalRotation) {
@@ -1027,10 +1111,8 @@ async function applyInboundRemoteRatchetStepIfNeeded(
     return
   }
 
-  if (currentRemoteRatchetPublicKeyBase64 === normalizedRemoteRatchetPublicKeyBase64) {
-    return
-  }
-
+  // The remote ratchet key has rotated — perform the receive-side DH ratchet so
+  // the root key and epoch advance to match the sender's outbound ratchet state.
   const localRatchetKey = await ensureStoredLocalRatchetKey(sessionId)
   const nextRootKeyBytes = await deriveMessageDhRatchetRootKey(
     rootKeyBytes,
@@ -1118,7 +1200,25 @@ async function resolveInboundMessageKey(
   }
 
   if (ratchetState.epoch !== normalizeCounter(epochHint)) {
-    throw new Error('The cached direct-chat ratchet epoch does not match this message.')
+    // The local ratchet epoch has diverged from the message epoch.  Rather than
+    // refusing to decrypt, rebuild the ratchet state at the expected epoch so
+    // the message is still readable.  This handles sessions whose ratchet state
+    // was corrupted by previous bugs in applyInboundRemoteRatchetStepIfNeeded,
+    // as well as race conditions between concurrent sync/encrypt flows.
+    console.warn(
+      `[resolveInboundMessageKey] Epoch mismatch for session ${sessionId}: ` +
+      `local=${ratchetState.epoch}, message=${normalizeCounter(epochHint)}, ` +
+      `role=${ratchetState.role} — rebuilding ratchet state at message epoch`
+    )
+    ratchetState = await buildInitialRatchetState(
+      rootKeyBytes,
+      sessionId,
+      handshakeHash,
+      ratchetState.role,
+      normalizeRatchetVersion(versionHint),
+      normalizeCounter(epochHint)
+    )
+    writeStoredSessionRatchetState(sessionId, ratchetState)
   }
 
   if (counter < ratchetState.receive) {

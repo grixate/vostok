@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useDeferredValue,
   useEffect,
   useRef,
@@ -37,6 +38,8 @@ import { ContextMenuOverlay } from './features/overlays/ContextMenuOverlay.tsx'
 import { ProfileOverlay } from './features/overlays/ProfileOverlay.tsx'
 import { SettingsPane } from './features/settings/SettingsPane.tsx'
 import { ToastStack } from './features/overlays/ToastStack.tsx'
+import { ConnectionStatusBar } from './features/overlays/ConnectionStatusBar.tsx'
+import { KeyboardShortcutsOverlay } from './features/overlays/KeyboardShortcutsOverlay.tsx'
 
 function App() {
   const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(() => readStoredDevice())
@@ -49,6 +52,7 @@ function App() {
   const [profileOverlayOpen, setProfileOverlayOpen] = useState(false)
   const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false)
   const [attachPopoverOpen, setAttachPopoverOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats')
 
@@ -78,6 +82,7 @@ function App() {
     profileOverlayOpen, setProfileOverlayOpen,
     settingsOverlayOpen, setSettingsOverlayOpen,
     attachPopoverOpen, setAttachPopoverOpen,
+    shortcutsOpen, setShortcutsOpen,
     toasts, showToast,
     sidebarTab, setSidebarTab,
     chatSearchInputRef, chatFilterInputRef, directChatInputRef,
@@ -97,11 +102,21 @@ function App() {
 
 function AppInner() {
   const { settingsOverlayOpen, setSettingsOverlayOpen, setSidebarTab } = useUIContext()
+  const [selectMessageId, setSelectMessageId] = useState<string | null>(null)
   const auth = useAuth()
   const layout = useViewportLayout()
   const desktop = useDesktop()
 
-  const chatList = useChatList(auth.view)
+  // Ref-based callback so useChatList (called first) can notify useMessages
+  // (called later) about chat:activity events on non-active, existing chats.
+  const existingChatActivityRef = useRef<(chatId: string) => void>(() => {})
+  const handleExistingChatActivity = useCallback((chatId: string) => {
+    existingChatActivityRef.current(chatId)
+  }, [])
+
+  const chatList = useChatList(auth.view, {
+    onExistingChatActivity: handleExistingChatActivity
+  })
   const deferredActiveChatId = useDeferredValue(chatList.activeChatId)
   const activeChatIdRef = useRef<string | null>(deferredActiveChatId)
 
@@ -128,6 +143,11 @@ function AppInner() {
     chatSessions.syncChatSessionsFromServer,
     chatSessions.chatSessions
   )
+  // Wire the ref so chat:activity events on non-active chats trigger a
+  // background preview decrypt (shows real text in sidebar instead of
+  // "Encrypted message").
+  existingChatActivityRef.current = messages.updateNonActiveChatPreview
+
   const media = useMediaCapture(
     chatList.activeChatId,
     messages.messageItemsRef,
@@ -223,10 +243,13 @@ function AppInner() {
           chatList={chatList}
           drafts={drafts}
           typingIndicator={typingIndicator}
+          initialSelectedMessageId={selectMessageId}
         />
       )}
-      <ContextMenuOverlay messages={messages} chatList={chatList} />
+      <ContextMenuOverlay messages={messages} chatList={chatList} onSelectMessage={(id) => { setSelectMessageId(id); requestAnimationFrame(() => setSelectMessageId(null)) }} />
       <ProfileOverlay auth={auth} />
+      <KeyboardShortcutsOverlay />
+      <ConnectionStatusBar />
       <ToastStack />
     </div>
   )

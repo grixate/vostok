@@ -3,41 +3,62 @@
 .live-composer {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--bg);
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.live-composer__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 72px;
 }
 
 .live-composer__btn {
-  background: none;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-surface-1);
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
-  border-radius: 50%;
-  color: var(--label2);
+  padding: 0;
+  border-radius: 20px;
+  color: var(--text-secondary);
   flex-shrink: 0;
   transition: background 100ms ease, color 100ms ease;
 }
 
 .live-composer__btn:hover {
-  background: var(--bg-hover);
-  color: var(--label);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.live-composer__mic {
+  width: 42px;
+  height: 42px;
+  border-radius: 21px;
+  background: var(--bg-surface-1);
+  padding: 0;
+}
+
+.live-composer__mic:hover {
+  background: var(--bg-surface-2);
 }
 
 .live-composer__field {
   flex: 1;
-  background: var(--bg-input);
-  border-radius: var(--input-radius);
-  border: 1px solid var(--border-input);
+  background: var(--bg-surface-1);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 8px 8px 8px 14px;
+  padding: 8px 8px 8px 16px;
   gap: 6px;
-  min-height: 38px;
+  height: 44px;
   transition: border-color 150ms ease;
 }
 
@@ -51,7 +72,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 4px 8px 6px;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 4px;
 }
 
@@ -63,7 +84,7 @@
 
 .live-composer__reply-copy span {
   font-size: 12px;
-  color: var(--label2);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -79,7 +100,7 @@
   outline: none;
   font-size: 14px;
   font-family: var(--font);
-  color: var(--label);
+  color: var(--text-primary);
   background: transparent;
   letter-spacing: -0.08px;
   resize: none;
@@ -90,14 +111,14 @@
 }
 
 .live-composer__input::placeholder {
-  color: var(--label3);
+  color: var(--text-muted);
 }
 
 .live-composer__send {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--accent);
+  width: 42px;
+  height: 42px;
+  border-radius: 21px;
+  background: var(--gradient-button);
   border: none;
   cursor: pointer;
   display: flex;
@@ -105,16 +126,14 @@
   justify-content: center;
   flex-shrink: 0;
   color: var(--text-on-accent);
-  transition: background 150ms ease, transform 100ms ease;
+  transition: transform 100ms ease, opacity 150ms ease;
 }
 
 .live-composer__send:hover {
-  background: var(--accent-hover);
   transform: scale(1.05);
 }
 
 .live-composer__send:active {
-  background: var(--accent-active);
   transform: scale(0.96);
 }
 
@@ -125,17 +144,17 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 8px 12px;
-  background: var(--bg);
-  border-top: 1px solid var(--border-primary);
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .composer__field {
   flex: 1;
-  background: var(--bg-input) !important;
-  border-radius: var(--input-radius) !important;
-  border: 1px solid var(--border-input) !important;
-  padding: 8px 8px 8px 14px;
+  background: var(--bg-surface-1) !important;
+  border-radius: var(--radius-pill) !important;
+  border: 1px solid var(--border-subtle) !important;
+  padding: 8px 8px 8px 16px;
 }
 
 .composer__reply {
@@ -151,7 +170,7 @@
 }
 
 .composer__reply-copy {
-  color: var(--label2);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -170,16 +189,16 @@
 }
 
 .composer__placeholder {
-  color: var(--label3);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
 .composer__field-action {
   border: 0;
   padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--fill);
-  color: var(--label2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 12px;
 }
@@ -191,15 +210,16 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg);
-  border-top: 1px solid var(--border-primary);
+  height: 72px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .voice-recorder__indicator {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--danger);
+  background: var(--status-error);
   animation: pulse-red 1s ease infinite;
   flex-shrink: 0;
 }
@@ -208,7 +228,7 @@
   font-size: 14px;
   font-weight: var(--emphasis-weight);
   font-variant-numeric: tabular-nums;
-  color: var(--label);
+  color: var(--text-primary);
   min-width: 48px;
 }
 
@@ -233,22 +253,22 @@
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--danger);
+  color: var(--status-error);
   cursor: pointer;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transition: background 100ms ease;
 }
 
 .voice-recorder__cancel:hover {
-  background: rgba(229, 57, 53, 0.12);
+  background: rgba(255, 68, 68, 0.12);
 }
 
 .voice-recorder__send {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--gradient-button);
   border: none;
   display: flex;
   align-items: center;
@@ -256,9 +276,145 @@
   cursor: pointer;
   flex-shrink: 0;
   color: var(--text-on-accent);
-  transition: background 150ms ease;
+  transition: transform 150ms ease;
 }
 
 .voice-recorder__send:hover {
-  background: var(--accent-hover);
+  transform: scale(1.05);
+}
+
+/* ─── Dropdown / Attach Menu ─────────────────────────────────────────────── */
+
+.dropdown-anchor {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-dropdown);
+  padding: 4px;
+  min-width: 180px;
+  animation: dropdown-in 100ms ease;
+}
+
+.dropdown-menu--bottom {
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+}
+
+.dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 100ms ease;
+}
+
+.dropdown-menu__item:hover {
+  background: var(--bg-surface-3);
+}
+
+/* ─── Compose Reply Bar (above composer) ─────────────────────────────────── */
+
+.compose-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--bg-surface-2);
+  border-radius: 8px 8px 0 0;
+}
+
+.compose-reply-bar__accent {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.compose-reply-bar__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compose-reply-bar__content strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.compose-reply-bar__content span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-reply-bar__close {
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.compose-reply-bar__close:hover {
+  color: var(--text-secondary);
+}
+
+/* ─── Compose Edit Bar (above composer) ──────────────────────────────────── */
+
+.compose-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--bg-surface-2);
+  border-radius: 8px 8px 0 0;
+  color: var(--accent);
+}
+
+.compose-edit-bar span {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.compose-edit-bar__close {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.compose-edit-bar__close:hover {
+  color: var(--text-secondary);
 }

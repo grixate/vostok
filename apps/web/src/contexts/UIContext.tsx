@@ -36,6 +36,8 @@ export type UIContextValue = {
   setSettingsOverlayOpen: Dispatch<SetStateAction<boolean>>
   attachPopoverOpen: boolean
   setAttachPopoverOpen: Dispatch<SetStateAction<boolean>>
+  shortcutsOpen: boolean
+  setShortcutsOpen: Dispatch<SetStateAction<boolean>>
   toasts: Toast[]
   showToast: (message: string, tone?: string) => void
   sidebarTab: SidebarTab

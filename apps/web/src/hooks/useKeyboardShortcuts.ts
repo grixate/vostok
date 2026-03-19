@@ -42,7 +42,8 @@ export function useKeyboardShortcuts({
     groupTitleInputRef,
     chatButtonRefs,
     chatSearchInputRef,
-    setChatSearchOpen
+    setChatSearchOpen,
+    setShortcutsOpen
   } = useUIContext()
 
   function focusRelativeChat(offset: number) {
@@ -211,6 +212,12 @@ export function useKeyboardShortcuts({
       event.preventDefault()
       const cycle: Record<string, 'light' | 'dark' | 'system'> = { light: 'dark', dark: 'system', system: 'light' }
       setThemePreference(cycle[themePreference] ?? 'system')
+      return
+    }
+
+    if ((event.key === '/' || event.key === '?') && !event.shiftKey) {
+      event.preventDefault()
+      setShortcutsOpen((v) => !v)
       return
     }
 

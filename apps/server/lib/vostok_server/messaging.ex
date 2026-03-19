@@ -24,7 +24,7 @@ defmodule VostokServer.Messaging do
   alias VostokServer.Repo
   alias VostokServerWeb.Endpoint
 
-  def list_chats_for_user(user_id) when is_binary(user_id) do
+  def list_chats_for_user(user_id, device_id \\ nil) when is_binary(user_id) do
     from(chat in Chat,
       join: membership in ChatMember,
       on: membership.chat_id == chat.id,
@@ -33,7 +33,7 @@ defmodule VostokServer.Messaging do
       preload: [members: ^member_query()]
     )
     |> Repo.all()
-    |> Enum.map(&hydrate_chat_summary(&1, user_id))
+    |> Enum.map(&hydrate_chat_summary(&1, user_id, device_id))
   end
 
   def ensure_self_chat(%User{} = user) do
@@ -1801,7 +1801,7 @@ defmodule VostokServer.Messaging do
     from(message_reaction in MessageReaction)
   end
 
-  defp hydrate_chat_summary(%Chat{} = chat, current_user_id) do
+  defp hydrate_chat_summary(%Chat{} = chat, current_user_id, device_id) do
     summary =
       from(message in Message,
         where: message.chat_id == ^chat.id,
@@ -1812,10 +1812,27 @@ defmodule VostokServer.Messaging do
       )
       |> Repo.one()
 
+    unread_count =
+      if device_id do
+        read_state = Repo.get_by(ChatReadState, chat_id: chat.id, device_id: device_id)
+
+        if read_state && read_state.read_at do
+          from(m in Message,
+            where: m.chat_id == ^chat.id and m.inserted_at > ^read_state.read_at,
+            select: count(m.id)
+          )
+          |> Repo.one()
+        else
+          summary.message_count
+        end
+      else
+        summary.message_count
+      end
+
     chat
     |> Map.from_struct()
     |> Map.take([:id, :type, :members, :metadata_encrypted])
-    |> Map.put(:message_count, summary.message_count)
+    |> Map.put(:message_count, unread_count)
     |> Map.put(:latest_message_at, summary.latest_message_at)
     |> present_chat(current_user_id)
   end
@@ -2484,5 +2501,20 @@ defmodule VostokServer.Messaging do
       chat_id: chat_id,
       message_id: message_id
     })
+
+    # Also notify each chat member via their personal user channel so they
+    # can discover new chats they haven't subscribed to yet.  The client
+    # subscribes to `user:#{user_id}` on connect and refreshes its chat list
+    # when it receives `chat:activity`.
+    member_user_ids =
+      from(m in ChatMember, where: m.chat_id == ^chat_id, select: m.user_id)
+      |> Repo.all()
+
+    for user_id <- member_user_ids do
+      Endpoint.broadcast("user:#{user_id}", "chat:activity", %{
+        chat_id: chat_id,
+        message_id: message_id
+      })
+    end
   end
 end

@@ -1,11 +1,26 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ChatListItem } from '@vostok/ui-chat'
+import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { formatRelativeTime } from '../../utils/format.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
+import { readChatPreview } from '../../lib/message-cache.ts'
+import { markChatRead } from '../../lib/api.ts'
+import {
+  UserSmallIcon,
+  UsersSmallIcon,
+  CheckCheckSmallIcon,
+  MuteSmallIcon,
+  PinSmallIcon,
+  ArchiveSmallIcon,
+  DeleteSmallTrashIcon,
+  SignOutSmallIcon,
+} from '../../icons/index.tsx'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useChatFolders } from '../../hooks/useChatFolders.ts'
 import type { ChatSummary } from '../../lib/api.ts'
+
+type ChatContextMenu = { chatId: string; x: number; y: number } | null
 
 type SidebarChatListProps = {
   chatList: ReturnType<typeof useChatList>
@@ -15,7 +30,29 @@ type SidebarChatListProps = {
 }
 
 export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolders }: SidebarChatListProps) {
-  const { chatButtonRefs } = useUIContext()
+  const { storedDevice } = useAppContext()
+  const { chatButtonRefs, showToast } = useUIContext()
+  const [chatContextMenu, setChatContextMenu] = useState<ChatContextMenu>(null)
+
+  const handleChatContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
+    e.preventDefault()
+    setChatContextMenu({ chatId, x: e.clientX, y: e.clientY })
+  }, [])
+
+  const closeChatContextMenu = useCallback(() => {
+    setChatContextMenu(null)
+  }, [])
+
+  const handleMarkAsRead = useCallback(() => {
+    if (!chatContextMenu || !storedDevice) return
+    void markChatRead(storedDevice.sessionToken, chatContextMenu.chatId).catch(() => {})
+    // Zero out unread count locally
+    chatList.setChatItems((prev) =>
+      prev.map((c) => c.id === chatContextMenu.chatId ? { ...c, message_count: 0 } : c)
+    )
+    showToast('Marked as read')
+    closeChatContextMenu()
+  }, [chatContextMenu, storedDevice, chatList, showToast, closeChatContextMenu])
 
   const folderFilteredItems: ChatSummary[] = useMemo(
     () => chatFolders.filterChatsByFolder(chatList.visibleChatItems),
@@ -74,6 +111,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
             key={chat.id}
             className="chat-list-button"
             onClick={() => chatList.setActiveChatId(chat.id)}
+            onContextMenu={(e) => handleChatContextMenu(e, chat.id)}
             ref={(element) => {
               chatButtonRefs.current[chat.id] = element
             }}
@@ -86,9 +124,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
                   ? ''
                   : draftChatIds.has(chat.id)
                     ? 'Draft'
-                    : chat.message_count > 0
-                      ? `${chat.message_count} encrypted ${chat.message_count === 1 ? 'message' : 'messages'}`
-                      : 'No messages yet'
+                    : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'Encrypted message' : 'No messages yet')
               }
               previewClassName={draftChatIds.has(chat.id) ? 'chat-list-item__draft' : undefined}
               timestamp={chat.is_self_chat ? '' : formatRelativeTime(chat.latest_message_at)}
@@ -112,6 +148,62 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
           </p>
         </div>
       )}
+
+      {chatContextMenu ? (() => {
+        const contextChat = chatList.chatItems.find((c) => c.id === chatContextMenu.chatId)
+        const isGroup = contextChat?.type === 'group'
+        return (
+          <>
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 200 }}
+              onClick={closeChatContextMenu}
+              onContextMenu={(e) => { e.preventDefault(); closeChatContextMenu() }}
+            />
+            <div
+              className="msg-context-menu"
+              style={{ top: chatContextMenu.y, left: chatContextMenu.x }}
+            >
+              <button type="button" onClick={() => { chatList.setActiveChatId(chatContextMenu.chatId); closeChatContextMenu() }}>
+                {isGroup ? <UsersSmallIcon style={{ color: '#888' }} /> : <UserSmallIcon style={{ color: '#888' }} />}
+                {isGroup ? 'View Group Info' : 'View Profile'}
+              </button>
+              <button type="button" onClick={handleMarkAsRead}>
+                <CheckCheckSmallIcon style={{ color: '#888' }} />
+                Mark as Read
+              </button>
+              <button type="button" disabled>
+                <MuteSmallIcon style={{ color: '#888' }} />
+                Mute Notifications
+              </button>
+              <button type="button" disabled>
+                <PinSmallIcon style={{ color: '#888' }} />
+                Pin Chat
+              </button>
+              {isGroup ? (
+                <>
+                  <div className="msg-context-menu__sep" />
+                  <button type="button" className="msg-context-menu__danger" disabled>
+                    <SignOutSmallIcon style={{ color: '#FF4444' }} />
+                    Leave Group
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" disabled>
+                    <ArchiveSmallIcon style={{ color: '#888' }} />
+                    Archive
+                  </button>
+                  <div className="msg-context-menu__sep" />
+                  <button type="button" className="msg-context-menu__danger" disabled>
+                    <DeleteSmallTrashIcon style={{ color: '#FF5500' }} />
+                    Delete Chat
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )
+      })() : null}
     </div>
   )
 }

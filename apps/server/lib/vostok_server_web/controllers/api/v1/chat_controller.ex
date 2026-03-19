@@ -34,7 +34,7 @@ defmodule VostokServerWeb.Api.V1.ChatController do
   end
 
   def index(conn, _params) do
-    chats = Messaging.list_chats_for_user(conn.assigns.current_user.id)
+    chats = Messaging.list_chats_for_user(conn.assigns.current_user.id, conn.assigns.current_device.id)
     json(conn, %{chats: chats})
   end
 

@@ -8,11 +8,17 @@ import {
   PinSmallIcon,
   CopySmallIcon,
   DeleteSmallTrashIcon,
+  ForwardSmallIcon,
+  TranslateSmallIcon,
+  SelectSmallIcon,
+  ChevronDownSmallIcon,
+  ChevronRightSmallIcon,
 } from '../../icons/index.tsx'
 
 type ContextMenuOverlayProps = {
   messages: ReturnType<typeof useMessages>
   chatList: ReturnType<typeof useChatList>
+  onSelectMessage?: (messageId: string) => void
 }
 
 type MenuItem = {
@@ -22,12 +28,13 @@ type MenuItem = {
   danger?: boolean
   disabled?: boolean
   separator?: boolean
+  trailing?: React.ReactNode
   action: () => void
 }
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+const QUICK_REACTIONS = ['❤️‍🔥', '🔥', '👍', '🤣', '😁', '😱', '💯']
 
-export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayProps) {
+export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: ContextMenuOverlayProps) {
   const {
     contextMenuMessage,
     setContextMenuMessage,
@@ -49,6 +56,7 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
   if (contextMenuMessage) {
     const msg = contextMenuMessage.message
 
+    // 1. Reply
     menuItems.push({
       key: 'reply',
       label: 'Reply',
@@ -56,6 +64,7 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
       action: () => { messages.handleReplyToMessage(msg); draftInputRef.current?.focus(); close() }
     })
 
+    // 2. Edit (only for outgoing, after Reply)
     if (msg.side === 'outgoing' && !msg.attachment) {
       menuItems.push({
         key: 'edit',
@@ -65,6 +74,24 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
       })
     }
 
+    // 3. Translate (stub, disabled)
+    menuItems.push({
+      key: 'translate',
+      label: 'Translate',
+      icon: <TranslateSmallIcon />,
+      disabled: true,
+      action: () => {}
+    })
+
+    // 4. Copy Text
+    menuItems.push({
+      key: 'copy',
+      label: 'Copy Text',
+      icon: <CopySmallIcon />,
+      action: () => { void navigator.clipboard.writeText(msg.text); close(); showToast('Copied to clipboard') }
+    })
+
+    // 5. Pin
     if (!msg.id.startsWith('optimistic-')) {
       menuItems.push({
         key: 'pin',
@@ -74,29 +101,24 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
       })
     }
 
-    menuItems.push({
-      key: 'copy',
-      label: 'Copy',
-      icon: <CopySmallIcon />,
-      action: () => { void navigator.clipboard.writeText(msg.text); close(); showToast('Copied to clipboard') }
-    })
-
+    // 6. Forward (enabled stub, with chevron-right trailing indicator)
     menuItems.push({
       key: 'forward',
       label: 'Forward',
-      icon: <ReplySmallIcon />,
-      disabled: true,
-      action: () => {}
+      icon: <ForwardSmallIcon />,
+      trailing: <ChevronRightSmallIcon />,
+      action: () => { close() }
     })
 
+    // 7. Select (enabled, wires into selection mode)
     menuItems.push({
       key: 'select',
       label: 'Select',
-      icon: <CopySmallIcon />,
-      disabled: true,
-      action: () => {}
+      icon: <SelectSmallIcon />,
+      action: () => { onSelectMessage?.(msg.id); close() }
     })
 
+    // 8. Separator + Delete (outgoing only)
     if (msg.side === 'outgoing') {
       menuItems.push({
         key: 'delete',
@@ -232,6 +254,17 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
               {emoji}
             </button>
           ))}
+          <button
+            type="button"
+            className="msg-context-menu__reaction-btn msg-context-menu__reaction-more"
+            onClick={() => {
+              // TODO: open full emoji picker
+              close()
+            }}
+            title="More reactions"
+          >
+            <ChevronDownSmallIcon />
+          </button>
         </div>
         <div className="msg-context-menu__sep" />
         {menuItems.map((item, index) => (
@@ -250,6 +283,7 @@ export function ContextMenuOverlay({ messages, chatList }: ContextMenuOverlayPro
             >
               {item.icon}
               {item.label}
+              {item.trailing ? <span className="msg-context-menu__trailing">{item.trailing}</span> : null}
             </button>
           </span>
         ))}

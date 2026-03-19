@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useThemeContext, type ThemePreference } from '../../contexts/ThemeContext.tsx'
 
 const ACCENT_PRESETS = [
-  { label: 'Blue', value: '#008BFF' },
-  { label: 'Purple', value: '#5856D6' },
-  { label: 'Green', value: '#34C759' },
-  { label: 'Orange', value: '#FF9500' },
+  { label: 'Orange', value: '#FF5500' },
+  { label: 'Amber', value: '#FF9500' },
   { label: 'Red', value: '#FF3B30' },
   { label: 'Pink', value: '#FF2D55' },
-  { label: 'Teal', value: '#5AC8FA' },
+  { label: 'Purple', value: '#5856D6' },
+  { label: 'Blue', value: '#008BFF' },
+  { label: 'Teal', value: '#20BFAB' },
 ]
 
 const BG_PRESETS_LIGHT = [

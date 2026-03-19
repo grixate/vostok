@@ -5,7 +5,7 @@ const STORAGE_KEY_MODE = 'vostok.theme.mode'
 const STORAGE_KEY_ACCENT = 'vostok.theme.accent'
 const STORAGE_KEY_CHAT_BG = 'vostok.theme.chat_background'
 
-const DEFAULT_ACCENT = '#008BFF'
+const DEFAULT_ACCENT = '#FF5500'
 
 function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light'

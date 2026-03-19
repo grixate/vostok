@@ -10,65 +10,89 @@
 @import './animations.css';
 
 /* ─── Design Tokens ───────────────────────────────────────────────────────────
-   Source: Vostok Desktop Design Guide — Telegram macOS desktop dark theme
+   Source: vchat-desktop.pen — Vostok Desktop Design
    Primary theme: Dark
-   Accent:         #008BFF
-   BG Primary:     #17212B
-   BG Secondary:   #0E1621
+   Accent:         #FF5500 → #FF9500 gradient
+   BG Primary:     #090909
+   BG Panel:       #111111
    Row height:     72px
-   Avatar:         48px (list) / 40px (header) / 32px (message)
+   Avatar:         48px (list) / 40px (header) / 34px (message)
    ──────────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* ── Accent ────────────────────────────────────────────────────────────── */
-  --accent: #008BFF;
-  --accent-soft: rgba(0, 139, 255, 0.15);
-  --accent-hover: #0077DB;
-  --accent-active: #0066BE;
-  --accent-muted: rgba(0, 139, 255, 0.15);
+  --accent: #FF5500;
+  --accent-alt: #FF9500;
+  --accent-amber: #FFB347;
+  --accent-soft: rgba(255, 85, 0, 0.15);
+  --accent-hover: #E64D00;
+  --accent-active: #CC4400;
+  --accent-muted: rgba(255, 85, 0, 0.15);
+
+  /* ── Accent gradients ──────────────────────────────────────────────────── */
+  --gradient-accent: linear-gradient(135deg, var(--accent) 0%, var(--accent-alt) 100%);
+  --gradient-button: linear-gradient(to top, var(--accent) 0%, var(--accent-alt) 100%);
 
   /* ── Surface layers (dark default) ─────────────────────────────────────── */
-  --bg: #17212B;
-  --bg2: #0E1621;
-  --bg3: #1F2936;
-  --bg-hover: #202B36;
-  --bg-active: #2B5278;
-  --bg-active-hover: #3A6A99;
-  --bg-input: #242F3D;
-  --bg-overlay: rgba(0, 0, 0, 0.45);
+  --bg-app: #090909;
+  --bg-panel: #111111;
+  --bg-surface-1: #1A1A1A;
+  --bg-surface-2: #1C1C1C;
+  --bg-surface-3: #2A2A2A;
+  --bg-bubble-sent: #201B13;
+  --bg-overlay: rgba(255, 255, 255, 0.035);
+  --bg-danger: #E53935;
+
+  /* Legacy aliases — components still reference these */
+  --bg: var(--bg-app);
+  --bg2: var(--bg-panel);
+  --bg3: var(--bg-surface-1);
+  --bg-hover: var(--bg-overlay);
+  --bg-active: var(--bg-surface-2);
+  --bg-active-hover: var(--bg-surface-3);
+  --bg-input: var(--bg-surface-1);
 
   /* ── Text ──────────────────────────────────────────────────────────────── */
-  --label: #F5F5F5;
-  --label2: #708499;
-  --label3: #546778;
-  --text-accent: #6AB3F3;
+  --text-primary: #FFFFFF;
+  --text-secondary: #888888;
+  --text-muted: #555555;
   --text-on-accent: #FFFFFF;
+  --text-accent: var(--accent);
+
+  /* Legacy aliases */
+  --label: var(--text-primary);
+  --label2: var(--text-secondary);
+  --label3: var(--text-muted);
 
   /* ── Message bubbles ───────────────────────────────────────────────────── */
-  --bubble-out-bg: #2B5278;
-  --bubble-out-bg-hover: #3A6A99;
-  --bubble-out-text: #F5F5F5;
-  --bubble-out-link: #69BFFA;
-  --bubble-out-meta: rgba(255, 255, 255, 0.45);
-  --bubble-in-bg: #182533;
-  --bubble-in-bg-hover: #1F2F40;
-  --bubble-in-text: #F5F5F5;
-  --bubble-in-link: #6AB3F3;
-  --bubble-in-meta: rgba(255, 255, 255, 0.35);
+  --bubble-out-bg: var(--bg-bubble-sent);
+  --bubble-out-bg-hover: #2A2318;
+  --bubble-out-text: #FFFFFF;
+  --bubble-out-link: var(--accent-amber);
+  --bubble-out-meta: var(--accent-amber);
+  --bubble-in-bg: var(--bg-surface-2);
+  --bubble-in-bg-hover: #242424;
+  --bubble-in-text: #FFFFFF;
+  --bubble-in-link: var(--accent);
+  --bubble-in-meta: var(--text-muted);
 
   /* ── Semantic colors ───────────────────────────────────────────────────── */
-  --green: #4FAE4E;
-  --danger: #E53935;
-  --color-success: #4FAE4E;
+  --status-online: #44CF6C;
+  --status-success: #34C759;
+  --status-error: #FF4444;
+  --green: var(--status-online);
+  --danger: var(--bg-danger);
+  --color-success: var(--status-success);
   --color-warning: #E6A817;
-  --color-info: #6AB3F3;
+  --color-info: var(--accent);
 
   /* ── Borders & fills ───────────────────────────────────────────────────── */
-  --fill: rgba(255, 255, 255, 0.08);
-  --sep: rgba(255, 255, 255, 0.08);
-  --sep2: rgba(255, 255, 255, 0.04);
-  --border-primary: rgba(255, 255, 255, 0.08);
-  --border-input: rgba(255, 255, 255, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.035);
+  --fill: rgba(255, 255, 255, 0.06);
+  --sep: var(--border-subtle);
+  --sep2: rgba(255, 255, 255, 0.02);
+  --border-primary: var(--border-subtle);
+  --border-input: rgba(255, 255, 255, 0.08);
   --border-input-focus: var(--accent);
 
   /* ── Peer avatar colors (8-color ring) ─────────────────────────────────── */
@@ -82,51 +106,60 @@
   --peer-8: #EB7840;
 
   /* ── Typography ────────────────────────────────────────────────────────── */
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: 'Inter', sans-serif;
   --font-mono: "SF Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, "Courier New", monospace;
   --emphasis-weight: 510;
-  --type-title: 510 20px/1.2 var(--font);
-  --type-headline: 510 16px/1.375 var(--font);
+  --type-title: 700 22px/1.2 var(--font);
+  --type-headline: 600 16px/1.375 var(--font);
   --type-body: 400 14px/1.4286 var(--font);
   --type-body-bold: 510 14px/1.4286 var(--font);
   --type-caption: 400 13px/1.385 var(--font);
   --type-small: 400 12px/1.333 var(--font);
   --type-micro: 510 11px/1.27 var(--font);
+  --type-name: 600 15px/1.2 var(--font);
+  --type-sender: 600 12px/1.2 var(--font);
 
   /* ── Layout ────────────────────────────────────────────────────────────── */
-  --sidebar-width: 380px;
+  --sidebar-width: 360px;
   --avatar-list: 48px;
   --avatar-header: 40px;
+  --avatar-message: 34px;
   --avatar-compact: 32px;
 
   /* ── Radii ─────────────────────────────────────────────────────────────── */
-  --bubble-radius: 12px;
-  --card-radius: 12px;
-  --input-radius: 12px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 100px;
+
+  /* Legacy aliases */
+  --bubble-radius: 16px;
+  --card-radius: var(--radius-md);
+  --input-radius: var(--radius-pill);
 
   /* ── Constraints ───────────────────────────────────────────────────────── */
   --bubble-max-width: 75%;
 
   /* ── Shadows ───────────────────────────────────────────────────────────── */
-  --shadow-separator: 1px 0 0 0 rgba(255,255,255,0.06);
-  --shadow-panel: 0 4px 24px rgba(0,0,0,0.30);
-  --shadow-dropdown: 0 2px 8px rgba(0, 0, 0, 0.35);
-  --shadow-popup: 0 2px 8px rgba(0, 0, 0, 0.35);
-  --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.5);
-  --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.3);
-  --shadow-bubble: 0 1px 2px rgba(0,0,0,0.20);
+  --shadow-separator: 1px 0 0 0 var(--border-subtle);
+  --shadow-panel: 0 4px 24px rgba(0,0,0,0.40);
+  --shadow-dropdown: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-popup: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.6);
+  --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-bubble: none;
 
   /* ── Scrollbar ─────────────────────────────────────────────────────────── */
   --scrollbar-track: transparent;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
 
   color-scheme: dark;
   font-family: var(--font);
   line-height: 1.5;
   font-weight: 400;
-  color: var(--label);
-  background: var(--bg2);
+  color: var(--text-primary);
+  background: var(--bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -168,60 +201,78 @@ button {
 /* ─── Light Mode ────────────────────────────────────────────────────────────── */
 
 [data-theme="light"] {
-  --accent: #008BFF;
-  --accent-soft: rgba(0, 139, 255, 0.10);
-  --accent-hover: #0077DB;
-  --accent-active: #0066BE;
-  --accent-muted: rgba(0, 139, 255, 0.10);
+  --accent: #FF5500;
+  --accent-alt: #FF9500;
+  --accent-amber: #FFB347;
+  --accent-soft: rgba(255, 85, 0, 0.10);
+  --accent-hover: #E64D00;
+  --accent-active: #CC4400;
+  --accent-muted: rgba(255, 85, 0, 0.10);
 
-  --bg: #FFFFFF;
-  --bg2: #F0F2F5;
-  --bg3: #FFFFFF;
-  --bg-hover: #F0F2F5;
-  --bg-active: #3390EC;
-  --bg-active-hover: #2B80D1;
-  --bg-input: #F0F2F5;
-  --bg-overlay: rgba(0, 0, 0, 0.3);
+  --bg-app: #EAEAEA;
+  --bg-panel: #FFFFFF;
+  --bg-surface-1: #F5F5F5;
+  --bg-surface-2: #EFEFEF;
+  --bg-surface-3: #E3E3E3;
+  --bg-bubble-sent: #FFE5CC;
+  --bg-overlay: rgba(0, 0, 0, 0.035);
+  --bg-danger: #D32F2F;
 
-  --label: #000000;
-  --label2: #707579;
-  --label3: #A8ADB3;
-  --text-accent: #3390EC;
+  --bg: var(--bg-app);
+  --bg2: var(--bg-panel);
+  --bg3: var(--bg-surface-1);
+  --bg-hover: var(--bg-overlay);
+  --bg-active: var(--bg-surface-2);
+  --bg-active-hover: var(--bg-surface-3);
+  --bg-input: var(--bg-surface-1);
+
+  --text-primary: #111111;
+  --text-secondary: #666666;
+  --text-muted: #999999;
   --text-on-accent: #FFFFFF;
+  --text-accent: var(--accent);
 
-  --bubble-out-bg: #EFFDDE;
-  --bubble-out-bg-hover: #DFF2CE;
-  --bubble-out-text: #000000;
-  --bubble-out-link: #3390EC;
-  --bubble-out-meta: rgba(0, 0, 0, 0.35);
-  --bubble-in-bg: #FFFFFF;
-  --bubble-in-bg-hover: #F0F2F5;
-  --bubble-in-text: #000000;
-  --bubble-in-link: #3390EC;
-  --bubble-in-meta: rgba(0, 0, 0, 0.35);
+  --label: var(--text-primary);
+  --label2: var(--text-secondary);
+  --label3: var(--text-muted);
 
-  --green: #4FAE4E;
-  --danger: #E53935;
-  --color-success: #4FAE4E;
+  --bubble-out-bg: var(--bg-bubble-sent);
+  --bubble-out-bg-hover: #FFD9B3;
+  --bubble-out-text: #111111;
+  --bubble-out-link: var(--accent);
+  --bubble-out-meta: var(--accent-amber);
+  --bubble-in-bg: var(--bg-surface-2);
+  --bubble-in-bg-hover: #E8E8E8;
+  --bubble-in-text: #111111;
+  --bubble-in-link: var(--accent);
+  --bubble-in-meta: var(--text-muted);
+
+  --status-online: #44CF6C;
+  --status-success: #2DA44E;
+  --status-error: #E53935;
+  --green: var(--status-online);
+  --danger: var(--bg-danger);
+  --color-success: var(--status-success);
   --color-warning: #E6A817;
-  --color-info: #3390EC;
+  --color-info: var(--accent);
 
-  --fill: rgba(0, 0, 0, 0.06);
-  --sep: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --fill: rgba(0, 0, 0, 0.04);
+  --sep: var(--border-subtle);
   --sep2: rgba(0, 0, 0, 0.04);
-  --border-primary: rgba(0, 0, 0, 0.08);
-  --border-input: rgba(0, 0, 0, 0.12);
+  --border-primary: var(--border-subtle);
+  --border-input: rgba(0, 0, 0, 0.10);
 
-  --shadow-separator: 1px 0 0 0 rgba(0,0,0,0.06);
+  --shadow-separator: 1px 0 0 0 var(--border-subtle);
   --shadow-panel: 0 4px 24px rgba(0,0,0,0.08);
   --shadow-dropdown: 0 2px 8px rgba(0, 0, 0, 0.15);
   --shadow-popup: 0 2px 8px rgba(0, 0, 0, 0.15);
   --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.18);
   --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.12);
-  --shadow-bubble: 0 1px 2px rgba(0,0,0,0.08);
+  --shadow-bubble: none;
 
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
 
   color-scheme: light;
 }
@@ -230,60 +281,78 @@ button {
 
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    --accent: #008BFF;
-    --accent-soft: rgba(0, 139, 255, 0.10);
-    --accent-hover: #0077DB;
-    --accent-active: #0066BE;
-    --accent-muted: rgba(0, 139, 255, 0.10);
+    --accent: #FF5500;
+    --accent-alt: #FF9500;
+    --accent-amber: #FFB347;
+    --accent-soft: rgba(255, 85, 0, 0.10);
+    --accent-hover: #E64D00;
+    --accent-active: #CC4400;
+    --accent-muted: rgba(255, 85, 0, 0.10);
 
-    --bg: #FFFFFF;
-    --bg2: #F0F2F5;
-    --bg3: #FFFFFF;
-    --bg-hover: #F0F2F5;
-    --bg-active: #3390EC;
-    --bg-active-hover: #2B80D1;
-    --bg-input: #F0F2F5;
-    --bg-overlay: rgba(0, 0, 0, 0.3);
+    --bg-app: #EAEAEA;
+    --bg-panel: #FFFFFF;
+    --bg-surface-1: #F5F5F5;
+    --bg-surface-2: #EFEFEF;
+    --bg-surface-3: #E3E3E3;
+    --bg-bubble-sent: #FFE5CC;
+    --bg-overlay: rgba(0, 0, 0, 0.035);
+    --bg-danger: #D32F2F;
 
-    --label: #000000;
-    --label2: #707579;
-    --label3: #A8ADB3;
-    --text-accent: #3390EC;
+    --bg: var(--bg-app);
+    --bg2: var(--bg-panel);
+    --bg3: var(--bg-surface-1);
+    --bg-hover: var(--bg-overlay);
+    --bg-active: var(--bg-surface-2);
+    --bg-active-hover: var(--bg-surface-3);
+    --bg-input: var(--bg-surface-1);
+
+    --text-primary: #111111;
+    --text-secondary: #666666;
+    --text-muted: #999999;
     --text-on-accent: #FFFFFF;
+    --text-accent: var(--accent);
 
-    --bubble-out-bg: #EFFDDE;
-    --bubble-out-bg-hover: #DFF2CE;
-    --bubble-out-text: #000000;
-    --bubble-out-link: #3390EC;
-    --bubble-out-meta: rgba(0, 0, 0, 0.35);
-    --bubble-in-bg: #FFFFFF;
-    --bubble-in-bg-hover: #F0F2F5;
-    --bubble-in-text: #000000;
-    --bubble-in-link: #3390EC;
-    --bubble-in-meta: rgba(0, 0, 0, 0.35);
+    --label: var(--text-primary);
+    --label2: var(--text-secondary);
+    --label3: var(--text-muted);
 
-    --green: #4FAE4E;
-    --danger: #E53935;
-    --color-success: #4FAE4E;
+    --bubble-out-bg: var(--bg-bubble-sent);
+    --bubble-out-bg-hover: #FFD9B3;
+    --bubble-out-text: #111111;
+    --bubble-out-link: var(--accent);
+    --bubble-out-meta: var(--accent-amber);
+    --bubble-in-bg: var(--bg-surface-2);
+    --bubble-in-bg-hover: #E8E8E8;
+    --bubble-in-text: #111111;
+    --bubble-in-link: var(--accent);
+    --bubble-in-meta: var(--text-muted);
+
+    --status-online: #44CF6C;
+    --status-success: #2DA44E;
+    --status-error: #E53935;
+    --green: var(--status-online);
+    --danger: var(--bg-danger);
+    --color-success: var(--status-success);
     --color-warning: #E6A817;
-    --color-info: #3390EC;
+    --color-info: var(--accent);
 
-    --fill: rgba(0, 0, 0, 0.06);
-    --sep: rgba(0, 0, 0, 0.08);
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --fill: rgba(0, 0, 0, 0.04);
+    --sep: var(--border-subtle);
     --sep2: rgba(0, 0, 0, 0.04);
-    --border-primary: rgba(0, 0, 0, 0.08);
-    --border-input: rgba(0, 0, 0, 0.12);
+    --border-primary: var(--border-subtle);
+    --border-input: rgba(0, 0, 0, 0.10);
 
-    --shadow-separator: 1px 0 0 0 rgba(0,0,0,0.06);
+    --shadow-separator: 1px 0 0 0 var(--border-subtle);
     --shadow-panel: 0 4px 24px rgba(0,0,0,0.08);
     --shadow-dropdown: 0 2px 8px rgba(0, 0, 0, 0.15);
     --shadow-popup: 0 2px 8px rgba(0, 0, 0, 0.15);
     --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.18);
     --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.12);
-    --shadow-bubble: 0 1px 2px rgba(0,0,0,0.08);
+    --shadow-bubble: none;
 
-    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
 
     color-scheme: light;
   }

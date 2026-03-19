@@ -9,6 +9,7 @@ import {
   AttachIcon,
   PhotoSmallIcon,
   FileSmallIcon,
+  EditSmallIcon,
   SendIcon,
   MicIcon,
   VideoCamIcon,
@@ -202,79 +203,94 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
   return (
     <form className="live-composer" onSubmit={handleSendMessage}>
       <input hidden onChange={media.handleAttachmentPick} ref={media.fileInputRef} type="file" />
-      <div className="dropdown-anchor">
-        <Tooltip text="Attach file">
-          <button className="live-composer__btn" type="button" aria-label="Attach file" onClick={() => setAttachPopoverOpen((v) => !v)}>
-            <AttachIcon width={22} height={22} />
-          </button>
-        </Tooltip>
-        {attachPopoverOpen ? (
-          <div className="dropdown-menu dropdown-menu--bottom" onClick={() => setAttachPopoverOpen(false)}>
-            <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.setAttribute('accept', 'image/*,video/*'); media.fileInputRef.current?.click() }}>
-              <PhotoSmallIcon />
-              Photo or Video
-            </button>
-            <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.removeAttribute('accept'); media.fileInputRef.current?.click() }}>
-              <FileSmallIcon />
-              File
-            </button>
+
+      {/* Reply bar — sits above the compose row */}
+      {messages.replyTargetMessageId ? (
+        <div className="compose-reply-bar">
+          <div className="compose-reply-bar__accent" />
+          <div className="compose-reply-bar__content">
+            <strong>{messages.editingMessageId ? 'Editing' : 'Reply'}</strong>
+            <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : 'Earlier message'}</span>
           </div>
-        ) : null}
-      </div>
-      <div className="live-composer__field">
-        {messages.replyTargetMessageId ? (
-          <div className="live-composer__reply">
-            <div className="live-composer__reply-copy">
-              <strong style={{ fontSize: 12, color: 'var(--accent)' }}>{messages.editingMessageId ? 'Editing' : 'Reply'}</strong>
-              <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : 'Earlier message'}</span>
+          <button className="compose-reply-bar__close" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label="Cancel reply">
+            <CloseIcon width={16} height={16} />
+          </button>
+        </div>
+      ) : null}
+
+      {/* Edit bar — sits above the compose row */}
+      {messages.editingMessageId && !messages.replyTargetMessageId ? (
+        <div className="compose-edit-bar">
+          <EditSmallIcon />
+          <span>Edit Message</span>
+          <button className="compose-edit-bar__close" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label="Cancel edit">
+            <CloseIcon width={16} height={16} />
+          </button>
+        </div>
+      ) : null}
+
+      {/* Main compose row */}
+      <div className="live-composer__row">
+        <div className="dropdown-anchor">
+          <Tooltip text="Attach file">
+            <button className="live-composer__btn" type="button" aria-label="Attach file" onClick={() => setAttachPopoverOpen((v) => !v)}>
+              <AttachIcon width={22} height={22} />
+            </button>
+          </Tooltip>
+          {attachPopoverOpen ? (
+            <div className="dropdown-menu dropdown-menu--bottom" onClick={() => setAttachPopoverOpen(false)}>
+              <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.setAttribute('accept', 'image/*,video/*'); media.fileInputRef.current?.click() }}>
+                <PhotoSmallIcon />
+                Photo or Video
+              </button>
+              <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.removeAttribute('accept'); media.fileInputRef.current?.click() }}>
+                <FileSmallIcon />
+                File
+              </button>
+              <button className="dropdown-menu__item" type="button" disabled>
+                👤
+                Contact
+              </button>
+              <button className="dropdown-menu__item" type="button" disabled>
+                📍
+                Location
+              </button>
             </div>
-            <button className="live-composer__btn live-composer__reply-clear" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label="Cancel reply">
-              <CloseIcon width={14} height={14} />
+          ) : null}
+        </div>
+        <div className="live-composer__field">
+          <textarea
+            className="live-composer__input"
+            onChange={(event) => { messages.setDraft(event.target.value); onDraftChange?.(event.target.value); handleTextareaInput(event) }}
+            placeholder={messages.editingMessageId ? 'Edit message\u2026' : 'Message'}
+            ref={draftInputRef}
+            rows={1}
+            value={messages.draft}
+          />
+        </div>
+        {messages.draft.trim().length > 0 ? (
+          <Tooltip text="Send message">
+            <button className="live-composer__send" type="submit" aria-label="Send">
+              <SendIcon stroke="white" />
             </button>
-          </div>
-        ) : null}
-        {messages.editingMessageId && !messages.replyTargetMessageId ? (
-          <div className="live-composer__reply">
-            <div className="live-composer__reply-copy">
-              <strong style={{ fontSize: 12, color: 'var(--accent)' }}>Editing</strong>
-              <span>{messages.editingTargetMessage ? messages.editingTargetMessage.text : 'Outgoing message'}</span>
-            </div>
-            <button className="live-composer__btn live-composer__reply-clear" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label="Cancel edit">
-              <CloseIcon width={14} height={14} />
+          </Tooltip>
+        ) : (
+          <Tooltip text={videoMode ? 'Record video message (right-click to switch to voice)' : 'Record voice message (right-click to switch to video)'}>
+            <button
+              className={`live-composer__btn live-composer__mic${videoMode ? ' live-composer__mic--video' : ''}`}
+              type="button"
+              aria-label={videoMode ? 'Record video message' : 'Record voice message'}
+              onClick={handleMediaButtonClick}
+              onPointerDown={handleMediaButtonPointerDown}
+              onPointerUp={handleMediaButtonPointerUp}
+              onPointerLeave={handleMediaButtonPointerUp}
+              onContextMenu={handleMediaButtonContextMenu}
+            >
+              {videoMode ? <VideoCamIcon width={22} height={22} /> : <MicIcon width={22} height={22} />}
             </button>
-          </div>
-        ) : null}
-        <textarea
-          className="live-composer__input"
-          onChange={(event) => { messages.setDraft(event.target.value); onDraftChange?.(event.target.value); handleTextareaInput(event) }}
-          placeholder={messages.editingMessageId ? 'Edit message\u2026' : 'Message'}
-          ref={draftInputRef}
-          rows={1}
-          value={messages.draft}
-        />
+          </Tooltip>
+        )}
       </div>
-      {messages.draft.trim().length > 0 ? (
-        <Tooltip text="Send message">
-          <button className="live-composer__send" type="submit" aria-label="Send">
-            <SendIcon stroke="white" />
-          </button>
-        </Tooltip>
-      ) : (
-        <Tooltip text={videoMode ? 'Record video message (right-click to switch to voice)' : 'Record voice message (right-click to switch to video)'}>
-          <button
-            className={`live-composer__btn live-composer__mic${videoMode ? ' live-composer__mic--video' : ''}`}
-            type="button"
-            aria-label={videoMode ? 'Record video message' : 'Record voice message'}
-            onClick={handleMediaButtonClick}
-            onPointerDown={handleMediaButtonPointerDown}
-            onPointerUp={handleMediaButtonPointerUp}
-            onPointerLeave={handleMediaButtonPointerUp}
-            onContextMenu={handleMediaButtonContextMenu}
-          >
-            {videoMode ? <VideoCamIcon width={22} height={22} /> : <MicIcon width={22} height={22} />}
-          </button>
-        </Tooltip>
-      )}
     </form>
   )
 }

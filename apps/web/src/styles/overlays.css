@@ -1,58 +1,13 @@
 /* ─── Dropdown Menu (Three-dots / Attach popover) ────────────────────────── */
-
-.dropdown-anchor {
-  position: relative;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  min-width: 200px;
-  background: var(--bg3);
-  border-radius: 12px;
-  box-shadow: var(--shadow-popup);
-  padding: 6px;
-  z-index: 100;
-  animation: dropdown-in 0.15s ease;
-}
-
-.dropdown-menu--bottom {
-  top: auto;
-  bottom: 100%;
-  margin-top: 0;
-  margin-bottom: 4px;
-}
-
-.dropdown-menu__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--label);
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 100ms ease;
-}
-
-.dropdown-menu__item:hover {
-  background: var(--bg-hover);
-}
+/* NOTE: Primary dropdown styles now live in composer.css. These are fallback. */
 
 .dropdown-menu__item--danger {
-  color: var(--danger);
+  color: var(--status-error);
 }
 
 .dropdown-menu__sep {
   height: 0.5px;
-  background: var(--border-primary);
+  background: var(--border-subtle);
   margin: 4px 12px;
 }
 
@@ -75,11 +30,12 @@
 .msg-context-menu {
   position: fixed;
   z-index: 201;
-  min-width: 180px;
-  background: var(--bg3);
+  min-width: 220px;
+  background: var(--bg-surface-2);
   border-radius: 12px;
+  border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-popup);
-  padding: 6px;
+  padding: 6px 0;
   animation: dropdown-in 0.12s ease;
 }
 
@@ -88,34 +44,35 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  height: 40px;
+  padding: 8px 16px;
   border: none;
   background: none;
   font: inherit;
-  font-size: 14px;
-  color: var(--label);
-  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: background 100ms ease;
 }
 
 .msg-context-menu button:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-3);
 }
 
 .msg-context-menu__sep {
   height: 0.5px;
-  background: var(--border-primary);
+  background: var(--border-subtle);
   margin: 4px 12px;
 }
 
 .msg-context-menu__danger {
-  color: var(--danger) !important;
+  color: var(--status-error) !important;
 }
 
 .msg-context-menu__item--focused {
-  background: var(--bg-hover);
+  background: var(--bg-surface-3);
 }
 
 .msg-context-menu__item--disabled {
@@ -125,28 +82,42 @@
 
 .msg-context-menu__reactions {
   display: flex;
-  gap: 2px;
-  padding: 4px 4px 2px;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-surface-2);
+  border-radius: 20px;
 }
 
 .msg-context-menu__reaction-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: none;
-  border-radius: 50%;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
-  transition: background 100ms ease;
+  transition: background 100ms ease, transform 100ms ease;
 }
 
 .msg-context-menu__reaction-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-3);
   transform: scale(1.2);
+}
+
+.msg-context-menu__reaction-more {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.msg-context-menu__trailing {
+  margin-left: auto;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
 }
 
 .msg-context-menu button:disabled {
@@ -166,8 +137,8 @@
   left: 0;
   width: 320px;
   height: 100%;
-  background: var(--bg2);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.30);
+  background: var(--bg-panel);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.40);
   z-index: 201;
   display: flex;
   flex-direction: column;
@@ -188,7 +159,7 @@
   align-items: center;
   gap: 12px;
   padding: 20px 16px;
-  border-bottom: 0.5px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .profile-overlay__avatar {
@@ -200,8 +171,9 @@
   justify-content: center;
   color: var(--text-on-accent);
   font-size: 20px;
-  font-weight: var(--emphasis-weight);
+  font-weight: 700;
   flex-shrink: 0;
+  background: var(--gradient-accent);
 }
 
 .profile-overlay__info {
@@ -213,12 +185,12 @@
 
 .profile-overlay__info strong {
   font-size: 16px;
-  font-weight: var(--emphasis-weight);
+  font-weight: 600;
 }
 
 .profile-overlay__info span {
   font-size: 13px;
-  color: var(--label2);
+  color: var(--text-secondary);
 }
 
 .profile-overlay__close {
@@ -229,7 +201,7 @@
   justify-content: center;
   border: none;
   background: none;
-  color: var(--label2);
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 50%;
   flex-shrink: 0;
@@ -237,7 +209,7 @@
 }
 
 .profile-overlay__close:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-1);
 }
 
 .profile-overlay__actions {
@@ -257,38 +229,38 @@
   background: none;
   font: inherit;
   font-size: 15px;
-  color: var(--label);
-  border-radius: 10px;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: background 100ms ease;
 }
 
 .profile-overlay__actions button:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-1);
 }
 
 .profile-overlay__sep {
   height: 0.5px;
-  background: var(--border-primary);
+  background: var(--border-subtle);
   margin: 4px 12px;
 }
 
 .profile-overlay__danger {
-  color: var(--danger) !important;
+  color: var(--status-error) !important;
 }
 
 /* ─── Settings Overlay ───────────────────────────────────────────────────── */
 
 .settings-overlay__title {
   font-size: 17px;
-  font-weight: var(--emphasis-weight);
+  font-weight: 600;
   flex: 1;
 }
 
 .settings-overlay__section {
   padding: 8px 8px 4px;
-  border-bottom: 0.5px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-overlay__section:last-child {
@@ -296,9 +268,9 @@
 }
 
 .settings-overlay__section-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: var(--emphasis-weight);
-  color: var(--label3);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 4px 12px 6px;
@@ -314,15 +286,15 @@
   background: none;
   font: inherit;
   font-size: 15px;
-  color: var(--label);
-  border-radius: 10px;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: background 100ms ease;
 }
 
 .settings-overlay__row:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-1);
 }
 
 .settings-overlay__row--info {
@@ -335,7 +307,7 @@
 }
 
 .settings-overlay__row--danger {
-  color: var(--danger);
+  color: var(--status-error);
 }
 
 /* ─── Reaction / Context / Call ────────────────────────────────────────────── */
@@ -345,19 +317,19 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px;
-  background: var(--bg3) !important;
-  border-radius: 12px !important;
+  background: var(--bg-surface-2) !important;
+  border-radius: var(--radius-md) !important;
 }
 
 .reaction-bar__chip {
   border: 0;
-  border-radius: 999px;
-  background: var(--fill);
-  color: var(--label);
+  border-radius: 12px;
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
   cursor: pointer;
   padding: 6px 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--emphasis-weight);
 }
 
 .context-menu {
@@ -365,24 +337,24 @@
   flex-direction: column;
   gap: 1px;
   padding: 4px;
-  background: var(--bg3) !important;
-  border-radius: 12px !important;
+  background: var(--bg-surface-2) !important;
+  border-radius: var(--radius-md) !important;
 }
 
 .context-menu__item {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--label);
+  color: var(--text-primary);
   cursor: pointer;
   padding: 10px 12px;
   text-align: left;
-  font-size: 15px;
+  font-size: 13px;
   transition: background 100ms ease;
 }
 
 .context-menu__item:hover {
-  background: var(--bg-hover);
+  background: var(--bg-surface-3);
 }
 
 .call-surface {
@@ -390,18 +362,165 @@
   flex-direction: column;
   gap: 4px;
   padding: 16px;
-  background: var(--bg2) !important;
-  border-radius: 12px !important;
+  background: var(--bg-panel) !important;
+  border-radius: var(--radius-md) !important;
 }
 
 .call-surface__mode {
   font-size: 11px;
   font-weight: var(--emphasis-weight);
   text-transform: uppercase;
-  color: var(--label2);
+  color: var(--text-secondary);
 }
 
 .call-surface__copy {
-  color: var(--label2);
+  color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* ─── Connection Status Bar ──────────────────────────────────────────────── */
+
+.connection-status-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  padding: 6px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: var(--emphasis-weight);
+  animation: status-bar-in 200ms ease;
+}
+
+.connection-status-bar--success {
+  background: rgba(68, 207, 108, 0.15);
+  color: var(--status-online);
+}
+
+.connection-status-bar--warning {
+  background: rgba(255, 149, 0, 0.15);
+  color: #FF9500;
+}
+
+.connection-status-bar--error {
+  background: rgba(255, 68, 68, 0.15);
+  color: var(--status-error);
+}
+
+@keyframes status-bar-in {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+/* ─── Keyboard Shortcuts Overlay ─────────────────────────────────────────── */
+
+.shortcuts-overlay__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fade-in 150ms ease;
+}
+
+.shortcuts-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 251;
+  width: min(90vw, 680px);
+  max-height: 80vh;
+  background: var(--bg-surface-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dropdown-in 150ms ease;
+}
+
+.shortcuts-overlay__header {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shortcuts-overlay__title {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.shortcuts-overlay__close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-surface-2);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 100ms ease;
+}
+
+.shortcuts-overlay__close:hover {
+  background: var(--bg-surface-3);
+}
+
+.shortcuts-overlay__body {
+  padding: 16px 24px 24px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.shortcuts-overlay__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcuts-overlay__group-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: var(--emphasis-weight);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shortcuts-overlay__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.shortcuts-overlay__label {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.shortcuts-overlay__kbd {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: var(--emphasis-weight);
+  color: var(--text-secondary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

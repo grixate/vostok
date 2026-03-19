@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageBubble } from '@vostok/ui-chat'
+import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { PinnedBar } from './PinnedBar.tsx'
 import {
@@ -15,7 +16,7 @@ import {
 } from '../../utils/attachment-helpers.ts'
 import { VoiceNotePlayer } from '../../components/VoiceNotePlayer.tsx'
 import { RoundVideoPlayer } from '../../components/RoundVideoPlayer.tsx'
-import { ChevronDownIcon } from '../../icons/index.tsx'
+import { ChevronDownIcon, ForwardSmallIcon, CopySmallIcon, DeleteSmallTrashIcon, CheckIcon } from '../../icons/index.tsx'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
 import type { ChatSummary } from '../../lib/api.ts'
@@ -25,6 +26,7 @@ type MessageThreadProps = {
   media: ReturnType<typeof useMediaCapture>
   activeChat: ChatSummary | null
   searchHighlight?: { query: string; activeMessageId?: string } | null
+  initialSelectedMessageId?: string | null
 }
 
 function escapeRegex(str: string): string {
@@ -42,7 +44,8 @@ function highlightText(text: string, query: string): React.ReactNode {
   )
 }
 
-export function MessageThread({ messages, media, activeChat, searchHighlight }: MessageThreadProps) {
+export function MessageThread({ messages, media, activeChat, searchHighlight, initialSelectedMessageId }: MessageThreadProps) {
+  const { storedDevice } = useAppContext()
   const { setContextMenuMessage, draftInputRef } = useUIContext()
 
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
@@ -59,6 +62,14 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
   const isNearBottomRef = useRef(true)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
 
+  // Enter selection mode when initialSelectedMessageId changes
+  useEffect(() => {
+    if (initialSelectedMessageId) {
+      setSelectedMessageIds(new Set([initialSelectedMessageId]))
+      lastClickedIdRef.current = initialSelectedMessageId
+    }
+  }, [initialSelectedMessageId])
+
   // Track new messages for enter animation
   useEffect(() => {
     const currentIds = new Set(messages.messageItems.map((m) => m.id))
@@ -73,22 +84,32 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
     const newIds = new Set<string>()
     for (const id of currentIds) {
       if (!known.has(id)) {
-        newIds.add(id)
+        // When an optimistic message (optimistic-<clientId>) is replaced by
+        // the server-confirmed message (UUID id, same clientId), the new UUID
+        // is unknown.  Detect this case and suppress the enter animation so
+        // the message doesn't visually "pop" a second time.
+        const msg = messages.messageItems.find((m) => m.id === id)
+        const wasOptimistic = msg?.clientId && known.has(`optimistic-${msg.clientId}`)
+
+        if (!wasOptimistic) {
+          newIds.add(id)
+        }
       }
     }
 
     if (newIds.size > 0) {
       setAnimatingIds(newIds)
-      knownMessageIdsRef.current = currentIds
+    }
 
+    knownMessageIdsRef.current = currentIds
+
+    if (newIds.size > 0) {
       // Clear animation classes after they complete
       const timer = setTimeout(() => {
         setAnimatingIds(new Set())
       }, 250)
       return () => clearTimeout(timer)
     }
-
-    knownMessageIdsRef.current = currentIds
   }, [messages.messageItems])
 
   // Reset known message IDs when switching chats
@@ -155,8 +176,26 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedMessageIds.size])
 
-  // Left-click does nothing; selection is available via context menu "Select"
-  const handleMessageClick = useCallback((_messageId: string, _event: React.MouseEvent) => {}, [])
+  const toggleSelection = useCallback((messageId: string) => {
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(messageId)) next.delete(messageId)
+      else next.add(messageId)
+      return next
+    })
+  }, [])
+
+  const handleEnterSelectionMode = useCallback((messageId: string) => {
+    setSelectedMessageIds(new Set([messageId]))
+    lastClickedIdRef.current = messageId
+  }, [])
+
+  // Left-click toggles selection when in selection mode
+  const handleMessageClick = useCallback((messageId: string, _event: React.MouseEvent) => {
+    if (selectedMessageIds.size > 0) {
+      toggleSelection(messageId)
+    }
+  }, [selectedMessageIds.size, toggleSelection])
 
   const handleDoubleClick = useCallback((message: typeof messages.messageItems[number]) => {
     // Guard: if user is selecting text, don't trigger reply
@@ -302,38 +341,46 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
             const isActiveSearchMatch = searchHighlight?.activeMessageId === message.id
             const { isFirstInGroup } = groupInfo[index]
             const isGroup = activeChat.type === 'group'
-            // For incoming messages in a 1:1 DM, senderUsername may be null — fall back to the chat title
+            // For incoming messages in a 1:1 DM, senderUsername may be null — fall back to the chat title.
+            // For outgoing messages, fall back to the current user's username from storedDevice.
             const rawSenderName = message.senderUsername ?? ''
-            const senderName = (message.side === 'incoming' && !rawSenderName && !activeChat.is_self_chat)
-              ? activeChat.title
-              : rawSenderName
-            const showSenderName = isGroup && isFirstInGroup && !!senderName
+            const senderName =
+              message.side === 'outgoing' && !rawSenderName
+                ? (storedDevice?.username ?? '')
+                : (message.side === 'incoming' && !rawSenderName && !activeChat.is_self_chat)
+                  ? activeChat.title
+                  : rawSenderName
+            const showSenderName = isFirstInGroup && !!senderName && message.side !== 'system'
             const avatarColor = avatarColorForSender(senderName)
 
             return (
             <div
-              key={message.id}
+              key={message.clientId || message.id}
               ref={(el) => { messageRefsMap.current[message.id] = el }}
               className={getWrapperClassName(message, isSelected, isActiveSearchMatch, isFirstInGroup, index)}
               onClick={(e) => handleMessageClick(message.id, e)}
               onDoubleClick={() => handleDoubleClick(message)}
             >
+            {selectedMessageIds.size > 0 && message.side !== 'system' ? (
+              <button
+                className={`selection-check${selectedMessageIds.has(message.id) ? ' selection-check--active' : ''}`}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleSelection(message.id) }}
+              >
+                {selectedMessageIds.has(message.id) ? <CheckIcon /> : null}
+              </button>
+            ) : null}
             {message.side !== 'system' ? (
               <div className={`message-row${message.side === 'outgoing' ? ' message-row--outgoing' : ''}`}>
                 <div
                   className={`message-row__avatar${
-                    (message.side === 'outgoing' || !isFirstInGroup)
-                      ? ' message-row__avatar--spacer'
-                      : ''
+                    !isFirstInGroup ? ' message-row__avatar--spacer' : ''
                   }`}
                   style={{
-                    background:
-                      message.side === 'incoming' && isFirstInGroup
-                        ? avatarColor
-                        : undefined,
+                    background: isFirstInGroup ? avatarColor : undefined,
                   }}
                 >
-                  {message.side === 'incoming' && isFirstInGroup
+                  {isFirstInGroup
                     ? senderName.slice(0, 1).toUpperCase()
                     : ''}
                 </div>
@@ -343,7 +390,7 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
                   ) : null}
                   <MessageBubble
               side={message.side}
-              timestamp={formatRelativeTime(message.sentAt)}
+              timestamp={`${formatRelativeTime(message.sentAt)}${message.editedAt ? ' edited' : ''}`}
               onContextMenu={(e) => {
                 if (message.side !== 'system' && !message.deletedAt) {
                   e.preventDefault()
@@ -421,11 +468,17 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
                 </button>
               ) : null}
               {message.reactions && message.reactions.length > 0 ? (
-                <span className="message-thread__reactions">
-                  {message.reactions
-                    .map((reaction) => `${reaction.reactionKey} ${reaction.count}${reaction.reacted ? '*' : ''}`)
-                    .join(' \u2022 ')}
-                </span>
+                <div className="message-thread__reactions">
+                  {message.reactions.map((reaction) => (
+                    <span
+                      key={reaction.reactionKey}
+                      className={`message-thread__reaction-chip${reaction.reacted ? ' message-thread__reaction-chip--own' : ''}`}
+                    >
+                      <span className="message-thread__reaction-emoji">{reaction.reactionKey}</span>
+                      <span className="message-thread__reaction-count">{reaction.count}</span>
+                    </span>
+                  ))}
+                </div>
               ) : null}
             </MessageBubble>
                 </div>
@@ -460,15 +513,17 @@ export function MessageThread({ messages, media, activeChat, searchHighlight }: 
       {selectedMessageIds.size > 0 ? (
         <div className="selection-bar">
           <span className="selection-bar__count">{selectedMessageIds.size} selected</span>
-          <button className="selection-bar__action" type="button" onClick={handleCopySelected}>
-            Copy
-          </button>
-          <button className="selection-bar__action" type="button" disabled>
-            Delete
-          </button>
-          <button className="selection-bar__action" type="button" onClick={handleClearSelection}>
-            Clear
-          </button>
+          <div className="selection-bar__actions">
+            <button className="selection-bar__icon-btn" type="button" disabled aria-label="Forward">
+              <ForwardSmallIcon />
+            </button>
+            <button className="selection-bar__icon-btn" type="button" onClick={handleCopySelected} aria-label="Copy">
+              <CopySmallIcon />
+            </button>
+            <button className="selection-bar__icon-btn selection-bar__icon-btn--danger" type="button" disabled aria-label="Delete">
+              <DeleteSmallTrashIcon />
+            </button>
+          </div>
         </div>
       ) : null}
     </section>

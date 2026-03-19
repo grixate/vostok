@@ -7,11 +7,12 @@ import {
   fetchMediaLinkMetadata,
   listMessages,
   listRecipientDevices,
+  markChatRead,
   toggleMessagePin,
   toggleMessageReaction,
   updateMessage
 } from '../lib/api.ts'
-import { readCachedMessages, writeCachedMessages, type CachedMessage } from '../lib/message-cache.ts'
+import { readCachedMessages, writeCachedMessages, writeChatPreview, type CachedMessage } from '../lib/message-cache.ts'
 import {
   countOutboxMessages,
   deleteOutboxMessage,
@@ -23,9 +24,9 @@ import { encryptMessageWithSessions } from '../lib/chat-session-vault.ts'
 import { encryptMessageWithGroupSenderKey, getActiveGroupSenderKey } from '../lib/message-vault.ts'
 import { outboxRetryDelayMs } from '@vostok/crypto-core'
 import { subscribeToChatStream } from '../lib/realtime.ts'
-import { projectMessage, cacheSentPlaintext } from '../utils/message-helpers.ts'
+import { projectMessage, cacheSentPlaintext, seedDecryptedCacheFromPersisted } from '../utils/message-helpers.ts'
 import { mergeMessageThread } from '../utils/message-helpers.ts'
-import { syncChatSummary } from '../utils/chat-helpers.ts'
+import { syncChatSummary, compareMessageOrder } from '../utils/chat-helpers.ts'
 import { extractFirstHttpUrl } from '../utils/format.ts'
 import { canUseChatSessions, shouldQueueOutboxSendFailure, isOutboxDuplicateClientIdError } from '../utils/crypto-helpers.ts'
 import type { AuthView, AttachmentDescriptor } from '../types.ts'
@@ -52,6 +53,7 @@ export function useMessages(
 
   const messageItemsRef = useRef<CachedMessage[]>([])
   const linkMetadataInFlightRef = useRef(new Set<string>())
+  const syncInFlightRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     messageItemsRef.current = messageItems
@@ -65,6 +67,14 @@ export function useMessages(
     messageItemsRef.current = nextMessages
     setMessageItems(nextMessages)
     void writeCachedMessages(chatId, nextMessages)
+
+    // Persist the last decrypted message preview for the sidebar chat list.
+    const lastDecrypted = [...nextMessages].reverse().find(
+      (m) => m.decryptable && m.text && m.side !== 'system'
+    )
+    if (lastDecrypted) {
+      writeChatPreview(chatId, lastDecrypted.text)
+    }
 
     if (syncSummary) {
       setChatItems((current) => syncChatSummary(current, chatId, nextMessages))
@@ -90,35 +100,99 @@ export function useMessages(
   }
 
   async function syncMessagesFromServerNow(chatId: string) {
-    if (!storedDevice || activeChatIdRef.current !== chatId) {
-      return
+    // Serialise sync calls — the decrypt path reads and writes shared ratchet
+    // state in localStorage, so concurrent syncs corrupt session counters.
+    if (syncInFlightRef.current) {
+      await syncInFlightRef.current.catch(() => {})
     }
 
-    await syncChatSessionsFromServer(chatId)
+    const run = async () => {
+      if (!storedDevice || activeChatIdRef.current !== chatId) {
+        return
+      }
 
-    const response = await listMessages(storedDevice.sessionToken, chatId)
-    const projected = await Promise.all(
-      response.messages.map((message) =>
-        projectMessage(
-          message,
-          storedDevice.deviceId,
-          storedDevice.encryptionPrivateKeyPkcs8Base64
+      await syncChatSessionsFromServer(chatId)
+
+      const response = await listMessages(storedDevice.sessionToken, chatId)
+      // Messages MUST be projected sequentially — each decryption reads and
+      // writes the shared ratchet state (receive counter, skipped message keys,
+      // etc.) in localStorage.  Parallel decryption via Promise.all causes race
+      // conditions where one message's state write overwrites another's.
+      const projected: Awaited<ReturnType<typeof projectMessage>>[] = []
+
+      for (const message of response.messages) {
+        projected.push(
+          await projectMessage(
+            message,
+            storedDevice.deviceId,
+            storedDevice.encryptionPrivateKeyPkcs8Base64
+          )
         )
-      )
-    )
+      }
 
-    if (activeChatIdRef.current !== chatId) {
-      return
+      if (activeChatIdRef.current !== chatId) {
+        return
+      }
+
+      // Preserve any optimistic (not-yet-confirmed) outgoing messages so the
+      // user doesn't see their pending message disappear while the server sync
+      // round-trips.  Once ingestMessageIntoActiveThread replaces the
+      // optimistic entry with the server-confirmed version, it drops out of
+      // future sync passes automatically.
+      const optimistic = messageItemsRef.current.filter(
+        (m) => m.id.startsWith('optimistic-') && !projected.some((p) => p.clientId === m.clientId)
+      )
+
+      const merged = optimistic.length > 0
+        ? [...projected, ...optimistic].sort(compareMessageOrder)
+        : projected
+
+      replaceActiveMessages(chatId, merged, true)
+
+      // Mark the chat as read now that messages are visible.  Fire-and-forget
+      // so it doesn't block the UI.  The last message ID lets the server track
+      // the exact read cursor for unread-count computation.
+      const lastMessageId = projected.length > 0
+        ? projected[projected.length - 1].id
+        : undefined
+      const validLastId = lastMessageId && !lastMessageId.startsWith('optimistic-')
+        ? lastMessageId
+        : undefined
+      void markChatRead(storedDevice.sessionToken, chatId, validLastId).catch(() => {})
     }
 
-    replaceActiveMessages(chatId, projected, true)
+    const promise = run()
+    syncInFlightRef.current = promise
+    try {
+      await promise
+    } finally {
+      if (syncInFlightRef.current === promise) {
+        syncInFlightRef.current = null
+      }
+    }
   }
 
   const syncMessagesFromServer = useEffectEvent(async (chatId: string) => {
     await syncMessagesFromServerNow(chatId)
   })
 
-  const handleRealtimeMessage = useEffectEvent((_messageId: string, chatId: string) => {
+  const handleRealtimeMessage = useEffectEvent((messageId: string, chatId: string) => {
+    const thread = messageItemsRef.current
+
+    // If the server-confirmed message is already in the thread, skip the sync.
+    if (thread.some((m) => m.id === messageId)) {
+      return
+    }
+
+    // If we have a pending optimistic outgoing message, the realtime event is
+    // most likely the server echo of our own just-sent message.  The async
+    // ingestMessageIntoActiveThread flow hasn't finished replacing the
+    // optimistic entry yet, so a full re-sync right now would cause a visual
+    // flicker.  Skip the sync — ingest will update the thread momentarily.
+    if (thread.some((m) => m.id.startsWith('optimistic-') && m.side === 'outgoing')) {
+      return
+    }
+
     void syncMessagesFromServer(chatId)
   })
 
@@ -152,6 +226,11 @@ export function useMessages(
         }
 
         if (cached.length > 0) {
+          // Seed the in-memory decryption cache from the persisted messages so
+          // that projectMessage() can find previously-decrypted text without
+          // re-running the Double Ratchet (which would fail after page reload
+          // because chain counters already advanced in the previous session).
+          seedDecryptedCacheFromPersisted(cached)
           messageItemsRef.current = cached
           setMessageItems(cached)
         } else {
@@ -647,6 +726,47 @@ export function useMessages(
     // Chat sessions are managed by useChatSessions hook
   }
 
+  /**
+   * Lightweight preview update for non-active chats.
+   * Called when `chat:activity` fires for a chat that is already in the list
+   * but is NOT the currently active chat.  Fetches the latest message, tries
+   * to decrypt it, and writes the preview to localStorage so the sidebar
+   * displays the actual message text instead of "Encrypted message".
+   */
+  async function updateNonActiveChatPreview(chatId: string) {
+    if (!storedDevice || activeChatIdRef.current === chatId) {
+      return
+    }
+
+    try {
+      // Bootstrap / discover sessions for the chat so we can decrypt.
+      await syncChatSessionsFromServer(chatId)
+
+      const response = await listMessages(storedDevice.sessionToken, chatId)
+
+      if (response.messages.length === 0) {
+        return
+      }
+
+      // Only decrypt the last message — enough for the sidebar preview.
+      const lastServerMessage = response.messages[response.messages.length - 1]
+      const projected = await projectMessage(
+        lastServerMessage,
+        storedDevice.deviceId,
+        storedDevice.encryptionPrivateKeyPkcs8Base64
+      )
+
+      if (projected.decryptable && projected.text && projected.side !== 'system') {
+        writeChatPreview(chatId, projected.text)
+
+        // Bump chatItems so the sidebar re-renders with the new preview.
+        setChatItems((current) => syncChatSummary(current, chatId, [projected]))
+      }
+    } catch {
+      // Preview update is best-effort — silently ignore failures.
+    }
+  }
+
   return {
     messageItems,
     messageItemsRef,
@@ -670,6 +790,7 @@ export function useMessages(
     replaceActiveMessages,
     ingestMessageIntoActiveThread,
     syncMessagesFromServerNow,
-    queueMessageForOutbox
+    queueMessageForOutbox,
+    updateNonActiveChatPreview
   }
 }

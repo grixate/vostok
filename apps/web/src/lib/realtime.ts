@@ -33,6 +33,38 @@ export function subscribeToConnectionStatus(cb: (s: ConnectionStatus) => void): 
 let deviceSocket: Socket | null = null
 let deviceSocketToken: string | null = null
 
+type UserActivityHandler = {
+  onChatActivity: (chatId: string) => void
+}
+
+export function subscribeToUserStream(
+  token: string,
+  userId: string,
+  handlers: UserActivityHandler
+): () => void {
+  const socket = ensureDeviceSocket(token)
+  const channel = socket.channel(`user:${userId}`)
+
+  channel.on('chat:activity', (payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const chatId = (payload as { chat_id?: unknown }).chat_id
+      if (typeof chatId === 'string') {
+        handlers.onChatActivity(chatId)
+      }
+    }
+  })
+
+  channel
+    .join()
+    .receive('error', () => {
+      console.warn('[subscribeToUserStream] Failed to join user channel')
+    })
+
+  return () => {
+    teardownChannel(channel, ['chat:activity'])
+  }
+}
+
 export function subscribeToChatStream(
   token: string,
   chatId: string,

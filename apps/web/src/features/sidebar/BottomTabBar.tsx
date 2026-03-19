@@ -1,6 +1,16 @@
-import { ChatCircle, Users, GearSix } from '@phosphor-icons/react'
-import type { Icon as PhosphorIcon } from '@phosphor-icons/react'
+import {
+  ChatsIcon, ChatsFilledIcon,
+  MembersIcon, MembersFilledIcon,
+  SettingsIcon, SettingsFilledIcon,
+} from '../../icons/index.tsx'
 import type { SidebarTab } from '../../contexts/UIContext.tsx'
+
+type TabDef = {
+  id: SidebarTab
+  label: string
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  IconActive: React.ComponentType<React.SVGProps<SVGSVGElement>>
+}
 
 type BottomTabBarProps = {
   activeTab: SidebarTab
@@ -8,26 +18,30 @@ type BottomTabBarProps = {
 }
 
 export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
-  const tabs: { id: SidebarTab; label: string; Icon: PhosphorIcon }[] = [
-    { id: 'chats', label: 'Chats', Icon: ChatCircle },
-    { id: 'members', label: 'Members', Icon: Users },
-    { id: 'settings', label: 'Settings', Icon: GearSix },
+  const tabs: TabDef[] = [
+    { id: 'chats', label: 'Chats', Icon: ChatsIcon, IconActive: ChatsFilledIcon },
+    { id: 'members', label: 'Members', Icon: MembersIcon, IconActive: MembersFilledIcon },
+    { id: 'settings', label: 'Settings', Icon: SettingsIcon, IconActive: SettingsFilledIcon },
   ]
 
   return (
     <div className="sidebar__bottom-tab-bar">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          className={`sidebar__tab-btn${activeTab === tab.id ? ' sidebar__tab-btn--active' : ''}`}
-          type="button"
-          onClick={() => onTabChange(tab.id)}
-          aria-label={tab.label}
-        >
-          <tab.Icon size={24} weight={activeTab === tab.id ? 'fill' : 'regular'} className="sidebar__tab-icon" />
-          <span className="sidebar__tab-label">{tab.label}</span>
-        </button>
-      ))}
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id
+        const IconComponent = isActive ? tab.IconActive : tab.Icon
+        return (
+          <button
+            key={tab.id}
+            className={`sidebar__tab-btn${isActive ? ' sidebar__tab-btn--active' : ''}`}
+            type="button"
+            onClick={() => onTabChange(tab.id)}
+            aria-label={tab.label}
+          >
+            <IconComponent className="sidebar__tab-icon" />
+            <span className="sidebar__tab-label">{tab.label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

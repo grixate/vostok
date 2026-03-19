@@ -9,8 +9,25 @@ const STORE_NAME = 'kv'
 const DB_VERSION = 1
 
 let databasePromise: Promise<IDBDatabase | null> | null = null
+const pendingBootstraps: Promise<void>[] = []
 
-export async function bootstrapSecureStore(prefixes: string[]): Promise<void> {
+/**
+ * Returns a promise that resolves once every `bootstrapSecureStore` call
+ * that was triggered at module-load time has finished restoring keys from
+ * IndexedDB into localStorage.  Await this before any synchronous
+ * localStorage read that depends on those keys (e.g. decryption).
+ */
+export function whenSecureStoreReady(): Promise<void> {
+  return Promise.all(pendingBootstraps).then(() => undefined)
+}
+
+export function bootstrapSecureStore(prefixes: string[]): Promise<void> {
+  const promise = bootstrapSecureStoreImpl(prefixes)
+  pendingBootstraps.push(promise)
+  return promise
+}
+
+async function bootstrapSecureStoreImpl(prefixes: string[]): Promise<void> {
   if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return
   }

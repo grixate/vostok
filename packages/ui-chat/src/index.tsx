@@ -42,7 +42,7 @@ export function ChatListItem({
     >
       <div
         className="chat-list-item__avatar"
-        style={{ background: avatarColor ?? 'linear-gradient(135deg, #007AFF, #5856D6)' }}
+        style={{ background: avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))' }}
       >
         {avatarInitial ?? title.slice(0, 1)}
         {online && <div className="chat-list-item__online-dot" />}
@@ -117,7 +117,7 @@ export function ConversationHeader({
         <div
           className="conversation-header__avatar"
           aria-label={`${title} details`}
-          style={{ background: avatarColor ?? 'linear-gradient(135deg, #007AFF, #5856D6)' }}
+          style={{ background: avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))' }}
         >
           {avatarInitial ?? title.slice(0, 1)}
         </div>
@@ -154,8 +154,7 @@ export function MessageBubble({
   return (
     <div className={cx('message-bubble', `message-bubble--${side}`, className)} {...props}>
       <div className="message-bubble__content">
-        {children}
-        {side !== 'system' ? (
+        {side !== 'system' && (
           <div className="message-bubble__state">
             {side === 'outgoing' && state === 'read' && (
               <svg width="17" height="10" viewBox="0 0 17 10" fill="none" aria-hidden="true">
@@ -169,10 +168,11 @@ export function MessageBubble({
               </svg>
             )}
             {state === 'sending' && <span>sending</span>}
-            {state === 'failed' && <span style={{ color: '#FF3B30' }}>failed</span>}
+            {state === 'failed' && <span style={{ color: 'var(--status-error, #FF4444)' }}>failed</span>}
             {timestamp && <span>{timestamp}</span>}
           </div>
-        ) : null}
+        )}
+        {children}
       </div>
     </div>
   )
@@ -334,7 +334,7 @@ export function ChatInfoPanel({ title, handle, avatarColor, onClose }: ChatInfoP
       ) : null}
       <div
         className="chat-info-panel__avatar"
-        style={{ background: avatarColor ?? 'linear-gradient(135deg, #007AFF, #5856D6)' }}
+        style={{ background: avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))' }}
       >
         {title.slice(0, 1)}
       </div>

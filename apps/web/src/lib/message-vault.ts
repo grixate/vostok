@@ -4,7 +4,7 @@ import {
   decryptMessageWithSessions,
   isSessionHeader
 } from './chat-session-vault'
-import { bootstrapSecureStore, persistSecureStoreValue } from './secure-kv-store'
+import { bootstrapSecureStore, persistSecureStoreValue, whenSecureStoreReady } from './secure-kv-store'
 
 const LEGACY_MESSAGE_KEY_STORAGE = 'vostok.message-key'
 const CONTENT_IV_BYTES = 12
@@ -342,6 +342,10 @@ export async function decryptMessageText(
   currentDeviceId: string,
   encryptionPrivateKeyPkcs8Base64?: string
 ): Promise<string> {
+  // Ensure IndexedDB → localStorage key restoration has finished before
+  // attempting any decryption that reads keys from localStorage.
+  await whenSecureStoreReady()
+
   if (message.header && message.recipient_envelope && isSessionHeader(message.header)) {
     return decryptMessageWithSessions(message, currentDeviceId)
   }

@@ -431,6 +431,14 @@ export async function listChats(token: string): Promise<{ chats: ChatSummary[] }
   })
 }
 
+export async function markChatRead(token: string, chatId: string, lastReadMessageId?: string): Promise<void> {
+  await apiRequest<unknown>(`/chats/${chatId}/read`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(lastReadMessageId ? { last_read_message_id: lastReadMessageId } : {})
+  })
+}
+
 export async function createDirectChat(token: string, username: string): Promise<{ chat: ChatSummary }> {
   return apiRequest<{ chat: ChatSummary }>('/chats/direct', {
     method: 'POST',
