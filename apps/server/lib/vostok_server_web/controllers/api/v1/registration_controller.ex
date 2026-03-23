@@ -6,21 +6,79 @@ defmodule VostokServerWeb.Api.V1.RegistrationController do
   alias VostokServer.Identity
   alias VostokServer.Messaging
 
-  def create(conn, params) do
+  @doc "Password-based user registration with invite code."
+  def create(conn, %{"username" => _, "password" => _} = params) do
+    case Auth.register(params) do
+      {:ok, %{access_token: access_token, refresh_token: refresh_token, user: user}} ->
+        _ = Messaging.ensure_self_chat(user)
+
+        conn
+        |> put_status(:created)
+        |> json(%{
+          access_token: access_token,
+          refresh_token: refresh_token,
+          user: %{
+            id: user.id,
+            username: user.username,
+            display_name: user.display_name,
+            role: user.role,
+            temp_password: user.temp_password
+          }
+        })
+
+      {:error, %Changeset{} = changeset} ->
+        render_changeset_error(conn, changeset)
+
+      {:error, {kind, _} = reason} when kind in [:registration_closed, :invite_required] ->
+        render_error(conn, :forbidden, reason)
+
+      {:error, {kind, _} = reason}
+      when kind in [:validation, :invalid_invite, :unauthorized, :not_found] ->
+        render_error(conn, :unprocessable_entity, reason)
+
+      {:error, other} ->
+        render_error(conn, :unprocessable_entity, {:validation, inspect(other)})
+    end
+  end
+
+  @doc "Server bootstrap — create the first admin account."
+  def bootstrap(conn, params) do
+    case Auth.register_bootstrap(params) do
+      {:ok, %{access_token: access_token, refresh_token: refresh_token, user: user}} ->
+        _ = Messaging.ensure_self_chat(user)
+
+        conn
+        |> put_status(:created)
+        |> json(%{
+          access_token: access_token,
+          refresh_token: refresh_token,
+          user: %{
+            id: user.id,
+            username: user.username,
+            display_name: user.display_name,
+            role: user.role,
+            temp_password: false
+          }
+        })
+
+      {:error, %Changeset{} = changeset} ->
+        render_changeset_error(conn, changeset)
+
+      {:error, {kind, message}} ->
+        render_error(conn, :forbidden, {kind, message})
+    end
+  end
+
+  @doc "Legacy device-based registration (for E2E device setup after login)."
+  def create_device(conn, params) do
     with {:ok, registration} <- Identity.register_device(params),
          {:ok, session} <- Auth.issue_session_for_device(registration.device),
          _ <- Messaging.ensure_self_chat(registration.user) do
       conn
       |> put_status(:created)
       |> json(%{
-        user: %{
-          id: registration.user.id,
-          username: registration.user.username
-        },
-        device: %{
-          id: registration.device.id,
-          device_name: registration.device.device_name
-        },
+        user: %{id: registration.user.id, username: registration.user.username},
+        device: %{id: registration.device.id, device_name: registration.device.device_name},
         session: session,
         prekey_count: length(registration.one_time_prekeys)
       })
@@ -28,10 +86,10 @@ defmodule VostokServerWeb.Api.V1.RegistrationController do
       {:error, %Changeset{} = changeset} ->
         render_changeset_error(conn, changeset)
 
-      {:error, {kind, _message} = reason} when kind in [:registration_closed, :invite_required] ->
+      {:error, {kind, _} = reason} when kind in [:registration_closed, :invite_required] ->
         render_error(conn, :forbidden, reason)
 
-      {:error, {kind, _message} = reason}
+      {:error, {kind, _} = reason}
       when kind in [:validation, :invalid_invite, :unauthorized, :not_found] ->
         render_error(conn, :unprocessable_entity, reason)
 

@@ -7,10 +7,10 @@ import {
 } from 'react'
 
 import type { Banner, StoredDevice } from './types.ts'
-import { readStoredDevice } from './utils/storage.ts'
+import { readStoredDevice, readAuthSession } from './utils/storage.ts'
 import { buildDesktopWindowTitle } from './utils/call-helpers.ts'
 
-import { AppContext } from './contexts/AppContext.tsx'
+import { AppContext, useAppContext } from './contexts/AppContext.tsx'
 import { ThemeContext } from './contexts/ThemeContext.tsx'
 import { UIContext, useUIContext, type ContextMenuState, type Toast, type SidebarTab } from './contexts/UIContext.tsx'
 import { useAuth } from './hooks/useAuth.ts'
@@ -28,8 +28,10 @@ import { useTheme } from './hooks/useTheme.ts'
 import { useChatFolders } from './hooks/useChatFolders.ts'
 import { useDrafts } from './hooks/useDrafts.ts'
 import { useTypingIndicator } from './hooks/useTypingIndicator.ts'
+import { usePresence } from './hooks/usePresence.ts'
 import { useNotifications } from './hooks/useNotifications.ts'
 import { useDeepLinks } from './hooks/useDeepLinks.ts'
+import { useSettings } from './hooks/useSettings.ts'
 
 import { LoginFlow } from './features/auth/LoginFlow.tsx'
 import { Sidebar } from './features/sidebar/Sidebar.tsx'
@@ -43,6 +45,7 @@ import { KeyboardShortcutsOverlay } from './features/overlays/KeyboardShortcutsO
 
 function App() {
   const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(() => readStoredDevice())
+  const [sessionToken, setSessionToken] = useState<string | null>(() => readAuthSession()?.accessToken ?? null)
   const [loading, setLoading] = useState(false)
   const [banner, setBanner] = useState<Banner | null>(null)
   const [contextMenuMessage, setContextMenuMessage] = useState<ContextMenuState | null>(null)
@@ -63,7 +66,7 @@ function App() {
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null)
   const chatButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
-  const appContextValue = { storedDevice, setStoredDevice, banner, setBanner, loading, setLoading }
+  const appContextValue = { storedDevice, setStoredDevice, sessionToken, setSessionToken, banner, setBanner, loading, setLoading }
   const themeContextValue = useTheme()
 
   function showToast(message: string, tone: string = 'info') {
@@ -102,10 +105,19 @@ function App() {
 
 function AppInner() {
   const { settingsOverlayOpen, setSettingsOverlayOpen, setSidebarTab } = useUIContext()
+  const { setSessionToken } = useAppContext()
   const [selectMessageId, setSelectMessageId] = useState<string | null>(null)
+  const [mobilePanel, setMobilePanel] = useState<'sidebar' | 'conversation'>('sidebar')
   const auth = useAuth()
   const layout = useViewportLayout()
   const desktop = useDesktop()
+
+  const appSettings = useSettings(auth.authSession?.accessToken ?? null)
+
+  // Sync JWT access token into AppContext so all hooks can use it
+  useEffect(() => {
+    setSessionToken(auth.authSession?.accessToken ?? null)
+  }, [auth.authSession?.accessToken, setSessionToken])
 
   // Ref-based callback so useChatList (called first) can notify useMessages
   // (called later) about chat:activity events on non-active, existing chats.
@@ -124,6 +136,19 @@ function AppInner() {
     activeChatIdRef.current = deferredActiveChatId
   }, [deferredActiveChatId])
 
+  // In mobile mode, switch to conversation panel when user selects a chat
+  // (skip the initial mount — only react to changes after first render)
+  const initialMobileChatRef = useRef(true)
+  useEffect(() => {
+    if (initialMobileChatRef.current) {
+      initialMobileChatRef.current = false
+      return
+    }
+    if (layout.isMobile && chatList.activeChatId) {
+      setMobilePanel('conversation')
+    }
+  }, [chatList.activeChatId, layout.isMobile])
+
   const activeChat =
     chatList.chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatList.chatItems[0] ?? null
 
@@ -141,7 +166,8 @@ function AppInner() {
     chatList.chatItems,
     chatList.setChatItems,
     chatSessions.syncChatSessionsFromServer,
-    chatSessions.chatSessions
+    chatSessions.chatSessions,
+    auth.profileUsername
   )
   // Wire the ref so chat:activity events on non-active chats trigger a
   // background preview decrypt (shows real text in sidebar instead of
@@ -162,7 +188,8 @@ function AppInner() {
   const call = useCall(auth.view, deferredActiveChatId, chatList.activeChatId)
   const chatFolders = useChatFolders()
   const drafts = useDrafts(deferredActiveChatId, messages.draft, messages.setDraft, messages.replyTargetMessageId)
-  const typingIndicator = useTypingIndicator(activeChat)
+  const typingIndicator = useTypingIndicator(activeChat, auth.authSession?.accessToken)
+  const presence = usePresence(auth.authSession?.accessToken ?? null)
 
   // Platform integration: notifications and deep links
   const _notifications = useNotifications(
@@ -184,7 +211,7 @@ function AppInner() {
 
   // Reset call state on forget device
   const originalForgetDevice = auth.handleForgetDevice
-  auth.handleForgetDevice = () => {
+  auth.handleForgetDevice = async () => {
     chatSessions.setChatSessions([])
     chatSessions.setRemotePrekeyBundles([])
     chatSessions.setSafetyNumbers([])
@@ -224,7 +251,6 @@ function AppInner() {
 
   return (
     <div className={appShellClassName}>
-      <Sidebar desktop={desktop} chatList={chatList} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} />
       {settingsOverlayOpen ? (
         <SettingsPane
           auth={auth}
@@ -232,19 +258,46 @@ function AppInner() {
           chatList={chatList}
           onClose={() => { setSettingsOverlayOpen(false); setSidebarTab('chats') }}
         />
+      ) : layout.isMobile ? (
+        /* Mobile: single-panel — show sidebar OR conversation */
+        mobilePanel === 'sidebar' ? (
+          <Sidebar desktop={desktop} chatList={chatList} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} presence={presence} />
+        ) : (
+          <ConversationPane
+            activeChat={activeChat}
+            groupChat={groupChat}
+            call={call}
+            layout={layout}
+            messages={messages}
+            media={media}
+            chatList={chatList}
+            drafts={drafts}
+            typingIndicator={typingIndicator}
+            presence={presence}
+            appSettings={appSettings}
+            initialSelectedMessageId={selectMessageId}
+            onBack={() => setMobilePanel('sidebar')}
+          />
+        )
       ) : (
-        <ConversationPane
-          activeChat={activeChat}
-          groupChat={groupChat}
-          call={call}
-          layout={layout}
-          messages={messages}
-          media={media}
-          chatList={chatList}
-          drafts={drafts}
-          typingIndicator={typingIndicator}
-          initialSelectedMessageId={selectMessageId}
-        />
+        /* Desktop: side-by-side */
+        <>
+          <Sidebar desktop={desktop} chatList={chatList} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} presence={presence} />
+          <ConversationPane
+            activeChat={activeChat}
+            groupChat={groupChat}
+            call={call}
+            layout={layout}
+            messages={messages}
+            media={media}
+            chatList={chatList}
+            drafts={drafts}
+            typingIndicator={typingIndicator}
+            presence={presence}
+            appSettings={appSettings}
+            initialSelectedMessageId={selectMessageId}
+          />
+        </>
       )}
       <ContextMenuOverlay messages={messages} chatList={chatList} onSelectMessage={(id) => { setSelectMessageId(id); requestAnimationFrame(() => setSelectMessageId(null)) }} />
       <ProfileOverlay auth={auth} />

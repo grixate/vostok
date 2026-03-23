@@ -38,4 +38,19 @@ defmodule VostokServerWeb.TopicChannel do
   def handle_in("ping", payload, socket) do
     {:reply, {:ok, Map.put(payload, "topic", socket.assigns.topic_name)}, socket}
   end
+
+  def handle_in("typing:start", _payload, socket) do
+    broadcast_from!(socket, "typing:start", %{
+      user_id: socket.assigns.user_id,
+      username: socket.assigns.username
+    })
+    {:noreply, socket}
+  end
+
+  def handle_in("typing:stop", _payload, socket) do
+    broadcast_from!(socket, "typing:stop", %{
+      user_id: socket.assigns.user_id
+    })
+    {:noreply, socket}
+  end
 end

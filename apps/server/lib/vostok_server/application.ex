@@ -12,12 +12,15 @@ defmodule VostokServer.Application do
       VostokServer.Repo,
       {Oban, Application.fetch_env!(:vostok_server, Oban)},
       VostokServer.Auth.ChallengeStore,
+      VostokServer.Auth.RateLimiter,
       {Registry, keys: :unique, name: VostokServer.Calls.RoomRegistry},
       VostokServer.Calls.RoomSupervisor,
+      VostokServer.Storage.HotCache,
+      VostokServer.Storage.Monitor,
+      VostokServer.Storage.EvictionWorker,
       {DNSCluster, query: Application.get_env(:vostok_server, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: VostokServer.PubSub},
-      # Start a worker by calling: VostokServer.Worker.start_link(arg)
-      # {VostokServer.Worker, arg},
+      VostokServerWeb.Presence,
       # Start to serve requests, typically the last entry
       VostokServerWeb.Endpoint
     ]

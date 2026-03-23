@@ -27,16 +27,25 @@
   pointer-events: auto;
 }
 
-.msg-context-menu {
+/* Wrapper positions both the reaction bar and menu together */
+.msg-context-menu-wrapper {
   position: fixed;
   z-index: 201;
-  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  animation: dropdown-in 0.12s ease;
+}
+
+.msg-context-menu {
+  min-width: 180px;
+  width: fit-content;
   background: var(--bg-surface-2);
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-popup);
   padding: 6px 0;
-  animation: dropdown-in 0.12s ease;
 }
 
 .msg-context-menu button {
@@ -71,6 +80,10 @@
   color: var(--status-error) !important;
 }
 
+.msg-context-menu__accent {
+  color: var(--accent) !important;
+}
+
 .msg-context-menu__item--focused {
   background: var(--bg-surface-3);
 }
@@ -86,6 +99,9 @@
   padding: 6px 8px;
   background: var(--bg-surface-2);
   border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-popup);
+  width: fit-content;
 }
 
 .msg-context-menu__reaction-btn {
@@ -523,4 +539,262 @@
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* ─── Profile Photo Modal ──────────────────────────────────────────────── */
+
+.profile-photo-modal {
+  width: 400px;
+  max-width: 90vw;
+  background: var(--bg-panel);
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.profile-photo-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.profile-photo-modal__title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-photo-modal__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  padding: 4px;
+}
+
+.profile-photo-modal__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px;
+  gap: 8px;
+}
+
+.profile-photo-modal__avatar-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.profile-photo-modal__avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-photo-modal__avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.profile-photo-modal__camera-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-surface-1);
+  border: 2px solid var(--bg-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.profile-photo-modal__name {
+  font-size: 16px;
+  font-weight: 510;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+
+.profile-photo-modal__username {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.profile-photo-modal__hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+
+.profile-photo-modal__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-1);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  width: 100%;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.profile-photo-modal__dropzone:hover {
+  border-color: var(--accent);
+  background: var(--bg-surface-2);
+}
+
+.profile-photo-modal__dropzone-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.profile-photo-modal__error {
+  color: var(--danger, #E53935);
+  font-size: 13px;
+}
+
+.profile-photo-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+  gap: 12px;
+}
+
+.profile-photo-modal__btn {
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 510;
+  cursor: pointer;
+  transition: opacity 100ms ease;
+}
+
+.profile-photo-modal__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.profile-photo-modal__btn--primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+.profile-photo-modal__btn--outline {
+  background: none;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+/* Progress ring */
+.profile-photo-modal__progress-ring {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 12px;
+}
+
+.profile-photo-modal__progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-photo-modal__filename {
+  font-size: 14px;
+  font-weight: 510;
+  color: var(--text-primary);
+}
+
+.profile-photo-modal__upload-size {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.profile-photo-modal__progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.profile-photo-modal__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 200ms linear;
+}
+
+/* Success */
+.profile-photo-modal__success-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.profile-photo-modal__success-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--green, #4CAF50);
+  color: white;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-panel);
+}
+
+.profile-photo-modal__success-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-photo-modal__success-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
 }

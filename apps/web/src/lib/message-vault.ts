@@ -342,6 +342,11 @@ export async function decryptMessageText(
   currentDeviceId: string,
   encryptionPrivateKeyPkcs8Base64?: string
 ): Promise<string> {
+  // Plaintext messages (crypto_scheme: 'none') are just base64-encoded text.
+  if (message.crypto_scheme === 'none') {
+    return new TextDecoder().decode(base64ToBytes(message.ciphertext))
+  }
+
   // Ensure IndexedDB → localStorage key restoration has finished before
   // attempting any decryption that reads keys from localStorage.
   await whenSecureStoreReady()

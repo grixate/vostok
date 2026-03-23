@@ -26,6 +26,6 @@ defmodule VostokServer.Calls.CallSession do
     |> cast(attrs, [:chat_id, :started_by_device_id, :mode, :status, :started_at, :ended_at])
     |> validate_required([:chat_id, :started_by_device_id, :mode, :status, :started_at])
     |> validate_inclusion(:mode, ["voice", "video", "group"])
-    |> validate_inclusion(:status, ["active", "ended"])
+    |> validate_inclusion(:status, ["ringing", "active", "ended"])
   end
 end

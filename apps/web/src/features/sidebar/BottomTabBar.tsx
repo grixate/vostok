@@ -1,7 +1,8 @@
 import {
   ChatsIcon, ChatsFilledIcon,
   MembersIcon, MembersFilledIcon,
-  SettingsIcon, SettingsFilledIcon,
+  PhoneIcon,
+  SettingsIcon,
 } from '../../icons/index.tsx'
 import type { SidebarTab } from '../../contexts/UIContext.tsx'
 
@@ -20,8 +21,9 @@ type BottomTabBarProps = {
 export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
   const tabs: TabDef[] = [
     { id: 'chats', label: 'Chats', Icon: ChatsIcon, IconActive: ChatsFilledIcon },
+    { id: 'calls', label: 'Calls', Icon: PhoneIcon, IconActive: PhoneIcon },
     { id: 'members', label: 'Members', Icon: MembersIcon, IconActive: MembersFilledIcon },
-    { id: 'settings', label: 'Settings', Icon: SettingsIcon, IconActive: SettingsFilledIcon },
+    { id: 'settings', label: 'Settings', Icon: SettingsIcon, IconActive: SettingsIcon },
   ]
 
   return (

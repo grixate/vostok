@@ -1,4 +1,4 @@
-import { Socket, type Channel } from 'phoenix'
+import { Socket, Presence, type Channel } from 'phoenix'
 import type { CallParticipant, CallRoomState, CallSession, CallSignal } from './api'
 
 type ChatMessageHandler = {
@@ -16,11 +16,24 @@ type CallStateHandler = {
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 let connectionStatus: ConnectionStatus = 'disconnected'
+let hasEverConnected = false
 const statusListeners = new Set<(s: ConnectionStatus) => void>()
+const reconnectListeners = new Set<() => void>()
 
 function notifyStatusListeners() {
   for (const cb of statusListeners) {
     cb(connectionStatus)
+  }
+
+  // Fire reconnect callbacks when recovering from a drop (not on first connect)
+  if (connectionStatus === 'connected') {
+    if (hasEverConnected) {
+      // This is a RE-connect — sync everything
+      for (const cb of reconnectListeners) {
+        try { cb() } catch { /* ignore */ }
+      }
+    }
+    hasEverConnected = true
   }
 }
 
@@ -28,6 +41,12 @@ export function subscribeToConnectionStatus(cb: (s: ConnectionStatus) => void): 
   statusListeners.add(cb)
   cb(connectionStatus)
   return () => statusListeners.delete(cb)
+}
+
+/** Subscribe to reconnection events — fires when socket recovers after a drop. */
+export function subscribeToReconnect(cb: () => void): () => void {
+  reconnectListeners.add(cb)
+  return () => reconnectListeners.delete(cb)
 }
 
 let deviceSocket: Socket | null = null
@@ -70,8 +89,7 @@ export function subscribeToChatStream(
   chatId: string,
   handlers: ChatMessageHandler
 ): () => void {
-  const socket = ensureDeviceSocket(token)
-  const channel = socket.channel(`chat:${chatId}`)
+  const channel = ensureChatChannel(token, chatId)
 
   channel.on('message:new', (payload: unknown) => {
     const messageId = readMessageId(payload)
@@ -81,12 +99,8 @@ export function subscribeToChatStream(
     }
   })
 
-  channel
-    .join()
-    .receive('error', () => handlers.onError?.())
-
   return () => {
-    teardownChannel(channel, ['message:new'])
+    channel.off('message:new')
   }
 }
 
@@ -127,6 +141,143 @@ export function subscribeToCallStream(
   }
 }
 
+// ── Typing Indicators ───────────────────────────────────────────────────────
+
+type TypingHandler = {
+  onTypingStart: (userId: string, username: string) => void
+  onTypingStop: (userId: string) => void
+}
+
+const chatChannels = new Map<string, Channel>()
+
+function ensureChatChannel(token: string, chatId: string): Channel {
+  const key = `chat:${chatId}`
+  const existing = chatChannels.get(key)
+
+  // Only reuse a channel if it belongs to the current socket
+  if (existing && deviceSocket && (existing as any).socket === deviceSocket) {
+    return existing
+  }
+
+  // Remove stale channel if socket changed
+  if (existing) {
+    chatChannels.delete(key)
+  }
+
+  const socket = ensureDeviceSocket(token)
+  const channel = socket.channel(key)
+  channel.join()
+    .receive('error', () => {
+      console.warn(`[realtime] Failed to join channel ${key}`)
+      chatChannels.delete(key)
+    })
+  chatChannels.set(key, channel)
+  return channel
+}
+
+export function subscribeToTyping(
+  token: string,
+  chatId: string,
+  handlers: TypingHandler
+): () => void {
+  const channel = ensureChatChannel(token, chatId)
+
+  channel.on('typing:start', (payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const p = payload as { user_id?: string; username?: string }
+      if (typeof p.user_id === 'string') {
+        handlers.onTypingStart(p.user_id, p.username ?? 'Someone')
+      }
+    }
+  })
+
+  channel.on('typing:stop', (payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const p = payload as { user_id?: string }
+      if (typeof p.user_id === 'string') {
+        handlers.onTypingStop(p.user_id)
+      }
+    }
+  })
+
+  return () => {
+    channel.off('typing:start')
+    channel.off('typing:stop')
+  }
+}
+
+export function pushTypingStart(token: string, chatId: string): void {
+  const channel = ensureChatChannel(token, chatId)
+  channel.push('typing:start', {})
+}
+
+export function pushTypingStop(token: string, chatId: string): void {
+  const channel = ensureChatChannel(token, chatId)
+  channel.push('typing:stop', {})
+}
+
+// ── Read Receipt Subscription ───────────────────────────────────────────────
+
+type ReadReceiptHandler = {
+  onReadUpdate: (userId: string, lastReadMessageId: string | null, readAt: string | null) => void
+}
+
+export function subscribeToReadReceipts(
+  token: string,
+  chatId: string,
+  handlers: ReadReceiptHandler
+): () => void {
+  const channel = ensureChatChannel(token, chatId)
+
+  channel.on('read:update', (payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const p = payload as { user_id?: string; last_read_message_id?: string; read_at?: string }
+      if (typeof p.user_id === 'string') {
+        handlers.onReadUpdate(p.user_id, p.last_read_message_id ?? null, p.read_at ?? null)
+      }
+    }
+  })
+
+  return () => {
+    channel.off('read:update')
+  }
+}
+
+// ── Presence ────────────────────────────────────────────────────────────────
+
+type PresenceHandler = {
+  onSync: (onlineUserIds: Set<string>) => void
+}
+
+export function subscribeToPresence(
+  token: string,
+  handlers: PresenceHandler
+): () => void {
+  const socket = ensureDeviceSocket(token)
+  const channel = socket.channel('presence:lobby')
+
+  const presence = new Presence(channel)
+
+  presence.onSync(() => {
+    const online = new Set<string>()
+    presence.list((userId: string) => {
+      online.add(userId)
+      return userId
+    })
+    handlers.onSync(online)
+  })
+
+  channel
+    .join()
+    .receive('error', () => {
+      console.warn('[subscribeToPresence] Failed to join presence channel')
+    })
+
+  return () => {
+    void channel.leave()
+  }
+}
+
 function ensureDeviceSocket(token: string): Socket {
   if (deviceSocket && deviceSocketToken === token) {
     return deviceSocket
@@ -136,21 +287,31 @@ function ensureDeviceSocket(token: string): Socket {
     deviceSocket.disconnect()
   }
 
-  deviceSocket = new Socket('/socket/device', {
-    params: { token }
+  // Clear cached channels — they belong to the old socket
+  chatChannels.clear()
+
+  const socket = new Socket('/socket/device', {
+    params: { token },
+    // Desktop app: aggressive reconnection — never give up
+    reconnectAfterMs: (tries: number) => Math.min(1000 * Math.pow(2, tries), 30000),
+    heartbeatIntervalMs: 20000,
+    rejoinAfterMs: (tries: number) => Math.min(1000 * Math.pow(2, tries), 10000)
   })
+  deviceSocket = socket
   deviceSocketToken = token
 
   connectionStatus = 'connecting'
   notifyStatusListeners()
 
-  deviceSocket.onOpen(() => { connectionStatus = 'connected'; notifyStatusListeners() })
-  deviceSocket.onClose(() => { connectionStatus = 'disconnected'; notifyStatusListeners() })
-  deviceSocket.onError(() => { connectionStatus = 'error'; notifyStatusListeners() })
+  // Guard status updates so a stale socket's close/error callbacks
+  // don't overwrite the current socket's status.
+  socket.onOpen(() => { if (deviceSocket === socket) { connectionStatus = 'connected'; notifyStatusListeners() } })
+  socket.onClose(() => { if (deviceSocket === socket) { connectionStatus = 'disconnected'; notifyStatusListeners() } })
+  socket.onError(() => { if (deviceSocket === socket) { connectionStatus = 'error'; notifyStatusListeners() } })
 
-  deviceSocket.connect()
+  socket.connect()
 
-  return deviceSocket
+  return socket
 }
 
 function teardownChannel(channel: Channel, events: string[]) {

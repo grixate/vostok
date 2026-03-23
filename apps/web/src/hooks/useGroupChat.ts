@@ -28,7 +28,7 @@ export function useGroupChat(
   profileUsername: string | null,
   setChatItems: React.Dispatch<React.SetStateAction<ChatSummary[]>>
 ) {
-  const { storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
   const [_groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
@@ -45,18 +45,18 @@ export function useGroupChat(
   }, [activeChat?.id, activeChat?.title, activeChat?.type])
 
   useEffect(() => {
-    if (!storedDevice || view !== 'chat' || !activeGroupChatId) {
+    if (!sessionToken || view !== 'chat' || !activeGroupChatId) {
       setGroupMembers([])
       return
     }
 
-    const { sessionToken } = storedDevice
+    const token = sessionToken
     const groupChatId = activeGroupChatId
     let cancelled = false
 
     async function loadGroupMembers() {
       try {
-        const response = await listGroupMembers(sessionToken, groupChatId)
+        const response = await listGroupMembers(token, groupChatId)
 
         if (!cancelled) {
           setGroupMembers(response.members)
@@ -75,22 +75,22 @@ export function useGroupChat(
     return () => {
       cancelled = true
     }
-  }, [activeGroupChatId, storedDevice, view, setBanner])
+  }, [activeGroupChatId, sessionToken, view, setBanner])
 
   useEffect(() => {
-    if (!storedDevice || view !== 'chat' || !activeGroupChatId) {
+    if (!sessionToken || !storedDevice || view !== 'chat' || !activeGroupChatId) {
       setGroupSenderKeys([])
       return
     }
 
-    const { sessionToken } = storedDevice
+    const token2 = sessionToken
     const encryptionPrivateKeyPkcs8Base64 = storedDevice.encryptionPrivateKeyPkcs8Base64
     const groupChatId = activeGroupChatId
     let cancelled = false
 
     async function loadGroupSenderKeys() {
       try {
-        const response = await listGroupSenderKeys(sessionToken, groupChatId)
+        const response = await listGroupSenderKeys(token2, groupChatId)
 
         if (!cancelled) {
           await storeInboundGroupSenderKeys(
@@ -112,12 +112,12 @@ export function useGroupChat(
     return () => {
       cancelled = true
     }
-  }, [activeGroupChatId, storedDevice, view])
+  }, [activeGroupChatId, sessionToken, storedDevice, view])
 
   async function _handleCreateGroupChat(event: FormEvent<HTMLFormElement>, newGroupTitle: string, newGroupMembers: string, setNewGroupTitle: (v: string) => void, setNewGroupMembers: (v: string) => void) {
     event.preventDefault()
 
-    if (!storedDevice || newGroupTitle.trim() === '') {
+    if (!sessionToken || newGroupTitle.trim() === '') {
       return
     }
 
@@ -128,7 +128,7 @@ export function useGroupChat(
         .split(',')
         .map((member) => member.trim())
         .filter(Boolean)
-      const response = await createGroupChat(storedDevice.sessionToken, {
+      const response = await createGroupChat(sessionToken, {
         title: newGroupTitle.trim(),
         members
       })
@@ -150,14 +150,14 @@ export function useGroupChat(
   async function _handleRenameActiveGroupChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!storedDevice || !activeChat || activeChat.type !== 'group' || groupRenameTitle.trim() === '') {
+    if (!sessionToken || !activeChat || activeChat.type !== 'group' || groupRenameTitle.trim() === '') {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await renameGroupChat(storedDevice.sessionToken, activeChat.id, {
+      const response = await renameGroupChat(sessionToken, activeChat.id, {
         title: groupRenameTitle.trim()
       })
 
@@ -173,14 +173,14 @@ export function useGroupChat(
   }
 
   async function _handleUpdateActiveGroupMemberRole(member: GroupMember, role: 'admin' | 'member') {
-    if (!storedDevice || !activeChat || activeChat.type !== 'group' || member.role === role) {
+    if (!sessionToken || !activeChat || activeChat.type !== 'group' || member.role === role) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await updateGroupMemberRole(storedDevice.sessionToken, activeChat.id, member.user_id, role)
+      const response = await updateGroupMemberRole(sessionToken, activeChat.id, member.user_id, role)
       setGroupMembers((current) =>
         current.map((entry) => (entry.user_id === response.member.user_id ? response.member : entry))
       )
@@ -197,14 +197,14 @@ export function useGroupChat(
   }
 
   async function handleRemoveActiveGroupMember(member: GroupMember) {
-    if (!storedDevice || !activeChat || activeChat.type !== 'group') {
+    if (!sessionToken || !activeChat || activeChat.type !== 'group') {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await removeGroupMember(storedDevice.sessionToken, activeChat.id, member.user_id)
+      const response = await removeGroupMember(sessionToken, activeChat.id, member.user_id)
       setGroupMembers((current) => current.filter((entry) => entry.user_id !== response.member.user_id))
       setChatItems((current) =>
         current.map((chat) =>
@@ -228,7 +228,7 @@ export function useGroupChat(
   }
 
   async function _handleRotateGroupSenderKey() {
-    if (!storedDevice || !activeChat || activeChat.type !== 'group') {
+    if (!sessionToken || !storedDevice || !activeChat || activeChat.type !== 'group') {
       return
     }
 
@@ -236,7 +236,7 @@ export function useGroupChat(
 
     try {
       const recipientDevices = (
-        await listRecipientDevices(storedDevice.sessionToken, activeChat.id)
+        await listRecipientDevices(sessionToken, activeChat.id)
       ).recipient_devices.filter((device) => device.device_id !== storedDevice.deviceId)
 
       if (recipientDevices.length === 0) {
@@ -252,7 +252,7 @@ export function useGroupChat(
       )
       const currentActiveSenderKey = getActiveGroupSenderKey(activeChat.id)
       const nextEpoch = currentActiveSenderKey ? currentActiveSenderKey.epoch + 1 : 1
-      const response = await distributeGroupSenderKeys(storedDevice.sessionToken, activeChat.id, {
+      const response = await distributeGroupSenderKeys(sessionToken, activeChat.id, {
         key_id: keyId,
         sender_key_epoch: nextEpoch,
         algorithm: 'p256-ecdh+a256gcm',

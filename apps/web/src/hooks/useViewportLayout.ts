@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
-import { DESKTOP_DETAIL_RAIL_BREAKPOINT, DETAIL_RAIL_STORAGE_KEY } from '../constants.ts'
+import { DESKTOP_DETAIL_RAIL_BREAKPOINT, DETAIL_RAIL_STORAGE_KEY, MOBILE_BREAKPOINT } from '../constants.ts'
 import { readDetailRailPreference } from '../utils/storage.ts'
 
 export function useViewportLayout() {
   const [detailRailPreferred, setDetailRailPreferred] = useState(() => readDetailRailPreference())
   const [isDesktopWide, setIsDesktopWide] = useState(() =>
     typeof window === 'undefined' ? true : window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT
+  )
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window === 'undefined' ? false : window.innerWidth < MOBILE_BREAKPOINT
   )
 
   useEffect(() => {
@@ -15,6 +18,7 @@ export function useViewportLayout() {
 
     const syncViewportMode = () => {
       setIsDesktopWide(window.innerWidth >= DESKTOP_DETAIL_RAIL_BREAKPOINT)
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
 
     syncViewportMode()
@@ -39,6 +43,7 @@ export function useViewportLayout() {
     detailRailPreferred,
     setDetailRailPreferred,
     isDesktopWide,
+    isMobile,
     detailRailVisible
   }
 }

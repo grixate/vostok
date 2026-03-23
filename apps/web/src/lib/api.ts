@@ -18,7 +18,7 @@ export type LinkDevicePayload = {
 }
 
 export type MeResponse = {
-  user: { id: string; username: string }
+  user: { id: string; username: string; display_name: string | null; bio: string | null; role: string }
   device: {
     id: string
     device_name: string
@@ -31,6 +31,7 @@ export type MeResponse = {
     } | null
   }
   session: { expires_at: string }
+  settings: Record<string, unknown> | null
 }
 
 export type DeviceInfo = {
@@ -59,6 +60,7 @@ export type ChatSummary = {
   type: string
   title: string
   participant_usernames: string[]
+  participant_user_ids: string[]
   is_self_chat: boolean
   latest_message_at: string | null
   message_count: number
@@ -229,7 +231,7 @@ export type CallSession = {
   chat_id: string
   started_by_device_id: string
   mode: 'voice' | 'video' | 'group'
-  status: 'active' | 'ended'
+  status: 'ringing' | 'active' | 'ended'
   started_at: string
   ended_at: string | null
 }
@@ -314,6 +316,121 @@ type ApiErrorBody = {
 }
 
 const API_ROOT = '/api/v1'
+
+// ── Password-based auth API ─────────────────────────────────────────────
+
+export type LoginResponse = {
+  access_token: string
+  refresh_token: string
+  user: { id: string; username: string; display_name: string | null; role: string; temp_password: boolean }
+}
+
+export type RefreshResponse = {
+  access_token: string
+  user: { id: string; username: string; display_name: string | null; role: string; temp_password: boolean }
+}
+
+export type ServerInfoResponse = {
+  name: string
+  version: string
+  auth_mode: 'invite_only' | 'closed' | 'dev'
+  access_requests_enabled: boolean
+  bootstrap: boolean
+}
+
+export type InviteValidation = {
+  valid: boolean
+  server_name?: string
+  reason?: string
+}
+
+export async function login(username: string, password: string): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password })
+  })
+}
+
+export async function refreshAccessToken(refreshToken: string): Promise<RefreshResponse> {
+  return apiRequest<RefreshResponse>('/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: refreshToken })
+  })
+}
+
+export async function authRegister(params: {
+  invite_code?: string
+  username: string
+  display_name?: string
+  password: string
+}): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
+
+export async function authBootstrap(params: {
+  username: string
+  display_name?: string
+  password: string
+}): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/auth/bootstrap', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
+
+export async function authLogout(token: string, refreshToken: string): Promise<void> {
+  await apiRequest('/auth/logout', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ refresh_token: refreshToken })
+  })
+}
+
+export async function checkUsername(username: string): Promise<{ available: boolean }> {
+  return apiRequest<{ available: boolean }>(`/auth/check-username/${encodeURIComponent(username)}`)
+}
+
+export async function validateInvite(code: string): Promise<InviteValidation> {
+  return apiRequest<InviteValidation>(`/invites/${encodeURIComponent(code)}/validate`)
+}
+
+export async function getServerInfo(): Promise<ServerInfoResponse> {
+  return apiRequest<ServerInfoResponse>('/server/info')
+}
+
+export async function requestAccess(name: string, message?: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/auth/access-request', {
+    method: 'POST',
+    body: JSON.stringify({ name, message })
+  })
+}
+
+export async function requestPasswordReset(username: string, message?: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/auth/password-reset-request', {
+    method: 'POST',
+    body: JSON.stringify({ username, message })
+  })
+}
+
+export async function changePassword(token: string, newPassword: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/auth/change-password', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ new_password: newPassword })
+  })
+}
+
+export async function devQuickLogin(username: string): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/dev/quick-login', {
+    method: 'POST',
+    body: JSON.stringify({ username })
+  })
+}
+
+// ── Legacy device registration API ──────────────────────────────────────
 
 export async function registerDevice(payload: RegisterPayload): Promise<RegisterResponse> {
   return apiRequest<RegisterResponse>('/register', {
@@ -596,11 +713,22 @@ export async function distributeGroupSenderKeys(
   })
 }
 
-export async function listMessages(token: string, chatId: string): Promise<{ messages: ChatMessage[] }> {
-  return apiRequest<{ messages: ChatMessage[] }>(`/chats/${chatId}/messages`, {
-    method: 'GET',
-    headers: authHeader(token)
-  })
+export async function listMessages(
+  token: string,
+  chatId: string,
+  opts?: { limit?: number; before?: string }
+): Promise<{ messages: ChatMessage[]; has_more: boolean }> {
+  const params = new URLSearchParams()
+  if (opts?.limit) params.set('limit', String(opts.limit))
+  if (opts?.before) params.set('before', opts.before)
+  const qs = params.toString()
+  return apiRequest<{ messages: ChatMessage[]; has_more: boolean }>(
+    `/chats/${chatId}/messages${qs ? `?${qs}` : ''}`,
+    {
+      method: 'GET',
+      headers: authHeader(token)
+    }
+  )
 }
 
 export async function listRecipientDevices(
@@ -754,6 +882,14 @@ export async function fetchMediaUpload(token: string, uploadId: string): Promise
   return apiRequest<{ upload: MediaUpload }>(`/media/${uploadId}`, {
     method: 'GET',
     headers: authHeader(token)
+  })
+}
+
+export async function confirmMediaDelivery(token: string, mediaId: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>(`/media/${mediaId}/confirm`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({})
   })
 }
 
@@ -1109,6 +1245,22 @@ export async function endCallSession(token: string, callId: string): Promise<{ c
   })
 }
 
+export async function acceptCallSession(token: string, callId: string): Promise<{ call: CallSession }> {
+  return apiRequest<{ call: CallSession }>(`/calls/${callId}/accept`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({})
+  })
+}
+
+export async function declineCallSession(token: string, callId: string): Promise<{ call: CallSession }> {
+  return apiRequest<{ call: CallSession }>(`/calls/${callId}/decline`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({})
+  })
+}
+
 export async function fetchCallKeys(
   token: string,
   callId: string
@@ -1147,7 +1299,52 @@ export async function rotateCallKeys(
   })
 }
 
-async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
+export async function fetchSettings(token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>('/me/settings', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function syncSettings(token: string, settings: Record<string, unknown>): Promise<void> {
+  await apiRequest<Record<string, unknown>>('/me/settings', {
+    method: 'PUT',
+    headers: authHeader(token),
+    body: JSON.stringify(settings)
+  })
+}
+
+export async function updateProfile(
+  token: string,
+  data: { display_name?: string; bio?: string; username?: string }
+): Promise<{ user: { id: string; username: string; display_name: string | null; bio: string | null; role: string } }> {
+  return apiRequest<{ user: { id: string; username: string; display_name: string | null; bio: string | null; role: string } }>('/me/profile', {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(data)
+  })
+}
+
+export async function uploadProfilePhoto(
+  token: string,
+  photoBase64: string,
+  contentType: string
+): Promise<{ ok: boolean; photo_url: string }> {
+  return apiRequest<{ ok: boolean; photo_url: string }>('/me/profile/photo', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ photo: photoBase64, content_type: contentType })
+  })
+}
+
+export async function deleteProfilePhoto(token: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/me/profile/photo', {
+    method: 'DELETE',
+    headers: authHeader(token)
+  })
+}
+
+async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
     headers: {

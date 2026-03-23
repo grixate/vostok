@@ -21,7 +21,7 @@ import {
 import type { AuthView } from '../types.ts'
 
 export function useFederation(view: AuthView) {
-  const { storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
   const [_adminOverview, setAdminOverview] = useState<AdminOverview | null>(null)
   const [_federationPeers, setFederationPeers] = useState<FederationPeer[]>([])
   const [_federationDeliveries, setFederationDeliveries] = useState<FederationDeliveryJob[]>([])
@@ -31,7 +31,7 @@ export function useFederation(view: AuthView) {
   const [_turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
 
   useEffect(() => {
-    if (!storedDevice || view !== 'chat') {
+    if (!sessionToken || view !== 'chat') {
       setAdminOverview(null)
       setFederationPeers([])
       setFederationDeliveries([])
@@ -39,16 +39,16 @@ export function useFederation(view: AuthView) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
+    const token = sessionToken
     let cancelled = false
 
     async function loadOpsSurface() {
       try {
         const [overviewResponse, peersResponse, deliveriesResponse, turnResponse] = await Promise.all([
-          fetchAdminOverview(sessionToken),
-          listFederationPeers(sessionToken),
-          listFederationDeliveries(sessionToken),
-          fetchTurnCredentials(sessionToken, { ttl_seconds: 600 })
+          fetchAdminOverview(token),
+          listFederationPeers(token),
+          listFederationDeliveries(token),
+          fetchTurnCredentials(token, { ttl_seconds: 600 })
         ])
 
         if (cancelled) {
@@ -74,19 +74,19 @@ export function useFederation(view: AuthView) {
     return () => {
       cancelled = true
     }
-  }, [storedDevice, view])
+  }, [sessionToken, view])
 
   async function _handleCreateFederationPeer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!storedDevice || federationDomain.trim() === '') {
+    if (!sessionToken || federationDomain.trim() === '') {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await createFederationPeer(storedDevice.sessionToken, {
+      const response = await createFederationPeer(sessionToken, {
         domain: federationDomain.trim(),
         display_name: federationDisplayName.trim() || undefined
       })
@@ -96,7 +96,7 @@ export function useFederation(view: AuthView) {
       setFederationDisplayName('')
       setBanner({ tone: 'success', message: `Federation peer queued: ${response.peer.domain}` })
 
-      const overviewResponse = await fetchAdminOverview(storedDevice.sessionToken)
+      const overviewResponse = await fetchAdminOverview(sessionToken)
       setAdminOverview(overviewResponse.overview)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create federation peer.'
@@ -107,21 +107,21 @@ export function useFederation(view: AuthView) {
   }
 
   async function _handleQueueFederationDelivery(peerId: string) {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await createFederationDelivery(storedDevice.sessionToken, peerId, {
+      const response = await createFederationDelivery(sessionToken, peerId, {
         event_type: 'message_relay',
         payload: { source: 'operator_ui' }
       })
 
       setFederationDeliveries((current) => [response.delivery, ...current.filter((job) => job.id !== response.delivery.id)])
 
-      const overviewResponse = await fetchAdminOverview(storedDevice.sessionToken)
+      const overviewResponse = await fetchAdminOverview(sessionToken)
       setAdminOverview(overviewResponse.overview)
       setBanner({ tone: 'success', message: 'Federation delivery queued.' })
     } catch (error) {
@@ -133,14 +133,14 @@ export function useFederation(view: AuthView) {
   }
 
   async function _handleCreateFederationPeerInvite(peerId: string) {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await createFederationPeerInvite(storedDevice.sessionToken, peerId)
+      const response = await createFederationPeerInvite(sessionToken, peerId)
       setFederationPeers((current) =>
         current.map((peer) => (peer.id === response.peer.id ? response.peer : peer))
       )
@@ -158,14 +158,14 @@ export function useFederation(view: AuthView) {
   }
 
   async function _handleAttemptFederationDelivery(jobId: string) {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await attemptFederationDelivery(storedDevice.sessionToken, jobId, {
+      const response = await attemptFederationDelivery(sessionToken, jobId, {
         outcome: 'delivered'
       })
 
@@ -173,7 +173,7 @@ export function useFederation(view: AuthView) {
         current.map((job) => (job.id === response.delivery.id ? response.delivery : job))
       )
 
-      const overviewResponse = await fetchAdminOverview(storedDevice.sessionToken)
+      const overviewResponse = await fetchAdminOverview(sessionToken)
       setAdminOverview(overviewResponse.overview)
       setBanner({ tone: 'success', message: `Delivery ${response.delivery.status}.` })
     } catch (error) {
@@ -188,11 +188,10 @@ export function useFederation(view: AuthView) {
     peerId: string,
     status: 'pending' | 'active' | 'disabled'
   ) {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
     setLoading(true)
 
     try {
@@ -210,11 +209,10 @@ export function useFederation(view: AuthView) {
   }
 
   async function _handleHeartbeatFederationPeer(peerId: string) {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
     setLoading(true)
 
     try {
@@ -232,14 +230,14 @@ export function useFederation(view: AuthView) {
   }
 
   async function _handleRefreshTurnCredentials() {
-    if (!storedDevice) {
+    if (!sessionToken) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await fetchTurnCredentials(storedDevice.sessionToken, { ttl_seconds: 900 })
+      const response = await fetchTurnCredentials(sessionToken, { ttl_seconds: 900 })
       setTurnCredentials(response.turn)
       setBanner({ tone: 'success', message: 'TURN credentials refreshed for call setup.' })
     } catch (error) {

@@ -7,15 +7,26 @@ export function useDrafts(
   setDraft: (value: string) => void,
   replyTargetMessageId: string | null
 ) {
-  const [draftChatIds, setDraftChatIds] = useState<Set<string>>(new Set())
+  const [draftChatIds, setDraftChatIds] = useState<Map<string, string>>(new Map())
   const previousChatIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSavedTextRef = useRef<string>('')
 
-  // On mount: load all draft chat IDs
+  // On mount: load all draft chat IDs with their text
   useEffect(() => {
-    void listDraftChatIds().then((ids) => {
-      setDraftChatIds(new Set(ids))
+    void listDraftChatIds().then(async (ids) => {
+      const entries = new Map<string, string>()
+      for (const id of ids) {
+        try {
+          const stored = await readDraft(id)
+          if (stored && stored.text.trim()) {
+            entries.set(id, stored.text)
+          }
+        } catch {
+          // Skip unreadable drafts
+        }
+      }
+      setDraftChatIds(entries)
     }).catch(() => {
       // Ignore errors on mount
     })
@@ -27,14 +38,15 @@ export function useDrafts(
 
     // Save draft for the previous chat
     if (previousChatId && lastSavedTextRef.current.trim()) {
+      const textToSave = lastSavedTextRef.current
       void writeDraft({
         chatId: previousChatId,
-        text: lastSavedTextRef.current,
+        text: textToSave,
         replyToMessageId: replyTargetMessageId
       }).then(() => {
         setDraftChatIds((prev) => {
-          const next = new Set(prev)
-          next.add(previousChatId)
+          const next = new Map(prev)
+          next.set(previousChatId, textToSave)
           return next
         })
       }).catch(() => {
@@ -43,7 +55,7 @@ export function useDrafts(
     } else if (previousChatId) {
       void clearDraft(previousChatId).then(() => {
         setDraftChatIds((prev) => {
-          const next = new Set(prev)
+          const next = new Map(prev)
           next.delete(previousChatId)
           return next
         })
@@ -86,8 +98,8 @@ export function useDrafts(
           replyToMessageId: replyTargetMessageId
         }).then(() => {
           setDraftChatIds((prev) => {
-            const next = new Set(prev)
-            next.add(activeChatId)
+            const next = new Map(prev)
+            next.set(activeChatId, text)
             return next
           })
         }).catch(() => {
@@ -96,7 +108,7 @@ export function useDrafts(
       } else {
         void clearDraft(activeChatId).then(() => {
           setDraftChatIds((prev) => {
-            const next = new Set(prev)
+            const next = new Map(prev)
             next.delete(activeChatId)
             return next
           })
@@ -120,7 +132,7 @@ export function useDrafts(
 
     void clearDraft(activeChatId).then(() => {
       setDraftChatIds((prev) => {
-        const next = new Set(prev)
+        const next = new Map(prev)
         next.delete(activeChatId)
         return next
       })

@@ -50,7 +50,7 @@ export function SettingsOverlay({ auth, chatSessions, chatList }: SettingsOverla
             <RefreshIcon width={18} height={18} />
             Refresh Session
           </button>
-          <button className="settings-overlay__row" type="button" onClick={() => { setSettingsOverlayOpen(false); auth.setView('link') }}>
+          <button className="settings-overlay__row" type="button" disabled>
             <LinkIcon width={18} height={18} />
             Link Another Device
           </button>

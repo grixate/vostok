@@ -9,11 +9,11 @@ import {
   CopySmallIcon,
   DeleteSmallTrashIcon,
   ForwardSmallIcon,
-  TranslateSmallIcon,
   SelectSmallIcon,
   ChevronDownSmallIcon,
   ChevronRightSmallIcon,
 } from '../../icons/index.tsx'
+import { ExternalLink } from 'lucide-react'
 
 type ContextMenuOverlayProps = {
   messages: ReturnType<typeof useMessages>
@@ -26,6 +26,7 @@ type MenuItem = {
   label: string
   icon: React.ReactNode
   danger?: boolean
+  accent?: boolean
   disabled?: boolean
   separator?: boolean
   trailing?: React.ReactNode
@@ -74,22 +75,29 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
       })
     }
 
-    // 3. Translate (stub, disabled)
-    menuItems.push({
-      key: 'translate',
-      label: 'Translate',
-      icon: <TranslateSmallIcon />,
-      disabled: true,
-      action: () => {}
-    })
-
-    // 4. Copy Text
+    // 3. Copy Text
     menuItems.push({
       key: 'copy',
       label: 'Copy Text',
       icon: <CopySmallIcon />,
       action: () => { void navigator.clipboard.writeText(msg.text); close(); showToast('Copied to clipboard') }
     })
+
+    // 3b. Go to Original (for forwarded messages)
+    if (msg.forwardedFrom) {
+      menuItems.push({
+        key: 'go-to-original',
+        label: 'Go to Original',
+        icon: <ExternalLink size={16} strokeWidth={1.75} />,
+        accent: true,
+        action: () => {
+          // Navigate to the original chat and message
+          chatList.setActiveChatId(msg.forwardedFrom!.chatId)
+          close()
+          showToast('Navigating to original message…')
+        }
+      })
+    }
 
     // 5. Pin
     if (!msg.id.startsWith('optimistic-')) {
@@ -228,7 +236,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
         onContextMenu={(e) => { e.preventDefault(); close() }}
       />
       <div
-        className="msg-context-menu"
+        className="msg-context-menu-wrapper"
         ref={menuRef}
         style={{
           top: displayPosition.top,
@@ -236,7 +244,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
           visibility: position ? 'visible' : 'hidden'
         }}
       >
-        {/* Quick reactions strip */}
+        {/* Quick reactions strip — separate floating pill */}
         <div className="msg-context-menu__reactions">
           {QUICK_REACTIONS.map((emoji) => (
             <button
@@ -266,27 +274,30 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
             <ChevronDownSmallIcon />
           </button>
         </div>
-        <div className="msg-context-menu__sep" />
-        {menuItems.map((item, index) => (
-          <span key={item.key}>
-            {item.separator ? <div className="msg-context-menu__sep" /> : null}
-            <button
-              type="button"
-              className={[
-                item.danger ? 'msg-context-menu__danger' : '',
-                index === focusedIndex ? 'msg-context-menu__item--focused' : '',
-                item.disabled ? 'msg-context-menu__item--disabled' : ''
-              ].filter(Boolean).join(' ') || undefined}
-              disabled={item.disabled}
-              onClick={item.action}
-              onMouseEnter={() => setFocusedIndex(index)}
-            >
-              {item.icon}
-              {item.label}
-              {item.trailing ? <span className="msg-context-menu__trailing">{item.trailing}</span> : null}
-            </button>
-          </span>
-        ))}
+        {/* Context menu — separate card */}
+        <div className="msg-context-menu">
+          {menuItems.map((item, index) => (
+            <span key={item.key}>
+              {item.separator ? <div className="msg-context-menu__sep" /> : null}
+              <button
+                type="button"
+                className={[
+                  item.danger ? 'msg-context-menu__danger' : '',
+                  item.accent ? 'msg-context-menu__accent' : '',
+                  index === focusedIndex ? 'msg-context-menu__item--focused' : '',
+                  item.disabled ? 'msg-context-menu__item--disabled' : ''
+                ].filter(Boolean).join(' ') || undefined}
+                disabled={item.disabled}
+                onClick={item.action}
+                onMouseEnter={() => setFocusedIndex(index)}
+              >
+                {item.icon}
+                {item.label}
+                {item.trailing ? <span className="msg-context-menu__trailing">{item.trailing}</span> : null}
+              </button>
+            </span>
+          ))}
+        </div>
       </div>
     </>
   )

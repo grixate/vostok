@@ -162,9 +162,31 @@ async function loadVideoFrame(src: string): Promise<HTMLVideoElement> {
     const video = document.createElement('video')
     video.muted = true
     video.playsInline = true
-    video.preload = 'metadata'
-    video.onloadeddata = () => resolve(video)
+    video.preload = 'auto'
+
+    let resolved = false
+    const finish = () => {
+      if (resolved) return
+      resolved = true
+      resolve(video)
+    }
+
+    // After metadata loads, seek to a small offset so an actual frame is
+    // rendered.  For freshly-recorded WebM blobs, t=0 often has no decoded
+    // frame yet, producing a blank canvas.
+    video.onloadedmetadata = () => {
+      video.currentTime = Math.min(0.1, video.duration || 0.1)
+    }
+    video.onseeked = finish
+    // Fallback: if seeked never fires, resolve after loadeddata
+    video.onloadeddata = () => {
+      setTimeout(finish, 200)
+    }
     video.onerror = () => reject(new Error('Failed to render a video attachment thumbnail.'))
+
+    // Timeout safety net — resolve with whatever is available after 3s
+    setTimeout(finish, 3000)
+
     video.src = src
   })
 }

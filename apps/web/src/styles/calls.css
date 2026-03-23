@@ -1,0 +1,951 @@
+/* ─── Call Controls (shared pill bar) ───────────────────────────────────── */
+
+.call-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: 24px;
+  background: var(--bg-surface-1);
+}
+
+.call-controls__btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-surface-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.call-controls__btn:hover {
+  background: var(--bg-surface-3, #ffffff1a);
+}
+
+.call-controls__btn--active {
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+}
+
+.call-controls__btn--hangup {
+  background: #E53935;
+  color: white;
+}
+
+.call-controls__btn--hangup:hover {
+  background: #C62828;
+}
+
+@keyframes call-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ─── Outgoing / Ringing Call Screen ───────────────────────────────────── */
+
+.outgoing-call-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  background: linear-gradient(180deg, #FF550033 0%, #090909 100%);
+  position: relative;
+}
+
+.outgoing-call-screen__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.outgoing-call-screen__avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 56px;
+  background: var(--bg-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 36px;
+  font-weight: 700;
+}
+
+.outgoing-call-screen__name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.outgoing-call-screen__status {
+  font-size: 14px;
+  color: var(--text-secondary);
+  animation: call-pulse 2s ease-in-out infinite;
+}
+
+.outgoing-call-screen__controls {
+  padding: 20px 32px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* ─── Active Call Screen (unified responsive) ──────────────────────────── */
+
+.ac {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+/* ── Shared elements ───────────────────────────────────────────────────── */
+
+.ac__avatar {
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ac__avatar--96  { width: 96px;  height: 96px;  border-radius: 48px;  font-size: 32px; }
+.ac__avatar--72  { width: 72px;  height: 72px;  border-radius: 36px;  font-size: 22px; }
+.ac__avatar--40  { width: 40px;  height: 40px;  border-radius: 20px;  font-size: 14px; }
+
+.ac__name {
+  color: var(--text-primary);
+  font-weight: 510;
+}
+
+.ac__name--20 { font-size: 20px; }
+.ac__name--16 { font-size: 16px; }
+
+.ac__timer {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ac__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #ffffff0a;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ac__emoji-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ac__controls-bar {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  z-index: 3;
+}
+
+.ac__camera-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Mobile layout ─────────────────────────────────────────────────────── */
+
+.ac--mobile {
+  align-items: center;
+}
+
+.ac__m-header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 16px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.ac__back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 0;
+}
+
+.ac__m-header-spacer {
+  flex: 1;
+}
+
+.ac__m-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* ── Tablet layout ─────────────────────────────────────────────────────── */
+
+.ac__t-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 20px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.ac__t-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ac__t-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ac__t-header-name {
+  font-size: 15px;
+  font-weight: 510;
+  color: var(--text-primary);
+}
+
+.ac__t-header-time {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ac__t-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+.ac__t-left {
+  width: 240px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  background: #0d0d0d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac__t-right {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0d0d0d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac__t-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Video overlay labels */
+.ac__vid-overlay {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 2;
+}
+
+.ac__vid-name {
+  font-size: 14px;
+  font-weight: 510;
+  color: #ffffff;
+}
+
+.ac__vid-time {
+  font-size: 12px;
+  color: #ffffffaa;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac__vid-labels {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+
+.ac__vid-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #00000088;
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ac__vid-label--tile {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+}
+
+/* Tablet PiP */
+.ac__t-pip {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 140px;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.ac__t-pip .self-preview-pip {
+  position: static;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ac__pip-label {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #00000088;
+  color: white;
+  font-size: 10px;
+  font-weight: 500;
+  z-index: 4;
+}
+
+/* ── Desktop layout ────────────────────────────────────────────────────── */
+
+.ac__split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.ac__d-info {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 20px 20px;
+  background: #ffffff03;
+}
+
+.ac__d-encrypt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.ac__separator {
+  width: 100%;
+  height: 1px;
+  background: #ffffff12;
+}
+
+.ac__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  align-self: flex-start;
+}
+
+.ac__participant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.ac__participant-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #ffffff08;
+}
+
+.ac__participant-row svg:last-child {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.ac__participant-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ac__participant-name {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* Desktop main area + video grid */
+.ac__d-main {
+  flex: 1;
+  background: #0D0D0D;
+  min-width: 0;
+  display: flex;
+}
+
+.ac__d-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 4px;
+  padding: 4px;
+  width: 100%;
+  height: 100%;
+}
+
+.ac__d-tile {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-surface-1);
+}
+
+.ac__d-tile--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac__d-tile-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ─── Active Call Bar (minimized PiP bar) ──────────────────────────────── */
+
+.active-call-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  background: #1A1A1A;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.active-call-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.active-call-bar__pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34C759;
+  flex-shrink: 0;
+  animation: call-bar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes call-bar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.active-call-bar__text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-call-bar__emoji {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.active-call-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.active-call-bar__btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  border: none;
+  background: var(--bg-surface-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  transition: background 100ms ease;
+}
+
+.active-call-bar__btn:hover {
+  background: var(--bg-surface-3, #ffffff1a);
+}
+
+.active-call-bar__btn--hangup {
+  background: #E53935;
+  color: white;
+}
+
+.active-call-bar__btn--hangup:hover {
+  background: #C62828;
+}
+
+/* ─── Incoming Call Banner ─────────────────────────────────────────────── */
+
+.incoming-call-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-surface-2);
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  width: 420px;
+  max-width: 100%;
+}
+
+.incoming-call-banner__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.incoming-call-banner__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.incoming-call-banner__name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incoming-call-banner__subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.incoming-call-banner__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.incoming-call-banner__btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: transform 100ms ease;
+}
+
+.incoming-call-banner__btn:hover {
+  transform: scale(1.08);
+}
+
+.incoming-call-banner__btn:active {
+  transform: scale(0.95);
+}
+
+.incoming-call-banner__btn--decline {
+  background: #FF3B30;
+}
+
+.incoming-call-banner__btn--accept {
+  background: #34C759;
+}
+
+/* ─── Incoming Call Overlay ────────────────────────────────────────────── */
+
+.incoming-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.incoming-call-overlay__card {
+  max-width: 320px;
+  width: 100%;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.incoming-call-overlay__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.incoming-call-overlay__name {
+  font-size: 18px;
+  font-weight: 510;
+  color: var(--text-primary);
+}
+
+.incoming-call-overlay__subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.incoming-call-overlay__actions {
+  display: flex;
+  gap: 32px;
+  margin-top: 12px;
+}
+
+.incoming-call-overlay__action-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: transform 100ms ease;
+}
+
+.incoming-call-overlay__action-btn:hover {
+  transform: scale(1.08);
+}
+
+.incoming-call-overlay__action-btn--decline {
+  background: #E53935;
+}
+
+.incoming-call-overlay__action-btn--accept {
+  background: #34C759;
+}
+
+/* ─── Self Preview PiP ─────────────────────────────────────────────────── */
+
+.self-preview-pip {
+  position: absolute;
+  bottom: 100px;
+  right: 16px;
+  width: 160px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+}
+
+.self-preview-pip:active {
+  cursor: grabbing;
+}
+
+.self-preview-pip__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* ─── Call Ended Screen ────────────────────────────────────────────────── */
+
+.call-ended-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: var(--bg-app);
+  gap: 8px;
+}
+
+.call-ended-screen__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.call-ended-screen__name {
+  font-size: 18px;
+  font-weight: 510;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+
+.call-ended-screen__reason {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.call-ended-screen__duration {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Group Call Grid ──────────────────────────────────────────────────── */
+
+.group-call-grid {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+}
+
+/* ─── Participant Tile ─────────────────────────────────────────────────── */
+
+.participant-tile {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-surface-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.participant-tile--speaking {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.participant-tile__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.participant-tile__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--gradient-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.participant-tile__name {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 13px;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  max-width: calc(100% - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-tile__mute {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.participant-tile__quality {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.participant-tile__quality--good { background: var(--green, #4CAF50); }
+.participant-tile__quality--fair { background: var(--color-warning, #FFC107); }
+.participant-tile__quality--poor { background: var(--danger, #E53935); }
+
+/* ─── Screen Share View ────────────────────────────────────────────────── */
+
+.screen-share-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen-share-view__video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.screen-share-view__label {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.screen-share-view__stop {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #E53935;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.screen-share-view__stop:hover {
+  background: #C62828;
+}
+
+/* ─── Call Quality Indicator ───────────────────────────────────────────── */
+
+.call-quality {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.call-quality--good { background: var(--green, #4CAF50); }
+.call-quality--fair { background: var(--color-warning, #FFC107); }
+.call-quality--poor { background: var(--danger, #E53935); }
+.call-quality--reconnecting { background: var(--danger, #E53935); animation: call-pulse 1s ease-in-out infinite; }

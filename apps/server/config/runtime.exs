@@ -74,8 +74,14 @@ if config_env() == :prod do
 
   config :vostok_server, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  prod_auth_mode =
+    System.get_env("VOSTOK_AUTH_MODE") ||
+      System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only")
+
   config :vostok_server,
-    registration_mode: System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only"),
+    auth_mode: prod_auth_mode,
+    registration_mode: prod_auth_mode,
+    server_name: System.get_env("VOSTOK_SERVER_NAME", "Vostok"),
     federation_port: env_integer.("VOSTOK_FEDERATION_PORT", 5555),
     federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
     federation_transport: [
@@ -143,11 +149,37 @@ if config_env() == :prod do
   # Check `Plug.SSL` for all available options in `force_ssl`.
 end
 
+# ── Media Storage ────────────────────────────────────────────────────────
+config :vostok_server, VostokServer.Storage,
+  hot_cache_dir: System.get_env("VOSTOK_MEDIA_DIR", "priv/media/hot"),
+  hot_cache_max_bytes: env_integer.("VOSTOK_MEDIA_MAX_BYTES", 50_000_000_000),
+  eviction_interval_ms: env_integer.("VOSTOK_EVICTION_INTERVAL_MS", 900_000),
+  eviction_batch_size: env_integer.("VOSTOK_EVICTION_BATCH_SIZE", 100),
+  max_age_days: env_integer.("VOSTOK_MEDIA_MAX_AGE_DAYS", 30),
+  delivery_grace_period_hours: env_integer.("VOSTOK_MEDIA_GRACE_HOURS", 48),
+  object_store: [
+    enabled: env_boolean.("VOSTOK_S3_ENABLED", false),
+    adapter: VostokServer.Storage.ObjectStore.S3,
+    bucket: System.get_env("VOSTOK_S3_BUCKET", "vostok-media"),
+    region: System.get_env("VOSTOK_S3_REGION", "us-east-1"),
+    endpoint: System.get_env("VOSTOK_S3_ENDPOINT"),
+    access_key_id: {:system, "VOSTOK_S3_ACCESS_KEY"},
+    secret_access_key: {:system, "VOSTOK_S3_SECRET_KEY"},
+    presigned_urls: env_boolean.("VOSTOK_S3_PRESIGNED_URLS", true),
+    presigned_url_ttl_seconds: env_integer.("VOSTOK_S3_PRESIGNED_TTL", 300)
+  ]
+
 if config_env() in [:dev, :test] do
   host = System.get_env("PHX_HOST", "localhost")
 
+  auth_mode =
+    System.get_env("VOSTOK_AUTH_MODE") ||
+      System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only")
+
   config :vostok_server,
-    registration_mode: System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only"),
+    auth_mode: auth_mode,
+    registration_mode: auth_mode,
+    server_name: System.get_env("VOSTOK_SERVER_NAME", "Vostok"),
     federation_port: env_integer.("VOSTOK_FEDERATION_PORT", 5555),
     federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
     federation_transport: [

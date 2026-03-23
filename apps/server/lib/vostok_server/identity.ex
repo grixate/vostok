@@ -62,6 +62,18 @@ defmodule VostokServer.Identity do
     |> Enum.map(fn user -> %{id: user.id, username: user.username} end)
   end
 
+  def update_user_profile(user, attrs) when is_map(attrs) do
+    user
+    |> User.profile_changeset(attrs)
+    |> Repo.update()
+  end
+
+  def update_user_settings(user, settings_binary) when is_binary(settings_binary) do
+    user
+    |> User.settings_changeset(%{settings_encrypted: settings_binary})
+    |> Repo.update()
+  end
+
   def link_device(user_id, attrs) when is_binary(user_id) and is_map(attrs) do
     with %User{} = user <- Repo.get(User, user_id),
          {:ok, normalized} <- normalize_linked_device(attrs),
@@ -76,6 +88,22 @@ defmodule VostokServer.Identity do
       now = DateTime.utc_now()
 
       Multi.new()
+      |> Multi.run(:revoke_placeholders, fn repo, _changes ->
+        # Revoke old placeholder devices that lack encryption keys — they were
+        # auto-created during registration and can't participate in E2E messaging.
+        {count, _} =
+          repo.update_all(
+            from(d in Device,
+              where:
+                d.user_id == ^user.id and
+                  is_nil(d.revoked_at) and
+                  is_nil(d.encryption_public_key)
+            ),
+            set: [revoked_at: now]
+          )
+
+        {:ok, count}
+      end)
       |> Multi.run(:device, fn repo, _changes ->
         user
         |> Ecto.build_assoc(:devices)
@@ -126,7 +154,9 @@ defmodule VostokServer.Identity do
   end
 
   def list_user_devices(user_id, current_device_id)
-      when is_binary(user_id) and is_binary(current_device_id) do
+      when is_binary(user_id) do
+    safe_device_id = current_device_id || "none"
+
     with %User{} <- Repo.get(User, user_id) do
       devices =
         from(device in Device,
@@ -138,7 +168,7 @@ defmodule VostokServer.Identity do
           ]
         )
         |> Repo.all()
-        |> Enum.map(&present_device_summary(&1, current_device_id))
+        |> Enum.map(&present_device_summary(&1, safe_device_id))
 
       {:ok, devices}
     else

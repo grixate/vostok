@@ -55,6 +55,11 @@ defmodule VostokServerWeb.Api.V1.MediaController do
     end
   end
 
+  def confirm_delivery(conn, %{"id" => upload_id}) do
+    Media.confirm_delivery(upload_id, conn.assigns.current_user.id)
+    json(conn, %{ok: true})
+  end
+
   def link_metadata(conn, params) do
     case Media.fetch_link_metadata(params) do
       {:ok, metadata} ->
@@ -75,6 +80,12 @@ defmodule VostokServerWeb.Api.V1.MediaController do
     conn
     |> put_status(:unauthorized)
     |> json(%{error: "unauthorized", message: message})
+  end
+
+  defp render_error(conn, :gone, message) do
+    conn
+    |> put_status(:gone)
+    |> json(%{error: "media_expired", message: message})
   end
 
   defp render_error(conn, _kind, message) do

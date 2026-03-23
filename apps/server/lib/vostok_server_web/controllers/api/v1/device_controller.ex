@@ -6,7 +6,12 @@ defmodule VostokServerWeb.Api.V1.DeviceController do
   alias VostokServer.Identity
 
   def index(conn, _params) do
-    case Identity.list_user_devices(conn.assigns.current_user.id, conn.assigns.current_device.id) do
+    current_device_id = case conn.assigns[:current_device] do
+      %{id: id} -> id
+      _ -> nil
+    end
+
+    case Identity.list_user_devices(conn.assigns.current_user.id, current_device_id) do
       {:ok, devices} ->
         json(conn, %{devices: devices})
 

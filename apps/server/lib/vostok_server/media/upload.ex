@@ -21,6 +21,18 @@ defmodule VostokServer.Media.Upload do
     field :ciphertext_sha256, :string
     field :completed_at, :utc_datetime_usec
 
+    # Storage tier fields
+    field :hot_cache_path, :string
+    field :object_key, :string
+    field :storage_tier, :string, default: "hot"
+    field :media_status, :string, default: "available"
+    field :evicted_at, :utc_datetime_usec
+    field :last_accessed_at, :utc_datetime_usec
+    field :recipient_count, :integer, default: 0
+    field :confirmed_count, :integer, default: 0
+    field :fully_delivered, :boolean, default: false
+    field :fully_delivered_at, :utc_datetime_usec
+
     belongs_to :uploader_device, VostokServer.Identity.Device
     has_many :parts, VostokServer.Media.UploadPart
 
@@ -40,7 +52,17 @@ defmodule VostokServer.Media.Upload do
       :expected_part_count,
       :ciphertext,
       :ciphertext_sha256,
-      :completed_at
+      :completed_at,
+      :hot_cache_path,
+      :object_key,
+      :storage_tier,
+      :media_status,
+      :evicted_at,
+      :last_accessed_at,
+      :recipient_count,
+      :confirmed_count,
+      :fully_delivered,
+      :fully_delivered_at
     ])
     |> validate_required([:uploader_device_id, :status, :media_kind, :filename])
     |> validate_inclusion(:status, ["pending", "completed"])

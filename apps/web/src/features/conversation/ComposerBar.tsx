@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, useEffect, type FormEvent } from 'react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
+import { EmojiPicker } from '../../components/EmojiPicker.tsx'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
@@ -14,24 +15,72 @@ import {
   MicIcon,
   VideoCamIcon,
   CloseIcon,
+  SmileIcon,
+  DeleteIcon,
+  PauseIcon,
 } from '../../icons/index.tsx'
+
+const WAVEFORM_BAR_COUNT = 32
+
+function LiveWaveform({ analyserRef }: { analyserRef: React.RefObject<AnalyserNode | null> }) {
+  const [levels, setLevels] = useState<number[]>(() => Array(WAVEFORM_BAR_COUNT).fill(0.08))
+  const rafRef = useRef<number>(0)
+
+  useEffect(() => {
+    let running = true
+    const dataArray = new Uint8Array(128)
+
+    function tick() {
+      if (!running) return
+      const analyser = analyserRef.current
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray)
+        // Sample WAVEFORM_BAR_COUNT evenly-spaced bins from the frequency data
+        const next: number[] = []
+        for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
+          const idx = Math.floor((i / WAVEFORM_BAR_COUNT) * dataArray.length)
+          next.push(Math.max(0.08, dataArray[idx] / 255))
+        }
+        setLevels(next)
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => { running = false; cancelAnimationFrame(rafRef.current) }
+  }, [analyserRef])
+
+  return (
+    <div className="voice-recorder__waves">
+      {levels.map((level, i) => (
+        <span
+          key={i}
+          className="voice-recorder__wave-bar voice-recorder__wave-bar--live"
+          style={{ height: `${Math.max(4, Math.round(level * 44))}px` }}
+        />
+      ))}
+    </div>
+  )
+}
 
 type ComposerBarProps = {
   messages: ReturnType<typeof useMessages>
   media: ReturnType<typeof useMediaCapture>
   activeChat: ChatSummary | null
   chatList: ReturnType<typeof useChatList>
+  sendKey?: 'enter' | 'ctrl-enter'
   onDraftChange?: (text: string) => void
   onMessageSent?: () => void
 }
 
-export function ComposerBar({ messages, media, activeChat, chatList, onDraftChange, onMessageSent }: ComposerBarProps) {
+export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', onDraftChange, onMessageSent }: ComposerBarProps) {
   const {
     attachPopoverOpen,
     setAttachPopoverOpen,
     draftInputRef
   } = useUIContext()
 
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [videoMode, setVideoMode] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -39,19 +88,6 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
   // so the subsequent synthetic click is ignored and doesn't start recording.
   const longPressOccurredRef = useRef(false)
   const videoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const videoPreviewRef = useRef<HTMLVideoElement | null>(null)
-
-  // Attach live camera stream to preview element
-  useEffect(() => {
-    const video = videoPreviewRef.current
-    if (!video) return
-    if (media.roundVideoRecording && media.roundVideoStreamRef.current) {
-      video.srcObject = media.roundVideoStreamRef.current
-      void video.play().catch(() => undefined)
-    } else {
-      video.srcObject = null
-    }
-  }, [media.roundVideoRecording])
 
   // Start / stop video duration timer
   useEffect(() => {
@@ -91,6 +127,29 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
     }
     onMessageSent?.()
   }
+
+  const handleEmojiSelect = useCallback((emoji: string) => {
+    const textarea = draftInputRef.current
+    if (textarea) {
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const before = messages.draft.slice(0, start)
+      const after = messages.draft.slice(end)
+      const newDraft = before + emoji + after
+      messages.setDraft(newDraft)
+      onDraftChange?.(newDraft)
+      // Restore cursor position after the inserted emoji
+      requestAnimationFrame(() => {
+        const pos = start + emoji.length
+        textarea.selectionStart = pos
+        textarea.selectionEnd = pos
+        textarea.focus()
+      })
+    } else {
+      messages.setDraft(messages.draft + emoji)
+      onDraftChange?.(messages.draft + emoji)
+    }
+  }, [messages, draftInputRef, onDraftChange])
 
   const handleTextareaInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const target = e.target
@@ -140,38 +199,39 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
     return null
   }
 
-  // ─── Round video recording UI ──────────────────────────────────────────────
+  // ─── Round video recording UI (bottom bar only — overlay is in ConversationPane) ─
   if (media.roundVideoRecording) {
     return (
       <div className="voice-recorder voice-recorder--video">
-        <div className="round-video-composer-preview">
-          <video
-            ref={videoPreviewRef}
-            className="round-video-composer-preview__video"
-            muted
-            playsInline
-          />
-          <div className="round-video-composer-preview__ring" />
+        <div className="voice-recorder__left">
+          <div className="voice-recorder__indicator voice-recorder__indicator--video" />
+          <span className="voice-recorder__duration">
+            {String(Math.floor(videoDuration / 60)).padStart(2, '0')}:{String(videoDuration % 60).padStart(2, '0')}
+          </span>
         </div>
-        <div className="voice-recorder__indicator voice-recorder__indicator--video" />
-        <span className="voice-recorder__duration">
-          {String(Math.floor(videoDuration / 60)).padStart(2, '0')}:{String(videoDuration % 60).padStart(2, '0')}
-        </span>
-        <button
-          className="voice-recorder__cancel"
-          type="button"
-          onClick={() => { void media.handleRoundVideoToggle() }}
-        >
-          Cancel
-        </button>
-        <button
-          className="voice-recorder__send"
-          type="button"
-          aria-label="Stop and send video"
-          onClick={() => void media.handleRoundVideoToggle()}
-        >
-          <SendIcon stroke="white" />
-        </button>
+        <LiveWaveform analyserRef={media.videoAnalyserRef} />
+        <div className="voice-recorder__right">
+          <button
+            className="voice-recorder__circle-btn"
+            type="button"
+            aria-label="Discard recording"
+            onClick={() => { void media.handleRoundVideoToggle() }}
+          >
+            <DeleteIcon />
+          </button>
+          <button
+            className="voice-recorder__circle-btn"
+            type="button"
+            aria-label="Pause recording"
+            disabled
+          >
+            <PauseIcon />
+          </button>
+          <button className="voice-recorder__send-pill" type="button" aria-label="Stop and send video" onClick={() => void media.handleRoundVideoToggle()}>
+            <SendIcon stroke="white" />
+            <span>Send</span>
+          </button>
+        </div>
       </div>
     )
   }
@@ -180,21 +240,35 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
   if (media.voiceNoteRecording) {
     return (
       <div className="voice-recorder">
-        <div className="voice-recorder__indicator" />
-        <span className="voice-recorder__duration">
-          {String(Math.floor(media.voiceRecordingDuration / 60)).padStart(2, '0')}:{String(media.voiceRecordingDuration % 60).padStart(2, '0')}
-        </span>
-        <div className="voice-recorder__waves">
-          {Array.from({ length: 24 }).map((_, i) => (
-            <span key={i} className="voice-recorder__wave-bar" style={{ animationDelay: `${i * 0.05}s` }} />
-          ))}
+        <div className="voice-recorder__left">
+          <div className="voice-recorder__indicator" />
+          <span className="voice-recorder__duration">
+            {String(Math.floor(media.voiceRecordingDuration / 60)).padStart(2, '0')}:{String(media.voiceRecordingDuration % 60).padStart(2, '0')}
+          </span>
         </div>
-        <button className="voice-recorder__cancel" type="button" onClick={() => { media.voiceNoteRecorderRef.current?.stop(); media.cleanupVoiceNoteCapture(); if (media.voiceRecordingTimerRef.current) { clearInterval(media.voiceRecordingTimerRef.current); media.voiceRecordingTimerRef.current = null } media.setVoiceRecordingDuration(0) }}>
-          Cancel
-        </button>
-        <button className="voice-recorder__send" type="button" aria-label="Send voice note" onClick={() => void media.handleVoiceNoteToggle()}>
-          <SendIcon stroke="white" />
-        </button>
+        <LiveWaveform analyserRef={media.voiceAnalyserRef} />
+        <div className="voice-recorder__right">
+          <button
+            className="voice-recorder__circle-btn"
+            type="button"
+            aria-label="Discard recording"
+            onClick={() => { media.voiceNoteRecorderRef.current?.stop(); media.cleanupVoiceNoteCapture(); if (media.voiceRecordingTimerRef.current) { clearInterval(media.voiceRecordingTimerRef.current); media.voiceRecordingTimerRef.current = null } media.setVoiceRecordingDuration(0) }}
+          >
+            <DeleteIcon />
+          </button>
+          <button
+            className="voice-recorder__circle-btn"
+            type="button"
+            aria-label="Pause recording"
+            disabled
+          >
+            <PauseIcon />
+          </button>
+          <button className="voice-recorder__send-pill" type="button" aria-label="Send voice note" onClick={() => void media.handleVoiceNoteToggle()}>
+            <SendIcon stroke="white" />
+            <span>Send</span>
+          </button>
+        </div>
       </div>
     )
   }
@@ -247,22 +321,31 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
                 <FileSmallIcon />
                 File
               </button>
-              <button className="dropdown-menu__item" type="button" disabled>
-                👤
-                Contact
-              </button>
-              <button className="dropdown-menu__item" type="button" disabled>
-                📍
-                Location
-              </button>
             </div>
           ) : null}
         </div>
         <div className="live-composer__field">
+          <div className="emoji-picker-anchor">
+            <button className="live-composer__field-icon" type="button" aria-label="Emoji" onClick={() => setEmojiPickerOpen((v) => !v)}>
+              <SmileIcon width={20} height={20} />
+            </button>
+            <EmojiPicker open={emojiPickerOpen} onClose={() => setEmojiPickerOpen(false)} onSelect={handleEmojiSelect} />
+          </div>
           <textarea
             className="live-composer__input"
             onChange={(event) => { messages.setDraft(event.target.value); onDraftChange?.(event.target.value); handleTextareaInput(event) }}
-            placeholder={messages.editingMessageId ? 'Edit message\u2026' : 'Message'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const shouldSend = sendKey === 'enter' ? !e.ctrlKey && !e.metaKey && !e.shiftKey : (e.ctrlKey || e.metaKey)
+                if (shouldSend && messages.draft.trim().length > 0) {
+                  e.preventDefault()
+                  void messages.sendDraftMessage(chatList.activeChatId)
+                  if (draftInputRef.current) draftInputRef.current.style.height = 'auto'
+                  onMessageSent?.()
+                }
+              }
+            }}
+            placeholder={messages.editingMessageId ? 'Edit message\u2026' : 'Write a message...'}
             ref={draftInputRef}
             rows={1}
             value={messages.draft}
@@ -274,22 +357,27 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
               <SendIcon stroke="white" />
             </button>
           </Tooltip>
-        ) : (
-          <Tooltip text={videoMode ? 'Record video message (right-click to switch to voice)' : 'Record voice message (right-click to switch to video)'}>
-            <button
-              className={`live-composer__btn live-composer__mic${videoMode ? ' live-composer__mic--video' : ''}`}
-              type="button"
-              aria-label={videoMode ? 'Record video message' : 'Record voice message'}
-              onClick={handleMediaButtonClick}
-              onPointerDown={handleMediaButtonPointerDown}
-              onPointerUp={handleMediaButtonPointerUp}
-              onPointerLeave={handleMediaButtonPointerUp}
-              onContextMenu={handleMediaButtonContextMenu}
-            >
-              {videoMode ? <VideoCamIcon width={22} height={22} /> : <MicIcon width={22} height={22} />}
-            </button>
-          </Tooltip>
-        )}
+        ) : null}
+        <Tooltip text="Record voice message">
+          <button
+            className="live-composer__btn live-composer__mic"
+            type="button"
+            aria-label="Record voice message"
+            onClick={() => { void media.handleVoiceNoteToggle() }}
+          >
+            <MicIcon width={20} height={20} />
+          </button>
+        </Tooltip>
+        <Tooltip text="Record video message">
+          <button
+            className="live-composer__btn live-composer__mic"
+            type="button"
+            aria-label="Record video message"
+            onClick={() => { void media.handleRoundVideoToggle() }}
+          >
+            <VideoCamIcon width={20} height={20} />
+          </button>
+        </Tooltip>
       </div>
     </form>
   )

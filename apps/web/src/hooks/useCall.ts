@@ -9,7 +9,9 @@ import type {
   CallWebRtcEndpointState
 } from '../lib/api.ts'
 import {
+  acceptCallSession,
   createCallSession,
+  declineCallSession,
   endCallSession,
   fetchActiveCall,
   fetchCallKeys,
@@ -46,7 +48,7 @@ export function useCall(
   deferredActiveChatId: string | null,
   activeChatId: string | null
 ) {
-  const { storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
   const [activeCall, setActiveCall] = useState<CallSession | null>(null)
   const [_callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
   const [callKeys, setCallKeys] = useState<CallKeyDistribution[]>([])
@@ -118,7 +120,7 @@ export function useCall(
   function ensureMembraneClient(): MembraneClient {
     const activeCallId = activeCall?.id ?? null
 
-    if (!activeCallId || !storedDevice) {
+    if (!activeCallId || !sessionToken || !storedDevice) {
       throw new Error('No active call is available for Membrane client bootstrap.')
     }
 
@@ -130,7 +132,6 @@ export function useCall(
       resetMembraneClient()
     }
 
-    const sessionToken = storedDevice.sessionToken
     const deviceId = storedDevice.deviceId
     const client = createMembraneClient({
       onSendMediaEvent(mediaEvent) {
@@ -196,7 +197,7 @@ export function useCall(
   }
 
   const handleRealtimeCallState = useEffectEvent((call: CallSession | null) => {
-    if (!call || call.status !== 'active') {
+    if (!call || call.status === 'ended') {
       setActiveCall(null)
       setCallParticipants([])
       setCallRoom(null)
@@ -207,6 +208,7 @@ export function useCall(
       return
     }
 
+    // Accept ringing and active states from realtime
     setActiveCall(call)
   })
 
@@ -262,7 +264,7 @@ export function useCall(
 
   // Load active call on chat change
   useEffect(() => {
-    if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
+    if (!sessionToken || !deferredActiveChatId || view !== 'chat') {
       setActiveCall(null)
       setCallParticipants([])
       setCallKeys([])
@@ -275,13 +277,13 @@ export function useCall(
       return
     }
 
+    const token0 = sessionToken
     const chatId = deferredActiveChatId
-    const sessionToken = storedDevice.sessionToken
     let cancelled = false
 
     async function loadActiveCall() {
       try {
-        const response = await fetchActiveCall(sessionToken, chatId)
+        const response = await fetchActiveCall(token0, chatId)
 
         if (!cancelled) {
           setActiveCall(response.call)
@@ -299,11 +301,11 @@ export function useCall(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deferredActiveChatId, storedDevice, view])
+  }, [deferredActiveChatId, sessionToken, view])
 
   // Load call state when active call changes
   useEffect(() => {
-    if (!storedDevice || !activeCall || view !== 'chat') {
+    if (!sessionToken || !activeCall || view !== 'chat') {
       setCallParticipants([])
       setCallKeys([])
       setCallRoom(null)
@@ -315,25 +317,25 @@ export function useCall(
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
+    const token = sessionToken
     const callId = activeCall.id
     let cancelled = false
     setCallWebRtcMediaEvents([])
 
     async function loadCallState() {
       try {
-        const response = await fetchCallState(sessionToken, callId)
+        const response = await fetchCallState(token, callId)
 
         if (!cancelled) {
           setCallParticipants(response.participants)
           callSignalsRef.current = response.signals
           setCallSignals(response.signals)
           setCallRoom(response.room)
-          const callKeysResponse = await fetchCallKeys(sessionToken, callId)
+          const callKeysResponse = await fetchCallKeys(token, callId)
           if (!cancelled) {
             setCallKeys(callKeysResponse.keys)
           }
-          const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, callId)
+          const endpointResponse = await fetchCallWebRtcEndpointState(token, callId)
 
           if (!cancelled) {
             setCallWebRtcEndpoint(endpointResponse.endpoint)
@@ -359,15 +361,15 @@ export function useCall(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCall, storedDevice, view])
+  }, [activeCall, sessionToken, view])
 
   // Poll Membrane WebRTC endpoint
   useEffect(() => {
-    if (!storedDevice || !activeCall || view !== 'chat' || !callWebRtcEndpoint?.exists) {
+    if (!sessionToken || !activeCall || view !== 'chat' || !callWebRtcEndpoint?.exists) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
+    const token2 = sessionToken
     const callId = activeCall.id
     let cancelled = false
     let inFlight = false
@@ -380,7 +382,7 @@ export function useCall(
       inFlight = true
 
       try {
-        const response = await pollCallWebRtcMediaEvents(sessionToken, callId)
+        const response = await pollCallWebRtcMediaEvents(token2, callId)
 
         if (!cancelled) {
           setCallWebRtcEndpoint(response.endpoint)
@@ -400,13 +402,13 @@ export function useCall(
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [activeCall, callWebRtcEndpoint?.exists, storedDevice, view])
+  }, [activeCall, callWebRtcEndpoint?.exists, sessionToken, view])
 
   // Attach local tracks to Membrane
   useEffect(() => {
     if (
       !activeCall ||
-      !storedDevice ||
+      !sessionToken ||
       view !== 'chat' ||
       !membraneClientConnected ||
       !membraneClientRef.current ||
@@ -446,17 +448,17 @@ export function useCall(
     return () => {
       cancelled = true
     }
-  }, [activeCall, localAudioTrackCount, localVideoTrackCount, membraneClientConnected, storedDevice, view])
+  }, [activeCall, localAudioTrackCount, localVideoTrackCount, membraneClientConnected, sessionToken, view])
 
   // Subscribe to call stream
   useEffect(() => {
-    if (!storedDevice || !deferredActiveChatId || view !== 'chat') {
+    if (!sessionToken || !deferredActiveChatId || view !== 'chat') {
       return
     }
 
     const chatId = deferredActiveChatId
 
-    return subscribeToCallStream(storedDevice.sessionToken, chatId, {
+    return subscribeToCallStream(sessionToken, chatId, {
       onState(call) {
         handleRealtimeCallState(call)
       },
@@ -468,14 +470,13 @@ export function useCall(
       },
       onError: handleRealtimeCallSubscriptionError
     })
-  }, [deferredActiveChatId, storedDevice, view])
+  }, [deferredActiveChatId, sessionToken, view])
 
   async function handleStartCall(mode: 'voice' | 'video' | 'group') {
-    if (!storedDevice || !activeChatId) {
+    if (!sessionToken || !activeChatId) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
     setLoading(true)
 
     try {
@@ -490,12 +491,49 @@ export function useCall(
     }
   }
 
-  async function handleEndCall() {
-    if (!storedDevice || !activeCall) {
+  async function handleAcceptCall() {
+    if (!sessionToken || !activeCall) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
+    setLoading(true)
+
+    try {
+      const response = await acceptCallSession(sessionToken, activeCall.id)
+      setActiveCall(response.call)
+      setBanner({ tone: 'success', message: 'Call accepted.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to accept call.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDeclineCall() {
+    if (!sessionToken || !activeCall) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await declineCallSession(sessionToken, activeCall.id)
+      setActiveCall(response.call.status === 'ended' ? null : response.call)
+      setBanner({ tone: 'info', message: 'Call declined.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to decline call.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleEndCall() {
+    if (!sessionToken || !activeCall) {
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -511,7 +549,7 @@ export function useCall(
   }
 
   async function _handleJoinActiveCall() {
-    if (!storedDevice || !activeCall) {
+    if (!sessionToken || !activeCall) {
       return
     }
 
@@ -529,7 +567,6 @@ export function useCall(
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
     const trackKind = activeCall.mode === 'voice' ? 'audio' : 'audio_video'
     setLoading(true)
 
@@ -568,14 +605,14 @@ export function useCall(
   }
 
   async function _handleRotateCallKeyEpoch() {
-    if (!storedDevice || !activeCall || !activeChatId) {
+    if (!sessionToken || !storedDevice || !activeCall || !activeChatId) {
       return
     }
 
     setLoading(true)
 
     try {
-      const recipientDeviceResponse = await listRecipientDevices(storedDevice.sessionToken, activeChatId)
+      const recipientDeviceResponse = await listRecipientDevices(sessionToken, activeChatId)
 
       const targetRecipients = recipientDeviceResponse.recipient_devices.filter(
         (device) => device.device_id !== storedDevice.deviceId
@@ -589,7 +626,7 @@ export function useCall(
       const wrappedKeys = await wrapGroupSenderKeyForRecipients(keyMaterial, targetRecipients)
       const nextEpoch = Math.max(0, ...callKeys.map((key) => key.key_epoch)) + 1
 
-      const response = await rotateCallKeys(storedDevice.sessionToken, activeCall.id, {
+      const response = await rotateCallKeys(sessionToken, activeCall.id, {
         key_epoch: nextEpoch,
         algorithm: 'sframe-aes-gcm-v1',
         wrapped_keys: wrappedKeys
@@ -609,11 +646,10 @@ export function useCall(
   }
 
   async function _handleLeaveActiveCall() {
-    if (!storedDevice || !activeCall) {
+    if (!sessionToken || !activeCall) {
       return
     }
 
-    const sessionToken = storedDevice.sessionToken
     setLoading(true)
 
     try {
@@ -633,14 +669,14 @@ export function useCall(
   }
 
   async function _handleProvisionMembraneWebRtcEndpoint() {
-    if (!storedDevice || !activeCall) {
+    if (!sessionToken || !activeCall) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await provisionCallWebRtcEndpoint(storedDevice.sessionToken, activeCall.id)
+      const response = await provisionCallWebRtcEndpoint(sessionToken, activeCall.id)
       setCallWebRtcEndpoint(response.endpoint)
       setCallRoom(response.room)
       setBanner({
@@ -657,14 +693,14 @@ export function useCall(
   }
 
   async function _handlePollMembraneWebRtcEndpoint() {
-    if (!storedDevice || !activeCall) {
+    if (!sessionToken || !activeCall) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await pollCallWebRtcMediaEvents(storedDevice.sessionToken, activeCall.id)
+      const response = await pollCallWebRtcMediaEvents(sessionToken, activeCall.id)
       setCallWebRtcEndpoint(response.endpoint)
       setCallWebRtcMediaEvents((current) =>
         [...response.media_events.reverse(), ...current].slice(0, 8)
@@ -693,7 +729,7 @@ export function useCall(
   }
 
   async function _handlePingMembraneWebRtcEndpoint() {
-    if (!storedDevice || !activeCall) {
+    if (!sessionToken || !activeCall) {
       return
     }
 
@@ -725,14 +761,13 @@ export function useCall(
   }
 
   async function _handleInitializeWebRtc() {
-    if (!activeCall || !storedDevice) {
+    if (!activeCall || !sessionToken || !storedDevice) {
       return
     }
 
     setLoading(true)
 
     try {
-      const sessionToken = storedDevice.sessionToken
       const endpointResponse = await provisionCallWebRtcEndpoint(sessionToken, activeCall.id)
       const client = ensureMembraneClient()
       if (!membraneClientConnected) {
@@ -855,6 +890,8 @@ export function useCall(
     membraneRemoteEndpoints,
     membraneRemoteTracks,
     handleStartCall,
+    handleAcceptCall,
+    handleDeclineCall,
     handleEndCall,
     _handleJoinActiveCall,
     _handleRotateCallKeyEpoch,

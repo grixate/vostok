@@ -20,6 +20,7 @@ function formatDuration(seconds: number): string {
 export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: RoundVideoBubbleProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
   const [muted, setMuted] = useState(false)
   const [duration, setDuration] = useState(0)
   const [elapsed, setElapsed] = useState(0)
@@ -33,8 +34,10 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
     function onTimeUpdate() {
       setElapsed(video!.currentTime)
       setProgress(video!.duration > 0 ? video!.currentTime / video!.duration : 0)
+      // First timeupdate means a frame has been decoded and rendered
+      setVideoReady(true)
     }
-    function onEnded() { setPlaying(false); setElapsed(0); setProgress(0); video!.currentTime = 0 }
+    function onEnded() { setPlaying(false); setVideoReady(false); setElapsed(0); setProgress(0); video!.currentTime = 0 }
 
     video.addEventListener('loadedmetadata', onMeta)
     video.addEventListener('timeupdate', onTimeUpdate)
@@ -68,7 +71,6 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
   const radius = DIAMETER / 2 - 3
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference * (1 - progress)
-  const displayTime = playing ? formatDuration(elapsed) : formatDuration(duration)
 
   return (
     <div className={`round-video round-video--${side}`}>
@@ -104,7 +106,17 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
           />
         </svg>
 
-        {/* Video element clipped to circle */}
+        {/* Thumbnail preview — visible until video has decoded its first frame */}
+        {descriptor.thumbnailDataUrl && !(playing && videoReady) && (
+          <img
+            className="round-video__poster"
+            src={descriptor.thumbnailDataUrl}
+            alt=""
+            style={{ width: DIAMETER - 6, height: DIAMETER - 6 }}
+          />
+        )}
+
+        {/* Video element — transparent until a frame is ready */}
         <video
           ref={videoRef}
           src={playbackUrl}
@@ -113,7 +125,7 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
           playsInline
           onClick={togglePlay}
           aria-label={descriptor.fileName}
-          style={{ width: DIAMETER - 6, height: DIAMETER - 6 }}
+          style={{ width: DIAMETER - 6, height: DIAMETER - 6, opacity: playing && videoReady ? 1 : 0 }}
         />
 
         {/* Play overlay when paused */}
@@ -128,6 +140,21 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
               <path d="M5 3L17 10L5 17V3Z" />
             </svg>
           </button>
+        )}
+
+        {/* Buffering spinner — shown when play was requested but video isn't ready */}
+        {playing && !videoReady && (
+          <div className="round-video__play-overlay" style={{ cursor: 'default' }}>
+            <span className="round-video__loading-spinner" />
+          </div>
+        )}
+
+        {/* Duration badge — shown when paused */}
+        {!playing && duration > 0 && (
+          <div className="round-video__duration-badge">
+            <span className="round-video__duration-dot" />
+            <span className="round-video__duration-text">{formatDuration(duration)}</span>
+          </div>
         )}
 
         {/* Mute toggle */}
@@ -145,7 +172,6 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
 
       {/* Caption row */}
       <div className="round-video__caption">
-        <span className="round-video__time">{displayTime}</span>
         {timestamp && <span className="round-video__timestamp">{timestamp}</span>}
       </div>
     </div>

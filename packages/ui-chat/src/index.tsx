@@ -13,6 +13,7 @@ export type ChatListItemProps = {
   active?: boolean
   avatarColor?: string
   avatarInitial?: string
+  avatarUrl?: string | null
   online?: boolean
   isFirst?: boolean
   previewClassName?: string
@@ -28,6 +29,7 @@ export function ChatListItem({
   active,
   avatarColor,
   avatarInitial,
+  avatarUrl,
   online,
   isFirst,
   previewClassName
@@ -42,9 +44,13 @@ export function ChatListItem({
     >
       <div
         className="chat-list-item__avatar"
-        style={{ background: avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))' }}
+        style={{ background: avatarUrl ? 'none' : (avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))') }}
       >
-        {avatarInitial ?? title.slice(0, 1)}
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+        ) : (
+          avatarInitial ?? title.slice(0, 1)
+        )}
         {online && <div className="chat-list-item__online-dot" />}
       </div>
       <div className={cx('chat-list-item__body', isFirst && 'chat-list-item__body--first')}>
@@ -57,9 +63,8 @@ export function ChatListItem({
           <div className="chat-list-item__flags">
             {pinned && !unreadCount && (
               <span className="chat-list-item__flag" aria-label="Pinned">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M8.5 1.5L10.5 3.5L7 7L7 10L5 8L1.5 11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                  <path d="M4 4.5L7.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 17v5M9 3h6l-1 7h3l-2 7H9l-2-7h3L9 3z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
             )}
@@ -91,6 +96,7 @@ type ConversationHeaderProps = {
   variant?: 'direct' | 'group' | 'channel'
   avatarColor?: string
   avatarInitial?: string
+  avatarUrl?: string | null
   online?: boolean
   onBack?: () => void
   onClickInfo?: () => void
@@ -102,12 +108,26 @@ export function ConversationHeader({
   subtitle,
   avatarColor,
   avatarInitial,
+  avatarUrl,
   online,
+  onBack,
   onClickInfo,
   actions
 }: ConversationHeaderProps) {
   return (
     <div className="conversation-header">
+      {onBack && (
+        <button
+          className="conversation-header__back"
+          type="button"
+          onClick={onBack}
+          aria-label="Back to chats"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M5 12L12 19M5 12L12 5" />
+          </svg>
+        </button>
+      )}
       <button
         className="conversation-header__left"
         type="button"
@@ -117,13 +137,18 @@ export function ConversationHeader({
         <div
           className="conversation-header__avatar"
           aria-label={`${title} details`}
-          style={{ background: avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))' }}
+          style={{ background: avatarUrl ? 'none' : (avatarColor ?? 'var(--gradient-accent, linear-gradient(135deg, #FF5500, #FF9500))') }}
         >
-          {avatarInitial ?? title.slice(0, 1)}
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : (
+            avatarInitial ?? title.slice(0, 1)
+          )}
         </div>
         <div className="conversation-header__info">
           <span className="conversation-header__name">{title}</span>
           <span className={cx('conversation-header__status', online && 'conversation-header__status--online')}>
+            {online && <span className="conversation-header__online-dot" />}
             {subtitle}
           </span>
         </div>

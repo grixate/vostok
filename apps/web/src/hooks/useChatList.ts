@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
+import { subscribeToReconnect } from '../lib/realtime.ts'
 import type { ChatSummary } from '../lib/api.ts'
 import {
   listChats,
   createDirectChat,
   createSelfChat,
   listDevices,
+  linkDevice,
   fetchMe
 } from '../lib/api.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
 import { subscribeToUserStream } from '../lib/realtime.ts'
-import type { AuthView } from '../types.ts'
+import { generateDeviceIdentity, generateDevicePrekeys } from '../lib/device-auth.ts'
+import { persistStoredDevice, readStoredDevice } from '../utils/storage.ts'
+import type { AuthView, StoredDevice } from '../types.ts'
 
 const ACTIVE_CHAT_STORAGE_KEY = 'vostok.layout.active_chat_id'
 
@@ -47,7 +51,7 @@ type ChatListOptions = {
 }
 
 export function useChatList(view: AuthView, options?: ChatListOptions) {
-  const { storedDevice, setLoading, setBanner, loading } = useAppContext()
+  const { sessionToken, storedDevice, setStoredDevice, setLoading, setBanner, loading } = useAppContext()
   const [chatItems, setChatItems] = useState<ChatSummary[]>([])
   const [chatFilter, setChatFilter] = useState('')
   const [activeChatId, _setActiveChatId] = useState<string | null>(() => readPersistedActiveChatId())
@@ -73,26 +77,73 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
   const userIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (view !== 'chat' || !storedDevice) {
+    if (view !== 'chat' || !sessionToken) {
       return
     }
 
-    const { sessionToken } = storedDevice
+    const token = sessionToken
     let cancelled = false
 
     async function bootstrapChatShell() {
       setLoading(true)
 
       try {
-        const [me, chatResponse, deviceResponse] = await Promise.all([
-          fetchMe(sessionToken),
-          listChats(sessionToken),
-          listDevices(sessionToken)
+        const [me, chatResponse] = await Promise.all([
+          fetchMe(token),
+          listChats(token)
         ])
+
+        // Device listing is optional — may fail if no device registered yet
+        let deviceResponse: { devices: any[] } = { devices: [] }
+        try {
+          deviceResponse = await listDevices(token)
+        } catch {
+          // No device registered — that's fine
+        }
+
+        // Auto-setup E2E device keys if no stored device exists locally.
+        // This generates key material, links a device to the server, and
+        // persists it so all messages can be end-to-end encrypted.
+        if (!storedDevice && !readStoredDevice()) {
+          try {
+            const identity = await generateDeviceIdentity()
+            const prekeys = await generateDevicePrekeys(identity.signingPrivateKeyPkcs8Base64)
+            const linked = await linkDevice(token, {
+              device_name: 'Web',
+              device_identity_public_key: identity.signingPublicKeyBase64,
+              device_encryption_public_key: identity.encryptionPublicKeyBase64,
+              signed_prekey: prekeys.signedPrekey.publicKeyBase64,
+              signed_prekey_signature: prekeys.signedPrekey.signatureBase64,
+              one_time_prekeys: prekeys.oneTimePrekeys.map((k) => k.publicKeyBase64)
+            })
+
+            const newDevice: StoredDevice = {
+              deviceId: linked.device.id,
+              deviceName: 'Web',
+              privateKeyPkcs8Base64: identity.signingPrivateKeyPkcs8Base64,
+              publicKeyBase64: identity.signingPublicKeyBase64,
+              encryptionPrivateKeyPkcs8Base64: identity.encryptionPrivateKeyPkcs8Base64,
+              encryptionPublicKeyBase64: identity.encryptionPublicKeyBase64,
+              signedPrekeyPublicKeyBase64: prekeys.signedPrekey.publicKeyBase64,
+              signedPrekeyPrivateKeyPkcs8Base64: prekeys.signedPrekey.privateKeyPkcs8Base64,
+              signedPrekeys: [prekeys.signedPrekey],
+              oneTimePrekeys: prekeys.oneTimePrekeys,
+              sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              sessionToken: token,
+              username: me.user.username
+            }
+
+            persistStoredDevice(newDevice)
+            setStoredDevice(newDevice)
+          } catch (deviceError) {
+            console.warn('Auto device setup failed:', deviceError)
+          }
+        }
+
         let nextChats = chatResponse.chats
 
         if (!nextChats.some((c) => c.is_self_chat)) {
-          const created = await createSelfChat(sessionToken)
+          const created = await createSelfChat(token)
           nextChats = [created.chat, ...nextChats]
         }
 
@@ -108,8 +159,6 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
 
         userIdRef.current = me.user.id
         setChatItems(nextChats)
-        // Validate the persisted active chat ID: use it if the chat still exists,
-        // otherwise fall back to the first chat in the list.
         setActiveChatId((current) => {
           if (current && nextChats.some((c) => c.id === current)) {
             return current
@@ -118,7 +167,7 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
         })
         setNewChatUsername((current) => (current === '' ? me.user.username : current))
 
-        if (me.device.prekeys?.replenish_recommended) {
+        if (me.device?.prekeys?.replenish_recommended) {
           setBanner({
             tone: 'info',
             message: `One-time prekeys are low (${me.device.prekeys.available_one_time_prekeys}/${me.device.prekeys.target_count}). Rotate prekeys soon.`
@@ -141,19 +190,38 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
     return () => {
       cancelled = true
     }
-  }, [storedDevice, view, setLoading, setBanner])
+  }, [sessionToken, view, setLoading, setBanner])
+
+  // Refresh chat list after connection recovery
+  useEffect(() => {
+    if (view !== 'chat' || !sessionToken) return
+
+    const token = sessionToken
+    return subscribeToReconnect(() => {
+      console.log('[reconnect] refreshing chat list')
+      listChats(token)
+        .then((response) => {
+          setChatItems((prev) => {
+            // Merge new chats, preserve existing order
+            const existingIds = new Set(prev.map((c) => c.id))
+            const newChats = response.chats.filter((c) => !existingIds.has(c.id))
+            return newChats.length > 0 ? [...prev, ...newChats] : prev
+          })
+        })
+        .catch(() => {})
+    })
+  }, [sessionToken, view])
 
   // Subscribe to the user channel for real-time chat activity notifications.
   // When another user sends the first message in a new chat, the server
   // broadcasts `chat:activity` to every member's `user:#{user_id}` channel.
   // If the chat isn't in our list yet, we refresh the full chat list.
   useEffect(() => {
-    if (view !== 'chat' || !storedDevice || !userIdRef.current) {
+    if (view !== 'chat' || !sessionToken || !userIdRef.current) {
       return
     }
 
     const userId = userIdRef.current
-    const { sessionToken } = storedDevice
 
     const onExistingChatActivity = options?.onExistingChatActivity
 
@@ -198,13 +266,13 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
     })
 
     return unsubscribe
-  }, [storedDevice, view, chatItems.length])
+  }, [sessionToken, view, chatItems.length])
 
   async function startDirectChatWith(username: string) {
-    if (!storedDevice) return
+    if (!sessionToken) return
     setLoading(true)
     try {
-      const response = await createDirectChat(storedDevice.sessionToken, username)
+      const response = await createDirectChat(sessionToken, username)
       setChatItems((current) => mergeChat(current, response.chat))
       setActiveChatId(response.chat.id)
       setNewChatUsername('')

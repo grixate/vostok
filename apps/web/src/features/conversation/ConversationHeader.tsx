@@ -5,11 +5,16 @@ import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { useCall } from '../../hooks/useCall.ts'
 import type { useViewportLayout } from '../../hooks/useViewportLayout.ts'
+import type { usePresence } from '../../hooks/usePresence.ts'
 import type { ChatSummary } from '../../lib/api.ts'
+import { readAuthSession } from '../../utils/storage.ts'
 import {
+  BackIcon,
   PhoneIcon,
+  MoreVertIcon,
   SearchIcon,
 } from '../../icons/index.tsx'
+import { useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
 
 type ConversationHeaderProps = {
   activeChat: ChatSummary | null
@@ -17,7 +22,9 @@ type ConversationHeaderProps = {
   call: ReturnType<typeof useCall>
   layout: ReturnType<typeof useViewportLayout>
   typingUsers: string[]
+  presence: ReturnType<typeof usePresence>
   onClickTitle?: () => void
+  onBack?: () => void
 }
 
 function TypingIndicator() {
@@ -51,7 +58,13 @@ function formatTypingSubtitle(typingUsers: string[], chatType: string): React.Re
   return <TypingIndicator />
 }
 
-export function ConversationHeader({ activeChat, groupChat, call, layout, typingUsers, onClickTitle }: ConversationHeaderProps) {
+function getOtherUserId(activeChat: ChatSummary): string | null {
+  if (activeChat.is_self_chat || activeChat.type === 'group') return null
+  const currentUserId = readAuthSession()?.user.id ?? null
+  return activeChat.participant_user_ids?.find((id) => id !== currentUserId) ?? null
+}
+
+export function ConversationHeader({ activeChat, groupChat, call, layout, typingUsers, presence, onClickTitle, onBack }: ConversationHeaderProps) {
   const {
     setChatSearchOpen,
     setChatSearchQuery,
@@ -61,11 +74,18 @@ export function ConversationHeader({ activeChat, groupChat, call, layout, typing
     return null
   }
 
+  const otherUserId = getOtherUserId(activeChat)
+  const otherPhotoUrl = useProfilePhoto(activeChat.is_self_chat ? null : otherUserId)
+  const isPresenceOnline = otherUserId ? presence.onlineUserIds.has(otherUserId) : false
+  // If user is typing, they're clearly online
+  const isOnline = isPresenceOnline || (typingUsers.length > 0 && !activeChat.is_self_chat && activeChat.type !== 'group')
+
+  const presenceSubtitle = isPresenceOnline ? 'online' : 'last seen recently'
   const defaultSubtitle = activeChat.is_self_chat
     ? ''
     : activeChat.type === 'group'
       ? `${groupChat.groupMembers.length} members`
-      : 'last seen recently'
+      : presenceSubtitle
 
   const subtitleText = typingUsers.length > 0
     ? (activeChat.type === 'group'
@@ -79,18 +99,23 @@ export function ConversationHeader({ activeChat, groupChat, call, layout, typing
       subtitle={subtitleText}
       avatarColor={chatAvatarColor(activeChat.title, activeChat.is_self_chat)}
       avatarInitial={activeChat.is_self_chat ? '\uD83D\uDD16' : activeChat.title.slice(0, 1)}
+      avatarUrl={otherPhotoUrl}
+      online={isOnline}
+      onBack={onBack}
       onClickInfo={onClickTitle}
       actions={(
         <>
           {!activeChat.is_self_chat ? (
-            <Tooltip text="Voice call">
-              <button className="vostok-icon-button" type="button" aria-label="Voice call" onClick={() => call.handleStartCall('voice')}>
-                <PhoneIcon />
-              </button>
-            </Tooltip>
+            <>
+              <Tooltip text="Call">
+                <button className="conversation-header__btn" type="button" aria-label="Call" onClick={() => call.handleStartCall('voice')}>
+                  <PhoneIcon />
+                </button>
+              </Tooltip>
+            </>
           ) : null}
-          <Tooltip text="Search messages">
-            <button className="vostok-icon-button" type="button" aria-label="Search" onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>
+          <Tooltip text="Search in chat">
+            <button className="conversation-header__btn" type="button" aria-label="Search in chat" onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>
               <SearchIcon />
             </button>
           </Tooltip>

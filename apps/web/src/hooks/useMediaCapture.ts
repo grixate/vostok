@@ -4,6 +4,7 @@ import { sha256Hex } from '@vostok/crypto-core'
 import {
   appendMediaUploadPart,
   completeMediaUpload,
+  confirmMediaDelivery,
   createMediaUpload,
   fetchMediaUpload,
   fetchMediaUploadState
@@ -15,7 +16,7 @@ import {
   generateAttachmentWaveform
 } from '../lib/attachment-vault.ts'
 import { base64ToBytes, bytesToBase64 } from '../lib/base64.ts'
-import { mergeMessageThread } from '../utils/message-helpers.ts'
+import { mergeMessageThread, cacheSentPlaintext } from '../utils/message-helpers.ts'
 import { inferMediaKind } from '../utils/attachment-helpers.ts'
 import { shouldQueueOutboxSendFailure } from '../utils/crypto-helpers.ts'
 import type { CachedMessage } from '../lib/message-cache.ts'
@@ -66,18 +67,28 @@ export function useMediaCapture(
   replyTargetMessageId: string | null,
   setReplyTargetMessageId: React.Dispatch<React.SetStateAction<string | null>>
 ) {
-  const { storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
+  // Keep a ref to the latest token so async callbacks (recorder.onstop)
+  // always use the current token, even if it refreshed during recording.
+  const sessionTokenRef = useRef(sessionToken)
+  sessionTokenRef.current = sessionToken
   const [voiceNoteRecording, setVoiceNoteRecording] = useState(false)
   const [roundVideoRecording, setRoundVideoRecording] = useState(false)
   const [attachmentPlaybackUrls, setAttachmentPlaybackUrls] = useState<Record<string, string>>({})
+  const [expiredMediaIds, setExpiredMediaIds] = useState<Set<string>>(new Set())
   const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0)
 
   const voiceNoteRecorderRef = useRef<MediaRecorder | null>(null)
   const voiceNoteStreamRef = useRef<MediaStream | null>(null)
   const voiceNoteChunksRef = useRef<Blob[]>([])
+  const voiceAnalyserRef = useRef<AnalyserNode | null>(null)
+  const voiceAudioContextRef = useRef<AudioContext | null>(null)
+  const videoAnalyserRef = useRef<AnalyserNode | null>(null)
+  const videoAudioContextRef = useRef<AudioContext | null>(null)
   const roundVideoRecorderRef = useRef<MediaRecorder | null>(null)
   const roundVideoStreamRef = useRef<MediaStream | null>(null)
   const roundVideoChunksRef = useRef<Blob[]>([])
+  const roundVideoThumbnailRef = useRef<string | null>(null)
   const attachmentPlaybackUrlsRef = useRef<Record<string, string>>({})
   const attachmentPlaybackInFlightRef = useRef<Map<string, Promise<string>>>(new Map())
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -144,6 +155,11 @@ export function useMediaCapture(
     }
 
     voiceNoteStreamRef.current = null
+    voiceAnalyserRef.current = null
+    if (voiceAudioContextRef.current) {
+      void voiceAudioContextRef.current.close().catch(() => undefined)
+      voiceAudioContextRef.current = null
+    }
     setVoiceNoteRecording(false)
   }
 
@@ -158,6 +174,11 @@ export function useMediaCapture(
     }
 
     roundVideoStreamRef.current = null
+    videoAnalyserRef.current = null
+    if (videoAudioContextRef.current) {
+      void videoAudioContextRef.current.close().catch(() => undefined)
+      videoAudioContextRef.current = null
+    }
     setRoundVideoRecording(false)
   }
 
@@ -232,7 +253,8 @@ export function useMediaCapture(
   }
 
   async function sendAttachmentFile(file: File) {
-    if (!storedDevice || !activeChatId) {
+    const token = sessionTokenRef.current
+    if (!token || !activeChatId) {
       return
     }
 
@@ -245,10 +267,18 @@ export function useMediaCapture(
     let thumbnailDataUrl: string | null = null
     let waveform: number[] | null = null
 
-    try {
-      thumbnailDataUrl = await generateAttachmentThumbnailDataUrl(file)
-    } catch {
-      thumbnailDataUrl = null
+    // For round videos, prefer the live-stream thumbnail captured directly
+    // from the camera before recording stopped — the WebM file-based
+    // extraction often produces a blank or tiny first frame.
+    if (roundVideoThumbnailRef.current) {
+      thumbnailDataUrl = roundVideoThumbnailRef.current
+      roundVideoThumbnailRef.current = null
+    } else {
+      try {
+        thumbnailDataUrl = await generateAttachmentThumbnailDataUrl(file)
+      } catch {
+        thumbnailDataUrl = null
+      }
     }
 
     try {
@@ -272,17 +302,29 @@ export function useMediaCapture(
       text: `Attachment: ${file.name}`,
       sentAt: new Date().toISOString(),
       side: 'outgoing',
+      senderId: storedDevice?.deviceId,
+      senderUsername: storedDevice?.username,
       decryptable: true,
       attachment: optimisticAttachment
     }
 
+    // Create a local blob URL for immediate playback of voice/video messages
+    const isVoiceOrVideo = file.name.startsWith('voice-note-') || file.name.startsWith('round-video-')
+    let localBlobUrl: string | null = null
+    if (isVoiceOrVideo) {
+      localBlobUrl = URL.createObjectURL(file)
+      // Store under the 'pending' uploadId so the message thread can find it
+      setAttachmentPlaybackUrls((prev) => ({ ...prev, pending: localBlobUrl! }))
+    }
+
+    console.log('[sendAttachmentFile] inserting optimistic:', optimisticId, 'clientId:', clientId)
     replaceActiveMessages(activeChatId, mergeMessageThread(messageItemsRef.current, optimisticMessage), true)
     setReplyTargetMessageId(null)
 
     try {
       const encryptedAttachment = await encryptAttachmentFile(file)
       const uploadId = await uploadEncryptedAttachmentMultipart(
-        storedDevice.sessionToken,
+        sessionTokenRef.current!,
         file.name,
         inferMediaKind(file.type),
         encryptedAttachment
@@ -300,19 +342,99 @@ export function useMediaCapture(
         ivBase64: encryptedAttachment.ivBase64
       }
 
-      const { payload, deliveryMode } = await buildEncryptedMessagePayload(
-        JSON.stringify(descriptor),
+      // Update the optimistic message with real attachment details so it exits
+      // the "Sending…" spinner immediately while the message is still in-flight.
+      const updatedOptimistic: CachedMessage = {
+        ...optimisticMessage,
+        attachment: {
+          ...optimisticAttachment,
+          uploadId,
+          contentKeyBase64: encryptedAttachment.contentKeyBase64,
+          ivBase64: encryptedAttachment.ivBase64
+        }
+      }
+      replaceActiveMessages(
         activeChatId,
-        clientId,
-        'attachment',
-        activeReplyToMessageId
+        mergeMessageThread(messageItemsRef.current, updatedOptimistic),
+        false
       )
+
+      // Migrate the blob URL from the 'pending' key to the real uploadId so
+      // the playback URL lookup in MessageThread finds it immediately.
+      if (localBlobUrl) {
+        setAttachmentPlaybackUrls((prev) => {
+          const next = { ...prev, [uploadId]: localBlobUrl }
+          delete next.pending
+          return next
+        })
+      }
+
+      // Cache the sent attachment so that if decryption of our own message fails
+      // (e.g. sender-key ratchet), the message still renders from the local cache.
+      const attachmentText =
+        file.type.startsWith('audio/') && file.name.startsWith('voice-note-')
+          ? `Voice note: ${file.name}`
+          : file.type.startsWith('video/') && file.name.startsWith('round-video-')
+            ? `Round video: ${file.name}`
+            : `Attachment: ${file.name}`
+      cacheSentPlaintext(clientId, attachmentText, {
+        uploadId,
+        fileName: file.name,
+        contentType: encryptedAttachment.contentType,
+        size: encryptedAttachment.size,
+        thumbnailDataUrl: thumbnailDataUrl ?? undefined,
+        waveform: waveform ?? undefined,
+        contentKeyBase64: encryptedAttachment.contentKeyBase64,
+        ivBase64: encryptedAttachment.ivBase64
+      })
+
+      // Retry encryption setup — session bootstrap may need a moment
+      const MAX_RETRIES = 4
+      const RETRY_DELAY_MS = 1500
+      let payload: Awaited<ReturnType<typeof buildEncryptedMessagePayload>>['payload'] | null = null
+      let deliveryMode: string = ''
+      let lastEncryptError: unknown = null
+
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          const result = await buildEncryptedMessagePayload(
+            JSON.stringify(descriptor),
+            activeChatId,
+            clientId,
+            'attachment',
+            activeReplyToMessageId
+          )
+          payload = result.payload
+          deliveryMode = result.deliveryMode
+          break
+        } catch (err) {
+          lastEncryptError = err
+          if (attempt < MAX_RETRIES - 1) {
+            setBanner({ tone: 'info', message: 'Setting up encryption\u2026' })
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
+          }
+        }
+      }
+
+      if (!payload) {
+        console.error('[sendAttachmentFile] encryption failed after retries:', lastEncryptError)
+        throw lastEncryptError ?? new Error('Failed to encrypt attachment.')
+      }
+      console.log('[sendAttachmentFile] encrypted OK, sending to server...')
 
       try {
         const { createMessage } = await import('../lib/api.ts')
-        const response = await createMessage(storedDevice.sessionToken, activeChatId, payload)
+        const response = await createMessage(sessionTokenRef.current!, activeChatId, payload)
+        console.log('[sendAttachmentFile] server response:', response.message.id, 'client_id:', response.message.client_id)
 
-        await ingestMessageIntoActiveThread(response.message, activeChatId)
+        try {
+          await ingestMessageIntoActiveThread(response.message, activeChatId)
+          console.log('[sendAttachmentFile] ingested OK')
+        } catch (ingestError) {
+          // Message was sent successfully — don't remove the optimistic message.
+          // The next channel sync or page reload will pick up the server version.
+          console.warn('[sendAttachmentFile] ingest failed, keeping optimistic:', ingestError)
+        }
         setBanner({
           tone: 'success',
           message:
@@ -335,14 +457,21 @@ export function useMediaCapture(
         throw error
       }
     } catch (error) {
+      console.error('[sendAttachmentFile] OUTER CATCH:', error)
       const message = error instanceof Error ? error.message : 'Failed to send attachment.'
       setBanner({ tone: 'error', message })
       setReplyTargetMessageId(activeReplyToMessageId)
-      replaceActiveMessages(
-        activeChatId,
-        messageItemsRef.current.filter((item) => item.clientId !== clientId && item.id !== optimisticId),
-        true
-      )
+
+      // Only remove the optimistic message for permanent failures.
+      // Encryption setup failures are transient — keep the message visible.
+      const isTransient = message.includes('Encryption') || message.includes('encryption') || message.includes('Setting up')
+      if (!isTransient) {
+        replaceActiveMessages(
+          activeChatId,
+          messageItemsRef.current.filter((item) => item.clientId !== clientId && item.id !== optimisticId),
+          true
+        )
+      }
     } finally {
       setLoading(false)
     }
@@ -352,7 +481,7 @@ export function useMediaCapture(
     const file = event.target.files?.[0]
     event.target.value = ''
 
-    if (!file || !storedDevice || !activeChatId) {
+    if (!file || !sessionTokenRef.current || !activeChatId) {
       return
     }
 
@@ -412,6 +541,19 @@ export function useMediaCapture(
         void sendAttachmentFile(file)
       }
 
+      // Set up AnalyserNode for live waveform visualization
+      try {
+        const audioCtx = new AudioContext()
+        const source = audioCtx.createMediaStreamSource(stream)
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 256
+        source.connect(analyser)
+        voiceAudioContextRef.current = audioCtx
+        voiceAnalyserRef.current = analyser
+      } catch {
+        // Audio context creation can fail — waveform will be decorative
+      }
+
       recorder.start()
       setVoiceNoteRecording(true)
       setVoiceRecordingDuration(0)
@@ -432,6 +574,30 @@ export function useMediaCapture(
       if (!recorder) {
         cleanupRoundVideoCapture()
         return
+      }
+
+      // Capture a thumbnail from the live video stream before stopping.
+      // This is more reliable than trying to decode the WebM file after.
+      try {
+        const stream = roundVideoStreamRef.current
+        const videoTrack = stream?.getVideoTracks()[0]
+        if (videoTrack && 'ImageCapture' in window) {
+          const capture = new (window as any).ImageCapture(videoTrack)
+          const bitmap = await capture.grabFrame()
+          const canvas = document.createElement('canvas')
+          const maxEdge = 280
+          const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+            roundVideoThumbnailRef.current = canvas.toDataURL('image/jpeg', 0.78)
+          }
+          bitmap.close()
+        }
+      } catch {
+        // Thumbnail capture failed — will fall back to file-based generation
       }
 
       setBanner({ tone: 'info', message: 'Finishing round video\u2026' })
@@ -480,6 +646,19 @@ export function useMediaCapture(
         void sendAttachmentFile(file)
       }
 
+      // Set up AnalyserNode for live waveform from video's audio track
+      try {
+        const audioCtx = new AudioContext()
+        const source = audioCtx.createMediaStreamSource(stream)
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 256
+        source.connect(analyser)
+        videoAudioContextRef.current = audioCtx
+        videoAnalyserRef.current = analyser
+      } catch {
+        // Audio context creation can fail — waveform will be static
+      }
+
       recorder.start()
       setRoundVideoRecording(true)
       setBanner({ tone: 'info', message: 'Recording round video\u2026 tap again to stop.' })
@@ -503,12 +682,23 @@ export function useMediaCapture(
       return inFlight
     }
 
-    if (!storedDevice) {
-      throw new Error('No local device identity is available.')
+    if (!sessionTokenRef.current) {
+      throw new Error('No session token is available.')
     }
 
     const promise = (async () => {
-      const response = await fetchMediaUpload(storedDevice.sessionToken, attachment.uploadId)
+      let response: Awaited<ReturnType<typeof fetchMediaUpload>>
+      try {
+        response = await fetchMediaUpload(sessionTokenRef.current!, attachment.uploadId)
+      } catch (fetchError) {
+        // Check if this is a 410 Gone (media expired/evicted)
+        const msg = fetchError instanceof Error ? fetchError.message : ''
+        if (msg.includes('expired') || msg.includes('deleted') || msg.includes('media_expired')) {
+          setExpiredMediaIds((prev) => new Set(prev).add(attachment.uploadId))
+          throw new Error('Media has expired and is no longer available on the server.')
+        }
+        throw fetchError
+      }
 
       if (!response.upload.ciphertext) {
         throw new Error('The encrypted attachment payload is missing on the server.')
@@ -521,6 +711,10 @@ export function useMediaCapture(
         attachment.contentType
       )
       const playbackUrl = URL.createObjectURL(blob)
+
+      // Confirm delivery — fire-and-forget so the server can track
+      // which recipients have downloaded the media for eviction decisions.
+      void confirmMediaDelivery(sessionTokenRef.current!, attachment.uploadId).catch(() => {})
 
       setAttachmentPlaybackUrls((current) => {
         const previous = current[attachment.uploadId]
@@ -548,8 +742,8 @@ export function useMediaCapture(
   }
 
   async function handleDownloadAttachment(attachment: AttachmentDescriptor) {
-    if (!storedDevice) {
-      setBanner({ tone: 'error', message: 'No local device identity is available.' })
+    if (!sessionTokenRef.current) {
+      setBanner({ tone: 'error', message: 'No session token is available.' })
       return
     }
 
@@ -557,7 +751,7 @@ export function useMediaCapture(
     setBanner({ tone: 'info', message: `Downloading ${attachment.fileName}\u2026` })
 
     try {
-      const response = await fetchMediaUpload(storedDevice.sessionToken, attachment.uploadId)
+      const response = await fetchMediaUpload(sessionTokenRef.current!, attachment.uploadId)
 
       if (!response.upload.ciphertext) {
         throw new Error('The encrypted attachment payload is missing on the server.')
@@ -593,7 +787,11 @@ export function useMediaCapture(
     fileInputRef,
     voiceNoteRecorderRef,
     voiceRecordingTimerRef,
+    voiceAnalyserRef,
+    videoAnalyserRef,
     roundVideoStreamRef,
+    attachmentPlaybackUrls,
+    expiredMediaIds,
     cleanupVoiceNoteCapture,
     sendAttachmentFile,
     handleAttachmentPick,

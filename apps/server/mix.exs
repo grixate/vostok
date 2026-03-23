@@ -51,7 +51,14 @@ defmodule VostokServer.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:membrane_rtc_engine, "~> 0.23.0"},
-      {:membrane_rtc_engine_webrtc, "~> 0.9.0"}
+      {:membrane_rtc_engine_webrtc, "~> 0.9.0"},
+      {:argon2_elixir, "~> 4.1"},
+      {:joken, "~> 2.6"},
+      # Object storage (S3-compatible)
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
+      {:hackney, "~> 1.20"},
+      {:sweet_xml, "~> 0.7"}
     ]
   end
 

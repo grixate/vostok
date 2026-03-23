@@ -3,9 +3,11 @@ import { SidebarHeader } from './SidebarHeader.tsx'
 import { SidebarChatList } from './SidebarChatList.tsx'
 import { BottomTabBar } from './BottomTabBar.tsx'
 import { MembersPane } from './MembersPane.tsx'
+import { CallsTab } from '../calls/CallsTab.tsx'
 import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useChatFolders } from '../../hooks/useChatFolders.ts'
+import type { usePresence } from '../../hooks/usePresence.ts'
 import type { ChatSummary } from '../../lib/api.ts'
 
 type SidebarProps = {
@@ -13,10 +15,11 @@ type SidebarProps = {
   chatList: ReturnType<typeof useChatList>
   activeChat: ChatSummary | null
   chatFolders: ReturnType<typeof useChatFolders>
-  draftChatIds: Set<string>
+  draftChatIds: Map<string, string>
+  presence: ReturnType<typeof usePresence>
 }
 
-export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatIds }: SidebarProps) {
+export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatIds, presence }: SidebarProps) {
   const { sidebarTab, setSidebarTab, setSettingsOverlayOpen } = useUIContext()
 
   function handleTabChange(tab: typeof sidebarTab) {
@@ -29,8 +32,11 @@ export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatI
       {sidebarTab === 'chats' && (
         <>
           <SidebarHeader desktop={desktop} chatList={chatList} />
-          <SidebarChatList chatList={chatList} activeChat={activeChat} draftChatIds={draftChatIds} chatFolders={chatFolders} />
+          <SidebarChatList chatList={chatList} activeChat={activeChat} draftChatIds={draftChatIds} chatFolders={chatFolders} presence={presence} />
         </>
+      )}
+      {sidebarTab === 'calls' && (
+        <CallsTab />
       )}
       {sidebarTab === 'members' && (
         <>

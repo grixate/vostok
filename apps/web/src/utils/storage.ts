@@ -1,7 +1,8 @@
-import type { StoredDevice } from '../types.ts'
+import type { StoredDevice, AuthSession } from '../types.ts'
 import type { DesktopWindowGeometry } from '../lib/desktop-shell.ts'
 import {
   STORAGE_KEY,
+  AUTH_STORAGE_KEY,
   DETAIL_RAIL_STORAGE_KEY,
   DESKTOP_WINDOW_GEOMETRY_STORAGE_KEY
 } from '../constants.ts'
@@ -28,6 +29,30 @@ export function persistStoredDevice(device: StoredDevice | null) {
   }
 
   window.localStorage.removeItem(STORAGE_KEY)
+}
+
+export function readAuthSession(): AuthSession | null {
+  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY)
+
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as AuthSession
+  } catch {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    return null
+  }
+}
+
+export function persistAuthSession(session: AuthSession | null) {
+  if (session) {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session))
+    return
+  }
+
+  window.localStorage.removeItem(AUTH_STORAGE_KEY)
 }
 
 export function readDetailRailPreference(): boolean {

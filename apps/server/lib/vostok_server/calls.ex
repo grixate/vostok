@@ -51,15 +51,15 @@ defmodule VostokServer.Calls do
             chat_id: chat_id,
             started_by_device_id: current_device_id,
             mode: mode,
-            status: "active",
+            status: "ringing",
             started_at: DateTime.utc_now()
           })
           |> Repo.insert()
           |> case do
             {:ok, call} ->
-              maybe_ensure_room(call)
               broadcast_call_state(chat_id, call)
-              emit_call_history_message(call, "#{String.capitalize(mode)} call started")
+              # Auto-expire ringing after 30 seconds
+              schedule_ring_timeout(call.id, chat_id)
               {:ok, present_call(call)}
 
             {:error, changeset} ->
@@ -82,6 +82,63 @@ defmodule VostokServer.Calls do
          room: current_room_state(call)
        }}
     else
+      nil ->
+        {:error, {:not_found, "Call not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def accept_call(call_id, user_id)
+      when is_binary(call_id) and is_binary(user_id) do
+    with %CallSession{status: "ringing"} = call <- Repo.get(CallSession, call_id),
+         {:ok, _membership} <- Messaging.ensure_membership(call.chat_id, user_id) do
+      call
+      |> CallSession.changeset(%{status: "active"})
+      |> Repo.update()
+      |> case do
+        {:ok, updated_call} ->
+          maybe_ensure_room(updated_call)
+          broadcast_call_state(updated_call.chat_id, updated_call)
+          emit_call_history_message(updated_call, "#{String.capitalize(updated_call.mode)} call started")
+          {:ok, present_call(updated_call)}
+
+        {:error, changeset} ->
+          {:error, {:validation, format_changeset_error(changeset)}}
+      end
+    else
+      %CallSession{status: status} ->
+        {:error, {:validation, "Call is #{status}, cannot accept."}}
+
+      nil ->
+        {:error, {:not_found, "Call not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def decline_call(call_id, user_id)
+      when is_binary(call_id) and is_binary(user_id) do
+    with %CallSession{status: "ringing"} = call <- Repo.get(CallSession, call_id),
+         {:ok, _membership} <- Messaging.ensure_membership(call.chat_id, user_id) do
+      call
+      |> CallSession.changeset(%{status: "ended", ended_at: DateTime.utc_now()})
+      |> Repo.update()
+      |> case do
+        {:ok, updated_call} ->
+          broadcast_call_state(updated_call.chat_id, updated_call)
+          emit_call_history_message(updated_call, "Declined call")
+          {:ok, present_call(updated_call)}
+
+        {:error, changeset} ->
+          {:error, {:validation, format_changeset_error(changeset)}}
+      end
+    else
+      %CallSession{} ->
+        {:error, {:validation, "Call is no longer ringing."}}
+
       nil ->
         {:error, {:not_found, "Call not found."}}
 
@@ -451,11 +508,37 @@ defmodule VostokServer.Calls do
 
   defp active_call_record(chat_id) do
     from(call in CallSession,
-      where: call.chat_id == ^chat_id and call.status == "active",
+      where: call.chat_id == ^chat_id and call.status in ["active", "ringing"],
       order_by: [desc: call.started_at],
       limit: 1
     )
     |> Repo.one()
+  end
+
+  defp schedule_ring_timeout(call_id, chat_id) do
+    # Expire ringing calls after 30 seconds
+    Task.start(fn ->
+      Process.sleep(30_000)
+
+      case Repo.get(CallSession, call_id) do
+        %CallSession{status: "ringing"} = call ->
+          call
+          |> CallSession.changeset(%{status: "ended", ended_at: DateTime.utc_now()})
+          |> Repo.update()
+          |> case do
+            {:ok, ended} ->
+              broadcast_call_state(chat_id, ended)
+              emit_call_history_message(ended, "Missed call")
+
+            _ ->
+              :ok
+          end
+
+        _ ->
+          # Already accepted or ended — nothing to do
+          :ok
+      end
+    end)
   end
 
   defp maybe_ensure_room(%CallSession{status: "active"} = call) do
@@ -468,6 +551,7 @@ defmodule VostokServer.Calls do
   defp maybe_ensure_room(_call), do: :ok
 
   defp ensure_active(%CallSession{status: "active"}), do: :ok
+  defp ensure_active(%CallSession{status: "ringing"}), do: :ok
   defp ensure_active(_call), do: {:error, {:validation, "Call is no longer active."}}
 
   defp normalize_mode(attrs) do

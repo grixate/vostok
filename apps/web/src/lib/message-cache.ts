@@ -9,6 +9,12 @@ export type CachedAttachment = {
   ivBase64?: string
 }
 
+export type ForwardedFrom = {
+  chatId: string
+  messageId: string
+  senderName: string
+}
+
 export type CachedMessage = {
   id: string
   clientId?: string
@@ -23,6 +29,7 @@ export type CachedMessage = {
   senderUsername?: string
   decryptable: boolean
   attachment?: CachedAttachment
+  forwardedFrom?: ForwardedFrom
   reactions?: Array<{
     reactionKey: string
     count: number

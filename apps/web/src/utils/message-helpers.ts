@@ -172,7 +172,8 @@ export function decodeSystemMessageText(payloadBase64: string): string {
 export async function projectMessage(
   message: ChatMessage,
   currentDeviceId: string,
-  encryptionPrivateKeyPkcs8Base64?: string
+  encryptionPrivateKeyPkcs8Base64?: string,
+  currentUsername?: string
 ): Promise<CachedMessage> {
   if (message.message_kind === 'system') {
     return {
@@ -191,6 +192,14 @@ export async function projectMessage(
     }
   }
 
+  // Determine if a message was sent by the current user.  Prefer device ID
+  // matching, but fall back to username matching when no local device is stored
+  // (e.g. plaintext / dev-mode sessions without E2E key material).
+  const isOwnMessage = currentDeviceId
+    ? message.sender_device_id === currentDeviceId
+    : !!(currentUsername && message.sender_username === currentUsername)
+  const side: CachedMessage['side'] = isOwnMessage ? 'outgoing' : 'incoming'
+
   if (message.deleted_at) {
     return {
       id: message.id,
@@ -201,7 +210,7 @@ export async function projectMessage(
       pinnedAt: message.pinned_at ?? undefined,
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at,
-      side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      side,
       senderId: message.sender_device_id,
       senderUsername: message.sender_username ?? undefined,
       decryptable: true,
@@ -229,7 +238,7 @@ export async function projectMessage(
       pinnedAt: message.pinned_at ?? undefined,
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
-      side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      side,
       senderId: message.sender_device_id,
       senderUsername: message.sender_username ?? undefined,
       decryptable: true,
@@ -263,7 +272,7 @@ export async function projectMessage(
       pinnedAt: message.pinned_at ?? undefined,
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
-      side: message.sender_device_id === currentDeviceId ? 'outgoing' : 'incoming',
+      side,
       senderId: message.sender_device_id,
       senderUsername: message.sender_username ?? undefined,
       decryptable: true,
@@ -275,12 +284,17 @@ export async function projectMessage(
       }))
     }
   } catch (decryptionError) {
-    console.error(
-      `[projectMessage] Decryption failed for message ${message.id} (kind=${message.message_kind}, scheme=${message.crypto_scheme}):`,
-      decryptionError
-    )
-    const isOutgoing = message.sender_device_id === currentDeviceId
-    const cached = isOutgoing ? lookupSentPlaintext(message.client_id) : null
+    const cached = isOwnMessage ? lookupSentPlaintext(message.client_id) : null
+
+    // Own outbound messages can't be decrypted via the session (the Double
+    // Ratchet encrypts for the recipient, not the sender).  The sent-plaintext
+    // cache handles this — only log an error if the cache miss is unexpected.
+    if (!cached) {
+      console.error(
+        `[projectMessage] Decryption failed for message ${message.id} (kind=${message.message_kind}, scheme=${message.crypto_scheme}):`,
+        decryptionError
+      )
+    }
 
     // If we resolved the plaintext from the sent-message cache, also persist it
     // in the decrypted-plaintext cache so subsequent re-projections (and the
@@ -298,7 +312,7 @@ export async function projectMessage(
       pinnedAt: message.pinned_at ?? undefined,
       editedAt: message.edited_at ?? undefined,
       deletedAt: message.deleted_at ?? undefined,
-      side: isOutgoing ? 'outgoing' : 'incoming',
+      side,
       senderId: message.sender_device_id,
       senderUsername: message.sender_username ?? undefined,
       decryptable: !!cached,

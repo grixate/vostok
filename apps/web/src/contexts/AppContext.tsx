@@ -4,6 +4,8 @@ import type { StoredDevice, Banner } from '../types.ts'
 export type AppContextValue = {
   storedDevice: StoredDevice | null
   setStoredDevice: Dispatch<SetStateAction<StoredDevice | null>>
+  sessionToken: string | null
+  setSessionToken: Dispatch<SetStateAction<string | null>>
   banner: Banner | null
   setBanner: Dispatch<SetStateAction<Banner | null>>
   loading: boolean

@@ -130,7 +130,7 @@ export function VoiceMessageBubble({ descriptor, playbackUrl, side }: VoiceMessa
       {/* Waveform */}
       <svg
         className="voice-bubble__waveform"
-        viewBox={`0 0 ${WAVEFORM_BARS * 5} 32`}
+        viewBox={`0 0 ${WAVEFORM_BARS * 5} 28`}
         preserveAspectRatio="none"
         onClick={handleWaveformClick}
         role="progressbar"
@@ -140,13 +140,13 @@ export function VoiceMessageBubble({ descriptor, playbackUrl, side }: VoiceMessa
         aria-label="Voice message progress"
       >
         {bars.map((h, i) => {
-          const barH = Math.max(3, h * 30)
+          const barH = Math.max(3, h * 26)
           const played = i / WAVEFORM_BARS <= progress
           return (
             <rect
               key={i}
               x={i * 5 + 1}
-              y={(32 - barH) / 2}
+              y={(28 - barH) / 2}
               width={3}
               height={barH}
               rx={1.5}

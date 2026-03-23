@@ -6,7 +6,7 @@ import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import {
   BackIcon,
-  ComposeIcon,
+  EditIcon,
   SearchIcon,
   MinimizeIcon,
   MaximizeIcon,
@@ -79,12 +79,15 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
         </div>
       ) : (
         <div className="sidebar__title-row">
-          <span
-            style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0, display: 'inline-block' }}
-            title={connectionStatus}
-            aria-label={`Connection: ${connectionStatus}`}
-          />
-          <span className="sidebar__title">Chats</span>
+          <div className="sidebar__title-group">
+            <span className="sidebar__title">Messages</span>
+            <span
+              className="sidebar__status-dot"
+              style={{ background: dotColor }}
+              title={connectionStatus}
+              aria-label={`Connection: ${connectionStatus}`}
+            />
+          </div>
           <Tooltip text="New message">
             <button
               className="sidebar__compose-btn"
@@ -92,7 +95,7 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               aria-label="New message"
               onClick={() => { chatList.setNewMessageMode(true); chatList.setNewChatUsername('') }}
             >
-              <ComposeIcon width={18} height={18} />
+              <EditIcon width={18} height={18} />
             </button>
           </Tooltip>
         </div>

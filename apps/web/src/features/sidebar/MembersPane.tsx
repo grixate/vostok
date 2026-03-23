@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { listUsers } from '../../lib/api.ts'
 import { peerColor } from '../../utils/avatar-colors.ts'
+import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 
 type MembersPaneProps = {
@@ -10,19 +11,22 @@ type MembersPaneProps = {
 }
 
 export function MembersPane({ chatList }: MembersPaneProps) {
-  const { storedDevice } = useAppContext()
+  const { sessionToken } = useAppContext()
   const { setSidebarTab } = useUIContext()
   const [users, setUsers] = useState<{ id: string; username: string }[]>([])
   const [filter, setFilter] = useState('')
 
   useEffect(() => {
-    if (!storedDevice) return
-    listUsers(storedDevice.sessionToken).then((res) => setUsers(res.users)).catch(() => {})
-  }, [storedDevice])
+    if (!sessionToken) return
+    listUsers(sessionToken).then((res) => setUsers(res.users)).catch(() => {})
+  }, [sessionToken])
 
   const filtered = filter
     ? users.filter((u) => u.username.toLowerCase().includes(filter.toLowerCase()))
     : users
+
+  const memberIds = useMemo(() => users.map((u) => u.id), [users])
+  const memberPhotos = useProfilePhotos(memberIds)
 
   function handleSelectUser(username: string) {
     chatList.startDirectChatWith(username)
@@ -51,9 +55,11 @@ export function MembersPane({ chatList }: MembersPaneProps) {
           >
             <div
               className="members-pane__avatar"
-              style={{ background: peerColor(user.username) }}
+              style={{ background: memberPhotos.get(user.id) ? 'none' : peerColor(user.username) }}
             >
-              {user.username.slice(0, 1).toUpperCase()}
+              {memberPhotos.get(user.id)
+                ? <img src={memberPhotos.get(user.id)} alt={user.username} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : user.username.slice(0, 1).toUpperCase()}
             </div>
             <span className="members-pane__username">@{user.username}</span>
           </button>

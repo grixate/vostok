@@ -170,6 +170,26 @@ defmodule VostokServerWeb.Api.V1.CallController do
     end
   end
 
+  def accept_call(conn, %{"call_id" => call_id}) do
+    case Calls.accept_call(call_id, conn.assigns.current_user.id) do
+      {:ok, call} ->
+        json(conn, %{call: call})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def decline_call(conn, %{"call_id" => call_id}) do
+    case Calls.decline_call(call_id, conn.assigns.current_user.id) do
+      {:ok, call} ->
+        json(conn, %{call: call})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
   def leave_call(conn, %{"call_id" => call_id}) do
     case Calls.leave_call(call_id, conn.assigns.current_user.id, conn.assigns.current_device.id) do
       {:ok, payload} ->

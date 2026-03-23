@@ -59,18 +59,31 @@ defmodule VostokServer.Media do
              expected_ciphertext_sha256,
              actual_ciphertext_sha256
            ),
-         {:ok, updated} <-
-           upload
+         {:ok, hot_cache_path} <-
+           VostokServer.Storage.HotCache.put(upload.id, assembled_ciphertext) do
+      # DB update is separate so we can rollback the file on failure
+      case upload
            |> Upload.changeset(%{
              status: "completed",
              completed_at: DateTime.utc_now(),
-             ciphertext: assembled_ciphertext,
+             ciphertext: nil,
              ciphertext_sha256: actual_ciphertext_sha256,
              uploaded_byte_size: byte_size(assembled_ciphertext),
-             expected_part_count: upload.expected_part_count || length(assembled_part_indexes)
+             expected_part_count: upload.expected_part_count || length(assembled_part_indexes),
+             hot_cache_path: hot_cache_path,
+             storage_tier: "hot",
+             media_status: "available",
+             last_accessed_at: DateTime.utc_now()
            })
            |> Repo.update() do
-      {:ok, present_upload(updated, uploaded_part_indexes: assembled_part_indexes)}
+        {:ok, updated} ->
+          {:ok, present_upload(updated, uploaded_part_indexes: assembled_part_indexes)}
+
+        {:error, changeset_error} ->
+          # DB update failed — clean up the orphaned file
+          VostokServer.Storage.HotCache.delete(upload.id)
+          {:error, {:validation, "Failed to finalize upload: #{inspect(changeset_error)}"}}
+      end
     else
       nil ->
         {:error, {:not_found, "Upload not found."}}
@@ -82,11 +95,103 @@ defmodule VostokServer.Media do
 
   def fetch_upload(upload_id) when is_binary(upload_id) do
     case Repo.get(Upload, upload_id) do
+      %Upload{media_status: "evicted"} ->
+        {:error, {:gone, "Media has expired and is no longer available."}}
+
+      %Upload{media_status: "deleted"} ->
+        {:error, {:gone, "Media has been deleted."}}
+
       %Upload{} = upload ->
-        {:ok, present_upload(upload, include_ciphertext: true)}
+        # Resolve ciphertext: prefer hot cache, fall back to DB column (legacy)
+        ciphertext =
+          case resolve_ciphertext(upload) do
+            {:ok, blob} -> blob
+            _ -> nil
+          end
+
+        # Update last_accessed_at (fire-and-forget)
+        upload
+        |> Upload.changeset(%{last_accessed_at: DateTime.utc_now()})
+        |> Repo.update()
+
+        {:ok, present_upload(%{upload | ciphertext: ciphertext}, include_ciphertext: true)}
 
       nil ->
         {:error, {:not_found, "Upload not found."}}
+    end
+  end
+
+  defp resolve_ciphertext(%Upload{storage_tier: "hot", hot_cache_path: path}) when is_binary(path) do
+    VostokServer.Storage.HotCache.get(Path.basename(path, ".enc"))
+  end
+
+  defp resolve_ciphertext(%Upload{storage_tier: "object", object_key: key}) when is_binary(key) do
+    alias VostokServer.Storage.ObjectStore
+    ObjectStore.adapter().get(key)
+  end
+
+  defp resolve_ciphertext(%Upload{ciphertext: blob}) when is_binary(blob) and byte_size(blob) > 0 do
+    {:ok, blob}
+  end
+
+  defp resolve_ciphertext(_upload), do: {:error, :not_found}
+
+  @doc "Record that a user has downloaded a media item. Validates upload exists and is available."
+  def confirm_delivery(upload_id, user_id) when is_binary(upload_id) and is_binary(user_id) do
+    alias VostokServer.Media.Delivery
+
+    # Only confirm for existing, available uploads
+    case Repo.get(Upload, upload_id) do
+      %Upload{media_status: "available"} ->
+        changeset = Delivery.changeset(%Delivery{}, %{
+          media_id: upload_id,
+          user_id: user_id,
+          confirmed_at: DateTime.utc_now()
+        })
+
+        case Repo.insert(changeset, on_conflict: :nothing, conflict_target: [:media_id, :user_id]) do
+          {:ok, _delivery} ->
+            update_delivery_counts(upload_id)
+            :ok
+
+          {:error, _changeset} ->
+            :ok
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp update_delivery_counts(upload_id) do
+    alias VostokServer.Media.Delivery
+
+    confirmed =
+      from(d in Delivery, where: d.media_id == ^upload_id, select: count())
+      |> Repo.one()
+
+    upload = Repo.get(Upload, upload_id)
+
+    if upload do
+      # If recipient_count is 0 (unknown), treat any confirmation as "delivered"
+      # since we don't know the full recipient list. Once at least one user
+      # confirms, mark as fully delivered so eviction can proceed.
+      fully_delivered =
+        cond do
+          upload.recipient_count > 0 -> confirmed >= upload.recipient_count
+          confirmed > 0 -> true
+          true -> false
+        end
+
+      now = if fully_delivered && !upload.fully_delivered, do: DateTime.utc_now(), else: upload.fully_delivered_at
+
+      upload
+      |> Upload.changeset(%{
+        confirmed_count: confirmed,
+        fully_delivered: fully_delivered,
+        fully_delivered_at: now
+      })
+      |> Repo.update()
     end
   end
 

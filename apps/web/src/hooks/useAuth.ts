@@ -1,211 +1,286 @@
-import { startTransition, useState, useEffect, type FormEvent } from 'react'
+import { startTransition, useState, useEffect } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import type { AuthView, StoredDevice } from '../types.ts'
-import type { DeviceInfo } from '../lib/api.ts'
+import type { AuthView, AuthSession, ServerInfo } from '../types.ts'
 import {
-  registerDevice,
-  issueChallenge,
-  verifyChallenge,
-  publishDevicePrekeys,
-  revokeDevice,
-  listDevices,
-  fetchMe
+  login as apiLogin,
+  authRegister,
+  authBootstrap,
+  authLogout,
+  refreshAccessToken,
+  changePassword as apiChangePassword,
+  getServerInfo,
+  devQuickLogin as apiDevQuickLogin,
+  validateInvite,
+  type LoginResponse
 } from '../lib/api.ts'
-import { generateDeviceIdentity, generateDevicePrekeys, signChallenge } from '../lib/device-auth.ts'
-import { persistStoredDevice } from '../utils/storage.ts'
+import { persistAuthSession, readAuthSession } from '../utils/storage.ts'
 
 export function useAuth() {
-  const { storedDevice, setStoredDevice, loading, setLoading, setBanner } = useAppContext()
-  const [view, setView] = useState<AuthView>(() => (storedDevice ? 'chat' : 'welcome'))
-  const [username, setUsername] = useState('')
-  const [deviceName, setDeviceName] = useState('This browser')
-  const [profileUsername, setProfileUsername] = useState<string | null>(null)
-  const [_devices, setDevices] = useState<DeviceInfo[]>([])
+  const { setStoredDevice, setBanner, setLoading } = useAppContext()
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => readAuthSession())
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
+  const [view, setView] = useState<AuthView>(() => (readAuthSession() ? 'chat' : 'login'))
+  const [error, setError] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [inviteCode, setInviteCode] = useState<string | null>(null)
+  const [initializing, setInitializing] = useState(true)
 
+  // Clear error when navigating between screens
+  function navigateTo(nextView: AuthView) {
+    setError(null)
+    setView(nextView)
+  }
+
+  // Fetch server info on mount
   useEffect(() => {
-    const nextDefault = storedDevice?.username ?? ''
-    setProfileUsername(storedDevice?.username ?? null)
-  }, [storedDevice])
+    getServerInfo()
+      .then((info) => {
+        setServerInfo(info)
+        if (info.bootstrap && !readAuthSession()) {
+          setView('server-bootstrap')
+        }
+      })
+      .catch(() => {
+        // Server may not support the new endpoint yet
+      })
+  }, [])
 
-  async function refreshDeviceList(sessionToken: string) {
-    const response = await listDevices(sessionToken)
-    setDevices(response.devices)
+  // Handle /invite/:code URL on mount
+  useEffect(() => {
+    const path = window.location.pathname
+    const match = path.match(/^\/invite\/([a-zA-Z0-9]+)$/)
+    if (!match) return
+
+    const code = match[1]
+
+    validateInvite(code)
+      .then((result) => {
+        if (result.valid) {
+          setInviteCode(code)
+          setView('create-account')
+        } else {
+          setError(result.reason ?? 'This invite link is invalid or has expired.')
+          setView('login')
+        }
+      })
+      .catch(() => {
+        setError('Could not validate invite link.')
+        setView('login')
+      })
+      .finally(() => {
+        // Clean up the URL without reloading
+        window.history.replaceState(null, '', '/')
+      })
+  }, [])
+
+  // Attempt silent refresh on mount if we have a stored session
+  useEffect(() => {
+    const stored = readAuthSession()
+    if (!stored) {
+      setInitializing(false)
+      return
+    }
+
+    refreshAccessToken(stored.refreshToken)
+      .then((result) => {
+        const updated: AuthSession = {
+          ...stored,
+          accessToken: result.access_token,
+          user: {
+            id: result.user.id,
+            username: result.user.username,
+            display_name: result.user.display_name,
+            role: result.user.role,
+            temp_password: result.user.temp_password
+          }
+        }
+        persistAuthSession(updated)
+        setAuthSession(updated)
+
+        if (result.user.temp_password) {
+          setView('force-password-change')
+        } else {
+          setView('chat')
+        }
+      })
+      .catch(() => {
+        persistAuthSession(null)
+        setAuthSession(null)
+        setView('login')
+      })
+      .finally(() => {
+        setInitializing(false)
+      })
+  }, [])
+
+  function handleLoginResponse(response: LoginResponse) {
+    const session: AuthSession = {
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token,
+      user: {
+        id: response.user.id,
+        username: response.user.username,
+        display_name: response.user.display_name,
+        role: response.user.role,
+        temp_password: response.user.temp_password
+      }
+    }
+
+    persistAuthSession(session)
+    setAuthSession(session)
+    setError(null)
+
+    if (response.user.temp_password) {
+      setView('force-password-change')
+    } else {
+      startTransition(() => setView('chat'))
+    }
   }
 
-  async function handleRegister(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setLoading(true)
-    setBanner({ tone: 'info', message: 'Generating a local device identity\u2026' })
+  async function handleLogin(username: string, password: string) {
+    setAuthLoading(true)
+    setError(null)
 
     try {
-      const identity = await generateDeviceIdentity()
-      const devicePrekeys = await generateDevicePrekeys(identity.signingPrivateKeyPkcs8Base64)
+      const response = await apiLogin(username, password)
+      handleLoginResponse(response)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
 
-      setBanner({ tone: 'info', message: 'Registering this device with the Vostok server\u2026' })
+  async function handleRegister(
+    code: string | null,
+    username: string,
+    displayName: string,
+    password: string
+  ) {
+    setAuthLoading(true)
+    setError(null)
 
-      const response = await registerDevice({
+    try {
+      const response = await authRegister({
+        invite_code: code ?? undefined,
         username,
-        device_name: deviceName,
-        device_identity_public_key: identity.signingPublicKeyBase64,
-        device_encryption_public_key: identity.encryptionPublicKeyBase64,
-        signed_prekey: devicePrekeys.signedPrekey.publicKeyBase64,
-        signed_prekey_signature: devicePrekeys.signedPrekey.signatureBase64,
-        one_time_prekeys: devicePrekeys.oneTimePrekeys.map((prekey) => prekey.publicKeyBase64)
+        display_name: displayName || undefined,
+        password
       })
+      handleLoginResponse(response)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
 
-      const nextStoredDevice: StoredDevice = {
-        deviceId: response.device.id,
-        deviceName: response.device.device_name,
-        privateKeyPkcs8Base64: identity.signingPrivateKeyPkcs8Base64,
-        publicKeyBase64: identity.signingPublicKeyBase64,
-        encryptionPrivateKeyPkcs8Base64: identity.encryptionPrivateKeyPkcs8Base64,
-        encryptionPublicKeyBase64: identity.encryptionPublicKeyBase64,
-        signedPrekeyPublicKeyBase64: devicePrekeys.signedPrekey.publicKeyBase64,
-        signedPrekeyPrivateKeyPkcs8Base64: devicePrekeys.signedPrekey.privateKeyPkcs8Base64,
-        signedPrekeys: [devicePrekeys.signedPrekey],
-        oneTimePrekeys: devicePrekeys.oneTimePrekeys,
-        sessionExpiresAt: response.session.expires_at,
-        sessionToken: response.session.token,
-        username: response.user.username
+  async function handleBootstrap(username: string, displayName: string, password: string) {
+    setAuthLoading(true)
+    setError(null)
+
+    try {
+      const response = await authBootstrap({
+        username,
+        display_name: displayName || undefined,
+        password
+      })
+      handleLoginResponse(response)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bootstrap failed.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  async function handleDevQuickLogin(username: string) {
+    setAuthLoading(true)
+    setError(null)
+
+    try {
+      const response = await apiDevQuickLogin(username)
+      handleLoginResponse(response)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Dev login failed.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  async function handleChangePassword(newPassword: string) {
+    if (!authSession) return
+    setAuthLoading(true)
+    setError(null)
+
+    try {
+      await apiChangePassword(authSession.accessToken, newPassword)
+
+      const updated: AuthSession = {
+        ...authSession,
+        user: { ...authSession.user, temp_password: false }
       }
-
-      persistStoredDevice(nextStoredDevice)
-      setStoredDevice(nextStoredDevice)
-      setProfileUsername(response.user.username)
-      await refreshDeviceList(nextStoredDevice.sessionToken)
-      setBanner({
-        tone: 'success',
-        message: `Device registered. Session token issued with ${response.prekey_count} one-time prekeys.`
-      })
+      persistAuthSession(updated)
+      setAuthSession(updated)
       startTransition(() => setView('chat'))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Registration failed.'
-      setBanner({ tone: 'error', message })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change password.')
     } finally {
-      setLoading(false)
+      setAuthLoading(false)
     }
   }
 
-  async function handleReauthenticate() {
-    if (!storedDevice) {
-      setBanner({ tone: 'error', message: 'No local device identity is available.' })
-      return
-    }
-
-    setLoading(true)
-    setBanner({ tone: 'info', message: 'Requesting a device challenge\u2026' })
-
-    try {
-      const challenge = await issueChallenge(storedDevice.deviceId)
-      const signature = await signChallenge(challenge.challenge, storedDevice.privateKeyPkcs8Base64)
-      const response = await verifyChallenge(storedDevice.deviceId, challenge.challenge_id, signature)
-
-      const nextStoredDevice = {
-        ...storedDevice,
-        sessionExpiresAt: response.session.expires_at,
-        sessionToken: response.session.token
+  async function handleLogout() {
+    if (authSession) {
+      try {
+        await authLogout(authSession.accessToken, authSession.refreshToken)
+      } catch {
+        // Best-effort logout
       }
-
-      persistStoredDevice(nextStoredDevice)
-      setStoredDevice(nextStoredDevice)
-      await refreshDeviceList(nextStoredDevice.sessionToken)
-      setBanner({ tone: 'success', message: 'Challenge verified. Session refreshed.' })
-      startTransition(() => setView('chat'))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Authentication failed.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
     }
+
+    persistAuthSession(null)
+    setAuthSession(null)
+    setError(null)
+    startTransition(() => setView('login'))
   }
 
-  async function _handleRotatePrekeys() {
-    if (!storedDevice) {
-      setBanner({ tone: 'error', message: 'No local device identity is available.' })
-      return
-    }
-
-    setLoading(true)
-    setBanner({ tone: 'info', message: 'Generating a fresh signed prekey and one-time prekeys\u2026' })
-
-    try {
-      const devicePrekeys = await generateDevicePrekeys(storedDevice.privateKeyPkcs8Base64)
-      const response = await publishDevicePrekeys(storedDevice.sessionToken, {
-        signed_prekey: devicePrekeys.signedPrekey.publicKeyBase64,
-        signed_prekey_signature: devicePrekeys.signedPrekey.signatureBase64,
-        one_time_prekeys: devicePrekeys.oneTimePrekeys.map((prekey) => prekey.publicKeyBase64),
-        replace_one_time_prekeys: true
-      })
-
-      const nextStoredDevice: StoredDevice = {
-        ...storedDevice,
-        signedPrekeyPublicKeyBase64: devicePrekeys.signedPrekey.publicKeyBase64,
-        signedPrekeyPrivateKeyPkcs8Base64: devicePrekeys.signedPrekey.privateKeyPkcs8Base64,
-        signedPrekeys: [...(storedDevice.signedPrekeys ?? []), devicePrekeys.signedPrekey],
-        oneTimePrekeys: [...(storedDevice.oneTimePrekeys ?? []), ...devicePrekeys.oneTimePrekeys]
-      }
-
-      persistStoredDevice(nextStoredDevice)
-      setStoredDevice(nextStoredDevice)
-      await refreshDeviceList(nextStoredDevice.sessionToken)
-      setBanner({
-        tone: 'success',
-        message: `Prekeys rotated. ${response.one_time_prekey_count} one-time prekeys are active on the server.`
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to rotate prekeys.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
-    }
+  function handleInviteContinue(code: string) {
+    setInviteCode(code)
+    navigateTo('create-account')
   }
 
-  function handleForgetDevice() {
-    persistStoredDevice(null)
-    setStoredDevice(null)
-    setDevices([])
-    setBanner({ tone: 'info', message: 'Local device identity cleared from this browser.' })
-    startTransition(() => setView('welcome'))
-  }
-
-  async function _handleRevokeLinkedDevice(deviceId: string) {
-    if (!storedDevice) {
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const response = await revokeDevice(storedDevice.sessionToken, deviceId)
-      await refreshDeviceList(storedDevice.sessionToken)
-      setBanner({
-        tone: 'success',
-        message: `Revoked ${response.device.device_name}. Existing sessions for that device are now invalid.`
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to revoke device.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Expose profileUsername for backwards compat with existing hooks
+  const profileUsername = authSession?.user.username ?? null
 
   return {
     view,
-    setView,
-    username,
-    setUsername,
-    deviceName,
-    setDeviceName,
+    setView: navigateTo,
+    authSession,
+    serverInfo,
+    error,
+    loading: authLoading,
+    initializing,
+    inviteCode,
     profileUsername,
-    setProfileUsername,
+    handleLogin,
     handleRegister,
-    handleReauthenticate,
-    handleForgetDevice,
-    _handleRotatePrekeys,
-    _handleRevokeLinkedDevice,
-    refreshDeviceList,
-    setDevices,
-    fetchMe
+    handleBootstrap,
+    handleDevQuickLogin,
+    handleChangePassword,
+    handleLogout,
+    handleInviteContinue,
+    // Legacy compat — these are still used by App.tsx / other hooks
+    handleForgetDevice: handleLogout,
+    setProfileUsername: (_: string | null) => {},
+    username: authSession?.user.username ?? '',
+    setUsername: (_: string) => {},
+    deviceName: '',
+    setDeviceName: (_: string) => {},
+    handleReauthenticate: () => {},
+    _handleRotatePrekeys: () => {},
+    _handleRevokeLinkedDevice: (_: string) => {},
+    refreshDeviceList: async (_: string) => {},
+    setDevices: (_: any) => {},
+    fetchMe: (() => {}) as any
   }
 }

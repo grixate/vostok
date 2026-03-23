@@ -62,6 +62,13 @@ import {
   PenLine,
   CircleCheck,
   CornerUpLeft,
+  Smile,
+  MapPin,
+  MicOff,
+  VideoOff,
+  MonitorUp,
+  PhoneCall,
+  Maximize2,
 } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
 
@@ -113,6 +120,7 @@ export const PhotoIcon = wrap(Image)
 export const FileIcon = wrap(FileText)
 export const MicIcon = wrap(Mic)
 export const SendIcon = wrap(Send)
+export const SmileIcon = wrap(Smile)
 
 // ---- Window Controls ----
 export const MinimizeIcon = wrap(Minus)
@@ -132,6 +140,11 @@ export const LinkChainIcon = wrap(Link)
 export const EyeOffIcon = wrap(EyeOff)
 export const PhoneOffIcon = wrap(PhoneOff)
 export const MonitorIcon = wrap(Monitor)
+export const MicOffIcon = wrap(MicOff)
+export const VideoOffIcon = wrap(VideoOff)
+export const MonitorUpIcon = wrap(MonitorUp)
+export const PhoneCallIcon = wrap(PhoneCall)
+export const ExpandIcon = wrap(Maximize2)
 
 // ---- Chevrons ----
 export const ChevronUpIcon = wrap(ChevronUp)
@@ -159,6 +172,7 @@ export const SelectSmallIcon = wrapSmall(CircleCheck)
 export const ChevronRightSmallIcon = wrapSmall(ChevronRight)
 export const UserSmallIcon = wrapSmall(User)
 export const UsersSmallIcon = wrapSmall(Users)
+export const MapPinSmallIcon = wrapSmall(MapPin)
 export const CheckCheckSmallIcon = wrapSmall(CheckCheck)
 export const MuteSmallIcon = wrapSmall(BellOff)
 export const ArchiveSmallIcon = wrapSmall(Archive)

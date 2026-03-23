@@ -90,7 +90,7 @@ export function DetailRail({
           <button className="secondary-action" onClick={auth.handleReauthenticate} type="button">
             Refresh Session
           </button>
-          <button className="secondary-action" onClick={() => auth.setView('link')} type="button">
+          <button className="secondary-action" type="button" disabled>
             Link Another Device
           </button>
           <button className="danger-action" onClick={auth.handleForgetDevice} type="button">

@@ -448,19 +448,57 @@ defmodule VostokServer.Messaging do
     end
   end
 
-  def list_messages_for_chat(chat_id, user_id, current_device_id)
-      when is_binary(chat_id) and is_binary(user_id) and is_binary(current_device_id) do
+  def list_messages_for_chat(chat_id, user_id, current_device_id, opts \\ %{})
+
+  def list_messages_for_chat(chat_id, user_id, current_device_id, opts)
+      when is_binary(chat_id) and is_binary(user_id) and is_binary(current_device_id) and
+             is_map(opts) do
+    limit = parse_positive_integer(opts["limit"], 50)
+    before_cursor = opts["before"]
+
     with {:ok, _membership} <- ensure_membership(chat_id, user_id) do
-      from(message in Message,
-        where: message.chat_id == ^chat_id,
-        order_by: [asc: message.inserted_at],
-        preload: [recipient_envelopes: ^recipient_query(), reactions: ^reaction_query(), sender_device: [:user]]
-      )
-      |> Repo.all()
-      |> Enum.map(&present_message(&1, current_device_id, user_id))
-      |> then(&{:ok, &1})
+      query =
+        from(message in Message,
+          where: message.chat_id == ^chat_id,
+          order_by: [desc: message.inserted_at, desc: message.id],
+          limit: ^(limit + 1),
+          preload: [recipient_envelopes: ^recipient_query(), reactions: ^reaction_query(), sender_device: [:user]]
+        )
+
+      query =
+        if is_binary(before_cursor) and before_cursor != "" do
+          case Repo.get(Message, before_cursor) do
+            %Message{inserted_at: cursor_time} ->
+              from(m in query,
+                where:
+                  m.inserted_at < ^cursor_time or
+                    (m.inserted_at == ^cursor_time and m.id < ^before_cursor)
+              )
+
+            nil ->
+              query
+          end
+        else
+          query
+        end
+
+      rows = Repo.all(query)
+      has_more = length(rows) > limit
+      page = rows |> Enum.take(limit) |> Enum.reverse()
+      presented = Enum.map(page, &present_message(&1, current_device_id, user_id))
+      {:ok, %{messages: presented, has_more: has_more}}
     end
   end
+
+  defp parse_positive_integer(nil, default), do: default
+  defp parse_positive_integer(value, default) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} when n > 0 -> min(n, 200)
+      _ -> default
+    end
+  end
+  defp parse_positive_integer(value, _default) when is_integer(value) and value > 0, do: min(value, 200)
+  defp parse_positive_integer(_, default), do: default
 
   def mark_chat_read(chat_id, user_id, current_device_id, attrs \\ %{})
 
@@ -1893,6 +1931,7 @@ defmodule VostokServer.Messaging do
       type: chat.type,
       title: title,
       participant_usernames: participant_names,
+      participant_user_ids: participant_ids,
       is_self_chat:
         length(participant_ids) == 1 and Enum.at(participant_ids, 0) == current_user_id,
       latest_message_at: iso_or_nil(chat.latest_message_at),
