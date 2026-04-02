@@ -821,9 +821,6 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
       <SectionLabel>Storage</SectionLabel>
       <GroupCard>
         <ServerStorageBar serverUrl={serverUrl} />
-      </GroupCard>
-
-      <GroupCard>
         <ChevronRow
           label="Keep Media"
           secondary={keepMediaLabel(settings.data_keep_media_seconds)}
@@ -858,21 +855,14 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
             ))}
           </div>
         )}
-      </GroupCard>
-
-      <GroupCard>
         {clearConfirm ? (
-          <div style={{ padding: 20, display: 'grid', gap: 12 }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Clear all local data?</p>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
-              This will remove all cached messages, downloaded media, and local settings from this device.
-              You will NOT be logged out. E2EE device keys will also be cleared.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" className="mini-action" onClick={() => setClearConfirm(false)}>Cancel</button>
-              <ButtonRow label={clearing ? 'Clearing...' : 'Clear Everything'} color="danger" onClick={handleClearAll} />
+          <>
+            <div style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
+              This will remove all cached messages, downloaded media, and local settings. E2EE device keys will also be cleared. You will NOT be logged out.
             </div>
-          </div>
+            <ButtonRow label="Cancel" color="accent" onClick={() => setClearConfirm(false)} />
+            <ButtonRow label={clearing ? 'Clearing...' : 'Clear Everything'} color="danger" onClick={handleClearAll} />
+          </>
         ) : (
           <ButtonRow label="Clear All Local Data" color="danger" onClick={() => setClearConfirm(true)} />
         )}
