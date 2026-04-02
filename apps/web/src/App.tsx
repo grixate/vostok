@@ -32,7 +32,7 @@ import { useMediaCapture } from './hooks/useMediaCapture.ts'
 import { useCall } from './hooks/useCall.ts'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
 import { useTheme } from './hooks/useTheme.ts'
-import { useChatFolders } from './hooks/useChatFolders.ts'
+
 import { useDrafts } from './hooks/useDrafts.ts'
 import { useTypingIndicator } from './hooks/useTypingIndicator.ts'
 import { usePresence } from './hooks/usePresence.ts'
@@ -381,7 +381,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
     messages.setReplyTargetMessageId
   )
   const call = useCall(appView, deferredActiveChatId, chatList.activeChatId, chatList.chatItems)
-  const chatFolders = useChatFolders()
+
   const drafts = useDrafts(deferredActiveChatId, messages.draft, messages.setDraft, messages.replyTargetMessageId)
   const typingIndicator = useTypingIndicator(activeChat, activeServerScope?.token ?? fallbackAuthToken)
   const presence = usePresence(activeServerScope?.token ?? fallbackAuthToken)
@@ -516,7 +516,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
       ) : layout.isMobile ? (
         /* Mobile: single-panel — show sidebar OR conversation */
         mobilePanel === 'sidebar' ? (
-          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} call={call} />
+          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
         ) : (
           <ConversationPane
             activeChat={activeChat}
@@ -536,7 +536,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
       ) : (
         /* Desktop: side-by-side */
         <>
-          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} call={call} />
+          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
           <ConversationPane
             activeChat={activeChat}
             groupChat={groupChat}

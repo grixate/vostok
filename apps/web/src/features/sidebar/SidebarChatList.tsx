@@ -16,7 +16,7 @@ import {
   SignOutSmallIcon,
 } from '../../icons/index.tsx'
 import type { useChatList } from '../../hooks/useChatList.ts'
-import type { useChatFolders } from '../../hooks/useChatFolders.ts'
+
 import type { MergedChatSummary } from '../../lib/multi-server.ts'
 
 type ChatContextMenu = { chatId: string; x: number; y: number } | null
@@ -25,10 +25,9 @@ type SidebarChatListProps = {
   chatList: ReturnType<typeof useChatList>
   activeChat: MergedChatSummary | null
   draftChatIds: Map<string, string>
-  chatFolders: ReturnType<typeof useChatFolders>
 }
 
-export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolders }: SidebarChatListProps) {
+export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarChatListProps) {
   const { chatButtonRefs, showToast } = useUIContext()
   const [chatContextMenu, setChatContextMenu] = useState<ChatContextMenu>(null)
 
@@ -70,8 +69,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
     closeChatContextMenu()
   }, [chatContextMenu, chatList, showToast, closeChatContextMenu])
 
-  const folderFilteredItems: MergedChatSummary[] = chatFolders
-    .filterChatsByFolder(chatList.visibleChatItems)
+  const folderFilteredItems: MergedChatSummary[] = chatList.visibleChatItems
     .filter((chat) => {
       // Hide empty chats with no messages and no draft (unless it's the active chat)
       if (!chat.is_self_chat && !chat.latest_message_at && chat.message_count === 0 && !draftChatIds.has(chat.id)) {

@@ -41,7 +41,6 @@ import {
   Bell,
   Database,
   Paintbrush,
-  Folder,
   Cloud,
   Camera,
 } from 'lucide-react'
@@ -57,7 +56,6 @@ type Section =
   | 'data-storage'
   | 'active-sessions'
   | 'appearance'
-  | 'chat-folders'
   | 'encryption'
 
 type SettingsPaneProps = {
@@ -80,7 +78,6 @@ const SECTION_TITLES: Record<Section, string> = {
   'data-storage': 'Data and Storage',
   'active-sessions': 'Active Sessions',
   'appearance': 'Appearance',
-  'chat-folders': 'Chat Folders',
   'encryption': 'Encryption',
 }
 
@@ -98,7 +95,6 @@ const NAV_ITEMS: NavEntry[] = [
   { id: 'data-storage', label: 'Data and Storage', icon: <Database size={LI} strokeWidth={1.75} /> },
   { id: 'active-sessions', label: 'Active Sessions', icon: <MonitorIcon />, badge: '4' },
   { id: 'appearance', label: 'Appearance', icon: <Paintbrush size={LI} strokeWidth={1.75} /> },
-  { id: 'chat-folders', label: 'Chat Folders', icon: <Folder size={LI} strokeWidth={1.75} /> },
 ]
 
 const NAV_ITEMS_BOTTOM: NavEntry[] = [
@@ -340,7 +336,6 @@ function SectionContent({ section, auth, chatSessions, chatList, servers, onClos
     case 'data-storage': return <DataStorageSection s={s} serverUrl={servers.activeServer?.url ?? null} />
     case 'active-sessions': return <ActiveSessionsSection token={token} />
     case 'appearance': return <AppearanceSection s={s} />
-    case 'chat-folders': return <ChatFoldersSection s={s} />
     case 'servers': return <ServerManagementSection servers={servers} />
     case 'encryption': return <EncryptionSection />
   }
@@ -996,21 +991,6 @@ function AppearanceSection({ s }: { s: SettingsHook }) {
 // ─── Language (removed — no i18n system) ────────────────────────────────────────
 
 // ─── Stickers and Emoji ─────────────────────────────────────────────────────────
-
-// ─── Chat Folders ───────────────────────────────────────────────────────────────
-
-function ChatFoldersSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle } = s
-
-  return (
-    <>
-      <SectionLabel>Options</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Show Folder Tabs" on={settings.folders_show_tabs} onToggle={() => toggle('folders_show_tabs')} last />
-      </GroupCard>
-    </>
-  )
-}
 
 // ─── Encryption ─────────────────────────────────────────────────────────────────
 
