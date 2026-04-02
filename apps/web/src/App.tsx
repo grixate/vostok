@@ -40,6 +40,7 @@ import { useNotifications } from './hooks/useNotifications.ts'
 import { useDeepLinks } from './hooks/useDeepLinks.ts'
 import { useSettings } from './hooks/useSettings.ts'
 import { useServers } from './hooks/useServers.ts'
+import { useDownloadManager } from './hooks/useDownloadManager.ts'
 
 import { Sidebar } from './features/sidebar/Sidebar.tsx'
 import { ConversationPane } from './features/conversation/ConversationPane.tsx'
@@ -380,6 +381,11 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
     messages.replyTargetMessageId,
     messages.setReplyTargetMessageId
   )
+  const downloadManager = useDownloadManager(
+    appSettings.settings.auto_download,
+    activeServerScope?.token ?? fallbackAuthToken,
+    activeServer?.url ?? window.location.origin,
+  )
   const call = useCall(appView, deferredActiveChatId, chatList.activeChatId, chatList.chatItems)
 
   const drafts = useDrafts(deferredActiveChatId, messages.draft, messages.setDraft, messages.replyTargetMessageId)
@@ -524,6 +530,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
             call={call}
             messages={messages}
             media={media}
+            downloadManager={downloadManager}
             chatList={chatListView}
             drafts={drafts}
             typingIndicator={typingIndicator}
@@ -543,6 +550,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
             call={call}
             messages={messages}
             media={media}
+            downloadManager={downloadManager}
             chatList={chatListView}
             drafts={drafts}
             typingIndicator={typingIndicator}

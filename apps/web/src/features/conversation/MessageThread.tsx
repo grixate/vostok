@@ -16,19 +16,23 @@ import {
   isRoundVideoAttachment
 } from '../../utils/attachment-helpers.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
-import { VoiceNotePlayer } from '../../components/VoiceNotePlayer.tsx'
-import { RoundVideoPlayer } from '../../components/RoundVideoPlayer.tsx'
-import { VoiceMessageBubble } from './VoiceMessageBubble.tsx'
-import { RoundVideoBubble } from './RoundVideoBubble.tsx'
+import { PhotoAttachment } from '../../components/PhotoAttachment.tsx'
+import { VideoAttachment } from '../../components/VideoAttachment.tsx'
+import { FileAttachment } from '../../components/FileAttachment.tsx'
+import { VoiceAttachment } from '../../components/VoiceAttachment.tsx'
+import { RoundVideoAttachment } from '../../components/RoundVideoAttachment.tsx'
 import { ChevronDownIcon, ForwardSmallIcon, CopySmallIcon, DeleteSmallTrashIcon, CheckIcon, SendIcon } from '../../icons/index.tsx'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
+import type { useDownloadManager } from '../../hooks/useDownloadManager.ts'
 import type { ChatSummary } from '../../lib/api.ts'
 
 type MessageThreadProps = {
   messages: ReturnType<typeof useMessages>
   media: ReturnType<typeof useMediaCapture>
+  downloadManager: ReturnType<typeof useDownloadManager>
   activeChat: ChatSummary | null
+  chatType: 'direct' | 'group'
   searchHighlight?: { query: string; activeMessageId?: string } | null
   initialSelectedMessageId?: string | null
   onSayHello?: () => void
@@ -52,7 +56,7 @@ function highlightText(text: string, query: string): React.ReactNode {
   )
 }
 
-export function MessageThread({ messages, media, activeChat, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
+export function MessageThread({ messages, media, downloadManager, activeChat, chatType, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
   const { storedDevice } = useAppContext()
   const { setContextMenuMessage, draftInputRef } = useUIContext()
   const participantUsernames = activeChat?.participant_usernames ?? EMPTY_PARTICIPANT_IDS
@@ -356,35 +360,26 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
     handleScrollToMessage(replyToMessageId)
   }, [handleScrollToMessage])
 
-  // --- Eagerly resolve voice/video playback URLs ---
-  const playbackUrlsRef = useRef<Record<string, string>>({})
-  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({})
-
+  // --- Auto-download eligible attachments ---
   useEffect(() => {
+    const eligible: { attachment: import('../../types.ts').AttachmentDescriptor; chatType: 'direct' | 'group' }[] = []
     for (const message of messages.messageItems) {
       if (!message.attachment?.contentKeyBase64 || !message.attachment.ivBase64) continue
-      const isVoice = isVoiceNoteAttachment(message.attachment)
-      const isVideo = isRoundVideoAttachment(message.attachment)
-      if (!isVoice && !isVideo) continue
       const uploadId = message.attachment.uploadId
-      if (playbackUrlsRef.current[uploadId]) continue
-      // Mark as in-flight so we don't re-request
-      playbackUrlsRef.current[uploadId] = ''
-      const descriptor = toAttachmentDescriptor(message.attachment)
-      media.ensureAttachmentPlaybackUrl(descriptor)
-        .then((url) => {
-          playbackUrlsRef.current[uploadId] = url
-          setPlaybackUrls((prev) => ({ ...prev, [uploadId]: url }))
-        })
-        .catch(() => {
-          // Allow retry on next render
-          delete playbackUrlsRef.current[uploadId]
-        })
+      const state = downloadManager.getState(uploadId)
+      if (state.status !== 'idle') continue
+      eligible.push({
+        attachment: toAttachmentDescriptor(message.attachment),
+        chatType,
+      })
     }
-  }, [media, messages.messageItems])
+    if (eligible.length > 0) {
+      downloadManager.processAutoDownloads(eligible)
+    }
+  }, [messages.messageItems, downloadManager, chatType])
 
-  // Merge local blob URLs from media capture (for optimistic messages) with eagerly resolved URLs
-  const allPlaybackUrls = { ...media.attachmentPlaybackUrls, ...playbackUrls }
+  // Merge download manager playback URLs with local blob URLs from media capture (for optimistic outgoing messages)
+  const allPlaybackUrls = { ...downloadManager.playbackUrls, ...media.attachmentPlaybackUrls }
 
   const searchQuery = searchHighlight?.query ?? ''
   const { contextMenuMessage } = useUIContext()
@@ -587,46 +582,18 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
                   {/* ── Round video: rendered standalone (no bubble wrapper) ── */}
                   {isRoundVideo ? (
                     <>
-                      {attachmentDescriptor && message.attachment && allPlaybackUrls[message.attachment.uploadId] ? (
-                        <RoundVideoBubble
-                          descriptor={attachmentDescriptor}
-                          playbackUrl={allPlaybackUrls[message.attachment.uploadId]}
+                      {message.attachment ? (
+                        <RoundVideoAttachment
+                          attachment={message.attachment}
+                          state={allPlaybackUrls[message.attachment.uploadId]
+                            ? { status: 'ready', playbackUrl: allPlaybackUrls[message.attachment.uploadId] }
+                            : downloadManager.getState(message.attachment.uploadId)}
                           side={message.side as 'incoming' | 'outgoing'}
                           timestamp={`${formatRelativeTime(message.sentAt)}${message.editedAt ? ' edited' : ''}`}
+                          onDownload={downloadManager.download}
+                          onCancel={downloadManager.cancel}
                         />
-                      ) : attachmentDescriptor && message.attachment ? (
-                        <RoundVideoPlayer
-                          attachment={attachmentDescriptor}
-                          onResolveMediaUrl={media.ensureAttachmentPlaybackUrl}
-                        />
-                      ) : (
-                        <div className={`round-video round-video--${message.side === 'outgoing' ? 'outgoing' : 'incoming'} round-video--loading`}>
-                          <div className="round-video__wrapper" style={{ width: 180, height: 180 }}>
-                            {message.attachment?.thumbnailDataUrl ? (
-                              <img
-                                alt="Video message"
-                                className="round-video__video"
-                                src={message.attachment.thumbnailDataUrl}
-                                style={{ width: 174, height: 174, top: 3, left: 3, position: 'absolute', borderRadius: '50%', objectFit: 'cover' }}
-                              />
-                            ) : allPlaybackUrls[message.attachment?.uploadId ?? ''] ? (
-                              <video
-                                className="round-video__video"
-                                src={allPlaybackUrls[message.attachment?.uploadId ?? '']}
-                                style={{ width: 174, height: 174, top: 3, left: 3, position: 'absolute', borderRadius: '50%', objectFit: 'cover' }}
-                                muted
-                                playsInline
-                              />
-                            ) : null}
-                            <div className="round-video__play-overlay" style={{ cursor: 'default' }}>
-                              <span className="round-video__loading-spinner" />
-                            </div>
-                          </div>
-                          <div className="round-video__caption">
-                            <span className="round-video__time">{formatRelativeTime(message.sentAt)}</span>
-                          </div>
-                        </div>
-                      )}
+                      ) : null}
                       {message.reactions && message.reactions.length > 0 ? (
                         <div className="message-thread__reactions">
                           {message.reactions.map((reaction) => (
@@ -675,77 +642,50 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
                   <span>{linkPreview.description || linkPreview.href}</span>
                 </a>
               ) : null}
-              {message.attachment?.thumbnailDataUrl && !isVoice && !isRoundVideo ? (
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <img
-                    alt={message.attachment.fileName}
-                    className="message-thread__attachment-preview"
-                    src={message.attachment.thumbnailDataUrl}
-                    style={{ cursor: media.expiredMediaIds.has(message.attachment.uploadId) ? 'default' : 'pointer', opacity: media.expiredMediaIds.has(message.attachment.uploadId) ? 0.5 : 1 }}
-                    onClick={(e) => {
-                      if (media.expiredMediaIds.has(message.attachment!.uploadId)) return
-                      e.stopPropagation()
-                      const isVideo = message.attachment!.contentType?.startsWith('video/') ?? false
-                      onOpenMedia?.(
-                        message.attachment!.thumbnailDataUrl!,
-                        isVideo ? 'video' : 'image',
-                        senderName,
-                        formatRelativeTime(message.sentAt),
-                        message.attachment!.fileName
-                      )
-                    }}
-                  />
-                  {media.expiredMediaIds.has(message.attachment.uploadId) && (
-                    <span style={{
-                      position: 'absolute', bottom: 8, left: 8, right: 8,
-                      background: 'rgba(0,0,0,0.7)', color: '#aaa', fontSize: 12,
-                      padding: '4px 8px', borderRadius: 6, textAlign: 'center',
-                    }}>
-                      Media expired
-                    </span>
-                  )}
-                </div>
-              ) : null}
-              {/* Voice message: waveform bubble or skeleton loading */}
-              {isVoice ? (
-                attachmentDescriptor && message.attachment && allPlaybackUrls[message.attachment.uploadId] ? (
-                  <VoiceMessageBubble
-                    descriptor={attachmentDescriptor}
-                    playbackUrl={allPlaybackUrls[message.attachment.uploadId]}
-                    side={message.side as 'incoming' | 'outgoing'}
-                  />
-                ) : attachmentDescriptor && message.attachment ? (
-                  <VoiceNotePlayer
-                    attachment={attachmentDescriptor}
-                    onResolveMediaUrl={media.ensureAttachmentPlaybackUrl}
+              {message.attachment && isImageAttachment && !isVoice && !isRoundVideo ? (
+                message.attachment.contentType?.startsWith('video/') ? (
+                  <VideoAttachment
+                    attachment={message.attachment}
+                    state={allPlaybackUrls[message.attachment.uploadId]
+                      ? { status: 'ready', playbackUrl: allPlaybackUrls[message.attachment.uploadId] }
+                      : downloadManager.getState(message.attachment.uploadId)}
+                    onDownload={downloadManager.download}
+                    onCancel={downloadManager.cancel}
                   />
                 ) : (
-                  <div className="voice-skeleton">
-                    <div className="voice-skeleton__btn" />
-                    <div className="voice-skeleton__bars">
-                      {Array.from({ length: 20 }, (_, i) => (
-                        <div key={i} className="voice-skeleton__bar" style={{ height: `${8 + Math.sin(i * 0.7) * 12}px` }} />
-                      ))}
-                    </div>
-                    <div className="voice-skeleton__time" />
-                  </div>
+                  <PhotoAttachment
+                    attachment={message.attachment}
+                    state={allPlaybackUrls[message.attachment.uploadId]
+                      ? { status: 'ready', playbackUrl: allPlaybackUrls[message.attachment.uploadId] }
+                      : downloadManager.getState(message.attachment.uploadId)}
+                    onDownload={downloadManager.download}
+                    onCancel={downloadManager.cancel}
+                    onOpenMedia={onOpenMedia}
+                    senderName={senderName}
+                    timestamp={formatRelativeTime(message.sentAt)}
+                  />
                 )
               ) : null}
-              {/* Download button: skip for voice/video/image messages */}
-              {attachmentDescriptor && !isMediaMessage ? (
-                media.expiredMediaIds.has(attachmentDescriptor.uploadId) ? (
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                    File expired — no longer available on server
-                  </span>
-                ) : (
-                  <button
-                    className="secondary-action"
-                    onClick={() => media.handleDownloadAttachment(attachmentDescriptor)}
-                    type="button"
-                  >
-                    Download {attachmentDescriptor.fileName}
-                  </button>
-                )
+              {/* Voice message */}
+              {isVoice && message.attachment ? (
+                <VoiceAttachment
+                  attachment={message.attachment}
+                  state={allPlaybackUrls[message.attachment.uploadId]
+                    ? { status: 'ready', playbackUrl: allPlaybackUrls[message.attachment.uploadId] }
+                    : downloadManager.getState(message.attachment.uploadId)}
+                  side={message.side as 'incoming' | 'outgoing'}
+                  onDownload={downloadManager.download}
+                />
+              ) : null}
+              {/* File attachment: skip for voice/video/image messages */}
+              {message.attachment && !isMediaMessage ? (
+                <FileAttachment
+                  attachment={message.attachment}
+                  state={downloadManager.getState(message.attachment.uploadId)}
+                  onDownload={downloadManager.download}
+                  onCancel={downloadManager.cancel}
+                  onSave={media.handleDownloadAttachment}
+                />
               ) : null}
               {message.reactions && message.reactions.length > 0 ? (
                 <div className="message-thread__reactions">

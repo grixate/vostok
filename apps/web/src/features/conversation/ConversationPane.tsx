@@ -29,6 +29,7 @@ import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { useCall } from '../../hooks/useCall.ts'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
+import type { useDownloadManager } from '../../hooks/useDownloadManager.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useDrafts } from '../../hooks/useDrafts.ts'
 import type { useTypingIndicator } from '../../hooks/useTypingIndicator.ts'
@@ -42,6 +43,7 @@ type ConversationPaneProps = {
   call: ReturnType<typeof useCall>
   messages: ReturnType<typeof useMessages>
   media: ReturnType<typeof useMediaCapture>
+  downloadManager: ReturnType<typeof useDownloadManager>
   chatList: ReturnType<typeof useChatList>
   drafts: ReturnType<typeof useDrafts>
   typingIndicator: ReturnType<typeof useTypingIndicator>
@@ -57,6 +59,7 @@ export function ConversationPane({
   call,
   messages,
   media,
+  downloadManager,
   chatList,
   drafts,
   typingIndicator,
@@ -800,7 +803,9 @@ export function ConversationPane({
       {resolvedChat ? <MessageThread
         messages={messages}
         media={media}
+        downloadManager={downloadManager}
         activeChat={resolvedChat}
+        chatType={resolvedChat.type === 'group' ? 'group' : 'direct'}
         searchHighlight={searchHighlight}
         initialSelectedMessageId={initialSelectedMessageId}
         onOpenMedia={handleOpenMediaViewer}

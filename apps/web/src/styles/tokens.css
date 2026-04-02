@@ -9,6 +9,7 @@
 @import './components.css';
 @import './animations.css';
 @import './calls.css';
+@import './attachments.css';
 
 /* ─── Design Tokens ───────────────────────────────────────────────────────────
    Source: vchat-desktop.pen — Vostok Desktop Design

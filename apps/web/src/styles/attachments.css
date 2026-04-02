@@ -1,0 +1,357 @@
+/* ─── Download Arrow ──────────────────────────────────────────────────────── */
+
+.download-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.download-arrow__circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  transition: transform 0.15s;
+}
+
+.download-arrow__circle:hover {
+  transform: scale(1.08);
+}
+
+.download-arrow__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.download-arrow--standalone .download-arrow__circle {
+  background: none;
+}
+
+.download-arrow--standalone .download-arrow__label {
+  color: var(--text-secondary);
+  text-shadow: none;
+}
+
+/* ─── Download Progress ──────────────────────────────────────────────────── */
+
+.download-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.download-progress__ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.download-progress__ring svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.download-progress__cancel {
+  color: #fff;
+  z-index: 1;
+}
+
+.download-progress__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.download-progress__arc--spin {
+  animation: download-progress-spin 1.2s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes download-progress-spin {
+  to { transform: rotate(270deg); }
+}
+
+/* ─── Photo Attachment ───────────────────────────────────────────────────── */
+
+.attachment-photo {
+  position: relative;
+  display: inline-block;
+  max-width: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.attachment-photo__thumb {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  border-radius: 12px;
+}
+
+.attachment-photo--ready {
+  cursor: pointer;
+  border-radius: 12px;
+  max-width: 320px;
+  display: block;
+}
+
+.attachment-photo__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+.attachment-photo--expired {
+  position: relative;
+  opacity: 0.5;
+}
+
+.attachment-photo__expired-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #aaa;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.attachment-photo__error {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── Video Attachment ───────────────────────────────────────────────────── */
+
+.attachment-video {
+  position: relative;
+  display: inline-block;
+  max-width: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.attachment-video__thumb {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  border-radius: 12px;
+}
+
+.attachment-video--ready {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.attachment-video__player {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  border-radius: 12px;
+}
+
+.attachment-video__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+.attachment-video__play-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.attachment-video__download-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+}
+
+.attachment-video__size {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.attachment-video--expired {
+  position: relative;
+  opacity: 0.5;
+}
+
+/* ─── File Attachment ────────────────────────────────────────────────────── */
+
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  min-width: 220px;
+  max-width: 320px;
+  transition: background 0.15s;
+}
+
+.attachment-file:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.attachment-file__icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.attachment-file__ext {
+  position: absolute;
+  bottom: -2px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.attachment-file__badge {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+}
+
+.attachment-file__badge--download {
+  color: var(--accent);
+}
+
+.attachment-file__badge--done {
+  color: var(--green, #34C759);
+}
+
+.attachment-file__badge--error {
+  color: var(--status-error);
+}
+
+.attachment-file__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachment-file__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-file__meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ─── Voice Attachment ───────────────────────────────────────────────────── */
+
+.voice-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  min-width: 200px;
+}
+
+.voice-attachment__download-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.voice-attachment__play {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.voice-attachment__play--pulse {
+  animation: voice-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.voice-attachment__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1;
+  height: 28px;
+}
+
+.voice-attachment__bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text-secondary);
+  min-height: 4px;
+}
+
+.voice-attachment__size {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}

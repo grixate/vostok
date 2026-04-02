@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SETTINGS_STORAGE_KEY } from '../constants.ts'
 import { fetchSettings, syncSettings } from '../lib/api.ts'
+import type { AutoDownloadSettings } from '../types.ts'
 
 export type UserSettings = {
   // General
@@ -52,6 +53,8 @@ export type UserSettings = {
   // Sessions
   sessions_confirm_new: boolean
   sessions_auto_terminate: boolean
+  // Auto-download (structured)
+  auto_download?: AutoDownloadSettings
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {

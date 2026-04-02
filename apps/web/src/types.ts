@@ -76,3 +76,29 @@ export type AttachmentDescriptor = {
   contentKeyBase64: string
   ivBase64: string
 }
+
+// ─── Auto-Download & Media Download ─────────────────────────────────────────
+
+export type AttachmentDownloadState =
+  | { status: 'idle' }
+  | { status: 'auto_queued' }
+  | { status: 'downloading'; progress: number }
+  | { status: 'decrypting' }
+  | { status: 'ready'; playbackUrl: string }
+  | { status: 'error'; message: string; retryable: boolean }
+  | { status: 'expired' }
+  | { status: 'cancelled' }
+
+export type AutoDownloadConfig = {
+  max_size_bytes: number
+  on_cellular: boolean
+}
+
+export type MediaKind = 'photos' | 'videos' | 'files' | 'voice_messages' | 'round_videos'
+
+export type AutoDownloadChatConfig = Record<MediaKind, AutoDownloadConfig>
+
+export type AutoDownloadSettings = {
+  private_chats: AutoDownloadChatConfig
+  group_chats: AutoDownloadChatConfig
+}

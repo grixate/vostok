@@ -31,6 +31,17 @@ export function isRoundVideoAttachment(
   return attachment.contentType.startsWith('video/') && attachment.fileName.startsWith('round-video-')
 }
 
+export function inferMediaKindForDownload(
+  contentType: string,
+  fileName: string,
+): 'photos' | 'videos' | 'files' | 'voice_messages' | 'round_videos' {
+  if (isVoiceNoteAttachment({ contentType, fileName })) return 'voice_messages'
+  if (isRoundVideoAttachment({ contentType, fileName })) return 'round_videos'
+  if (contentType.startsWith('image/')) return 'photos'
+  if (contentType.startsWith('video/')) return 'videos'
+  return 'files'
+}
+
 export function inferMediaKind(contentType: string): 'file' | 'image' | 'audio' | 'video' {
   if (contentType.startsWith('image/')) {
     return 'image'

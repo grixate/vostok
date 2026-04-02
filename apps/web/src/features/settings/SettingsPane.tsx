@@ -9,6 +9,8 @@ import type { useChatSessions } from '../../hooks/useChatSessions.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useServers } from '../../hooks/useServers.ts'
 import { type UserSettings } from '../../hooks/useSettings.ts'
+import { DEFAULT_AUTO_DOWNLOAD as DEFAULT_AUTO_DOWNLOAD_SETTINGS } from '../../lib/download-manager.ts'
+import type { AutoDownloadSettings } from '../../types.ts'
 import { listDevices, revokeDevice, updateProfile, fetchMe } from '../../lib/api.ts'
 import { buildApiRoot } from '../../lib/api-request.ts'
 import type { DeviceInfo } from '../../lib/api.ts'
@@ -671,6 +673,98 @@ function ServerStorageBar({ serverUrl }: { serverUrl: string | null }) {
   )
 }
 
+// ─── Auto-Download Settings Group ───────────────────────────────────────────────
+
+const SIZE_PRESETS = [
+  { label: 'Off', bytes: 0 },
+  { label: '5 MB', bytes: 5 * 1024 * 1024 },
+  { label: '15 MB', bytes: 15 * 1024 * 1024 },
+  { label: '50 MB', bytes: 50 * 1024 * 1024 },
+  { label: '100 MB', bytes: 100 * 1024 * 1024 },
+  { label: 'No limit', bytes: Number.MAX_SAFE_INTEGER },
+]
+
+function sizePresetLabel(bytes: number): string {
+  if (bytes === 0) return 'Off'
+  if (bytes >= Number.MAX_SAFE_INTEGER) return 'No limit'
+  const mb = bytes / (1024 * 1024)
+  return `Up to ${mb} MB`
+}
+
+const MEDIA_KIND_LABELS: Record<string, string> = {
+  photos: 'Photos',
+  videos: 'Videos',
+  files: 'Files',
+  voice_messages: 'Voice Messages',
+  round_videos: 'Round Videos',
+}
+
+const MEDIA_KINDS = ['photos', 'videos', 'files', 'voice_messages', 'round_videos'] as const
+
+function AutoDownloadGroup({
+  label,
+  chatKey,
+  settings,
+  updateSetting,
+}: {
+  label: string
+  chatKey: 'private_chats' | 'group_chats'
+  settings: UserSettings
+  updateSetting: <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => void
+}) {
+  const { auto_download } = settings
+  const defaults = DEFAULT_AUTO_DOWNLOAD_SETTINGS
+  const chatConfig = auto_download?.[chatKey] ?? defaults[chatKey]
+  const [expandedKind, setExpandedKind] = useState<string | null>(null)
+
+  function updateKind(kind: string, maxBytes: number) {
+    const current = auto_download ?? defaults
+    const updated: AutoDownloadSettings = {
+      ...current,
+      [chatKey]: {
+        ...current[chatKey],
+        [kind]: { ...current[chatKey][kind as keyof typeof current.private_chats], max_size_bytes: maxBytes },
+      },
+    }
+    updateSetting('auto_download', updated)
+  }
+
+  return (
+    <>
+      <SectionLabel>{label}</SectionLabel>
+      <GroupCard>
+        {MEDIA_KINDS.map((kind) => {
+          const config = chatConfig[kind]
+          const isExpanded = expandedKind === kind
+          return (
+            <div key={kind}>
+              <ChevronRow
+                label={MEDIA_KIND_LABELS[kind]}
+                secondary={sizePresetLabel(config.max_size_bytes)}
+                onClick={() => setExpandedKind(isExpanded ? null : kind)}
+              />
+              {isExpanded && (
+                <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {SIZE_PRESETS.map((preset) => (
+                    <RadioRow
+                      key={preset.label}
+                      label={preset.label}
+                      active={config.max_size_bytes === preset.bytes}
+                      onSelect={() => { updateKind(kind, preset.bytes); setExpandedKind(null) }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </GroupCard>
+    </>
+  )
+}
+
+// ─── Data & Storage ─────────────────────────────────────────────────────────────
+
 function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: string | null }) {
   const { settings, toggle } = s
   const [storageEstimate, setStorageEstimate] = useState<string>(() => (
@@ -718,13 +812,8 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
         <ChevronRow label="Keep Media" secondary="Forever" />
         <ButtonRow label={clearing ? 'Clearing...' : 'Clear Cache'} color="danger" onClick={handleClearCache} last />
       </GroupCard>
-      <SectionLabel>Auto Download - Private Chats</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Photos" on={settings.data_auto_photos} onToggle={() => toggle('data_auto_photos')} />
-        <ToggleRow label="Videos" on={settings.data_auto_videos} onToggle={() => toggle('data_auto_videos')} />
-        <ToggleRow label="Documents" on={settings.data_auto_documents} onToggle={() => toggle('data_auto_documents')} />
-        <ToggleRow label="Voice Messages" on={settings.data_auto_voice} onToggle={() => toggle('data_auto_voice')} last />
-      </GroupCard>
+      <AutoDownloadGroup label="Auto-Download — Private Chats" chatKey="private_chats" settings={settings} updateSetting={s.updateSetting} />
+      <AutoDownloadGroup label="Auto-Download — Group Chats" chatKey="group_chats" settings={settings} updateSetting={s.updateSetting} />
       <ServerStorageAdmin serverUrl={serverUrl} />
     </>
   )
