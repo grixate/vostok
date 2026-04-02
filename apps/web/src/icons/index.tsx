@@ -47,7 +47,6 @@ import {
   CheckCheck,
   Check,
   Languages,
-  Share2,
   Archive,
   BellOff,
   CheckSquare,
@@ -69,6 +68,7 @@ import {
   MonitorUp,
   PhoneCall,
   Maximize2,
+  Redo2,
 } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
 
@@ -104,7 +104,7 @@ export const EditIcon = wrap(Pencil)
 export const PinIcon = wrap(Pin)
 export const CopyIcon = wrap(Copy)
 export const DeleteIcon = wrap(Trash2)
-export const ForwardIcon = wrap(Share2)
+export const ForwardIcon = wrap(Redo2)
 export const TranslateIcon = wrap(Languages)
 export const ArchiveIcon = wrap(Archive)
 export const MuteIcon = wrap(BellOff)
@@ -166,7 +166,7 @@ export const FileSmallIcon = wrapSmall(FileText)
 export const CloseSmallIcon = wrapSmall(X)
 export const ChevronUpSmallIcon = wrapSmall(ChevronUp)
 export const ChevronDownSmallIcon = wrapSmall(ChevronDown)
-export const ForwardSmallIcon = wrapSmall(Share2)
+export const ForwardSmallIcon = wrapSmall(Redo2)
 export const TranslateSmallIcon = wrapSmall(Languages)
 export const SelectSmallIcon = wrapSmall(CircleCheck)
 export const ChevronRightSmallIcon = wrapSmall(ChevronRight)

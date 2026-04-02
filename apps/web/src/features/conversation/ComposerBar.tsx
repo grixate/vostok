@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs */
 import { useCallback, useRef, useState, useEffect, type FormEvent } from 'react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
@@ -69,11 +70,13 @@ type ComposerBarProps = {
   activeChat: ChatSummary | null
   chatList: ReturnType<typeof useChatList>
   sendKey?: 'enter' | 'ctrl-enter'
+  spellCheck?: boolean
+  autoCapitalize?: boolean
   onDraftChange?: (text: string) => void
   onMessageSent?: () => void
 }
 
-export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', onDraftChange, onMessageSent }: ComposerBarProps) {
+export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', spellCheck = true, autoCapitalize = false, onDraftChange, onMessageSent }: ComposerBarProps) {
   const {
     attachPopoverOpen,
     setAttachPopoverOpen,
@@ -81,12 +84,7 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
   } = useUIContext()
 
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
-  const [videoMode, setVideoMode] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Tracks whether the last pointer-down completed a long-press mode toggle,
-  // so the subsequent synthetic click is ignored and doesn't start recording.
-  const longPressOccurredRef = useRef(false)
   const videoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Start / stop video duration timer
@@ -108,13 +106,6 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
         clearInterval(videoTimerRef.current)
         videoTimerRef.current = null
       }
-    }
-  }, [media.roundVideoRecording])
-
-  // Reset video mode when round video recording ends
-  useEffect(() => {
-    if (!media.roundVideoRecording) {
-      setVideoMode(false)
     }
   }, [media.roundVideoRecording])
 
@@ -157,42 +148,8 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
     target.style.height = `${Math.min(target.scrollHeight, 160)}px`
   }, [])
 
-  // Long-press (400 ms) toggles between mic and camera mode.
-  // Sets longPressOccurredRef so the subsequent synthetic click is ignored.
-  function handleMediaButtonPointerDown() {
-    longPressTimerRef.current = setTimeout(() => {
-      longPressOccurredRef.current = true
-      setVideoMode((v) => !v)
-      longPressTimerRef.current = null
-    }, 400)
-  }
-
-  function handleMediaButtonPointerUp() {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }
-
-  // Right-click immediately toggles mode (no recording started).
-  function handleMediaButtonContextMenu(e: React.MouseEvent) {
-    e.preventDefault()
-    longPressOccurredRef.current = true // suppress the click that follows contextmenu
-    setVideoMode((v) => !v)
-  }
-
-  function handleMediaButtonClick() {
-    // If a long-press or right-click just toggled the mode, skip recording for
-    // this event — the user wanted a mode switch, not to start/stop.
-    if (longPressOccurredRef.current) {
-      longPressOccurredRef.current = false
-      return
-    }
-    if (videoMode) {
-      void media.handleRoundVideoToggle()
-    } else {
-      void media.handleVoiceNoteToggle()
-    }
+  function handleDiscardVoiceRecording() {
+    void media.discardVoiceNoteRecording()
   }
 
   if (!activeChat) {
@@ -252,7 +209,7 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             className="voice-recorder__circle-btn"
             type="button"
             aria-label="Discard recording"
-            onClick={() => { media.voiceNoteRecorderRef.current?.stop(); media.cleanupVoiceNoteCapture(); if (media.voiceRecordingTimerRef.current) { clearInterval(media.voiceRecordingTimerRef.current); media.voiceRecordingTimerRef.current = null } media.setVoiceRecordingDuration(0) }}
+            onClick={handleDiscardVoiceRecording}
           >
             <DeleteIcon />
           </button>
@@ -349,6 +306,8 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             ref={draftInputRef}
             rows={1}
             value={messages.draft}
+            spellCheck={spellCheck}
+            autoCapitalize={autoCapitalize ? 'sentences' : 'off'}
           />
         </div>
         {messages.draft.trim().length > 0 ? (

@@ -1,29 +1,52 @@
-import { startTransition, useState, useEffect } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
 import type { AuthView, AuthSession, ServerInfo } from '../types.ts'
-import {
-  login as apiLogin,
-  authRegister,
-  authBootstrap,
-  authLogout,
-  refreshAccessToken,
-  changePassword as apiChangePassword,
-  getServerInfo,
-  devQuickLogin as apiDevQuickLogin,
-  validateInvite,
-  type LoginResponse
-} from '../lib/api.ts'
-import { persistAuthSession, readAuthSession } from '../utils/storage.ts'
+import type { InviteValidation, LoginResponse } from '../lib/api.ts'
+import { normalizeServerUrl } from '../lib/multi-server.ts'
+import { createServerApiClient } from '../lib/server-api.ts'
+import { persistAuthSession, persistStoredDevice, readAuthSession } from '../utils/storage.ts'
 
-export function useAuth() {
+export function useAuth(serverBaseUrl?: string | null) {
   const { setStoredDevice, setBanner, setLoading } = useAppContext()
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => readAuthSession())
+  const resolvedServerBaseUrl = normalizeServerUrl(
+    serverBaseUrl?.trim() || (typeof window !== 'undefined' ? window.location.origin : '')
+  )
+  const currentOriginBaseUrl = normalizeServerUrl(
+    typeof window !== 'undefined' ? window.location.origin : resolvedServerBaseUrl
+  )
+  const useLegacyStorage = resolvedServerBaseUrl === currentOriginBaseUrl
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => (
+    useLegacyStorage ? readAuthSession() : null
+  ))
+  const [authSessionServerUrl, setAuthSessionServerUrl] = useState<string | null>(() => (
+    useLegacyStorage && readAuthSession() ? currentOriginBaseUrl : null
+  ))
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
-  const [view, setView] = useState<AuthView>(() => (readAuthSession() ? 'chat' : 'login'))
+  const [view, setView] = useState<AuthView>(() => (
+    useLegacyStorage && readAuthSession() ? 'chat' : 'login'
+  ))
   const [error, setError] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [inviteCode, setInviteCode] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(true)
+  const serverClient = useMemo(
+    () => createServerApiClient(resolvedServerBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '')),
+    [resolvedServerBaseUrl]
+  )
+
+  useEffect(() => {
+    if (authSessionServerUrl === resolvedServerBaseUrl) {
+      return
+    }
+
+    if (!useLegacyStorage) {
+      setAuthSession(null)
+      setAuthSessionServerUrl(null)
+      setInviteCode(null)
+      setError(null)
+      setView('login')
+    }
+  }, [authSessionServerUrl, resolvedServerBaseUrl, useLegacyStorage])
 
   // Clear error when navigating between screens
   function navigateTo(nextView: AuthView) {
@@ -31,19 +54,33 @@ export function useAuth() {
     setView(nextView)
   }
 
-  // Fetch server info on mount
+  // Fetch server info whenever the selected pre-auth server changes.
   useEffect(() => {
-    getServerInfo()
+    let cancelled = false
+
+    setServerInfo(null)
+
+    serverClient.getServerInfo()
       .then((info) => {
+        if (cancelled) {
+          return
+        }
+
         setServerInfo(info)
-        if (info.bootstrap && !readAuthSession()) {
+        const hasStoredSession = useLegacyStorage ? !!readAuthSession() : !!authSession
+        if (info.bootstrap && !hasStoredSession) {
           setView('server-bootstrap')
+        } else if (!hasStoredSession) {
+          setView('login')
         }
       })
       .catch(() => {
         // Server may not support the new endpoint yet
       })
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [authSession, serverClient, useLegacyStorage])
 
   // Handle /invite/:code URL on mount
   useEffect(() => {
@@ -53,7 +90,7 @@ export function useAuth() {
 
     const code = match[1]
 
-    validateInvite(code)
+    serverClient.validateInvite(code)
       .then((result) => {
         if (result.valid) {
           setInviteCode(code)
@@ -71,17 +108,22 @@ export function useAuth() {
         // Clean up the URL without reloading
         window.history.replaceState(null, '', '/')
       })
-  }, [])
+  }, [serverClient])
 
   // Attempt silent refresh on mount if we have a stored session
   useEffect(() => {
+    if (!useLegacyStorage) {
+      setInitializing(false)
+      return
+    }
+
     const stored = readAuthSession()
     if (!stored) {
       setInitializing(false)
       return
     }
 
-    refreshAccessToken(stored.refreshToken)
+    serverClient.refreshAccessToken(stored.refreshToken)
       .then((result) => {
         const updated: AuthSession = {
           ...stored,
@@ -96,6 +138,7 @@ export function useAuth() {
         }
         persistAuthSession(updated)
         setAuthSession(updated)
+        setAuthSessionServerUrl(currentOriginBaseUrl)
 
         if (result.user.temp_password) {
           setView('force-password-change')
@@ -111,7 +154,7 @@ export function useAuth() {
       .finally(() => {
         setInitializing(false)
       })
-  }, [])
+  }, [currentOriginBaseUrl, serverClient, useLegacyStorage])
 
   function handleLoginResponse(response: LoginResponse) {
     const session: AuthSession = {
@@ -126,8 +169,11 @@ export function useAuth() {
       }
     }
 
-    persistAuthSession(session)
+    if (useLegacyStorage) {
+      persistAuthSession(session)
+    }
     setAuthSession(session)
+    setAuthSessionServerUrl(useLegacyStorage ? currentOriginBaseUrl : resolvedServerBaseUrl)
     setError(null)
 
     if (response.user.temp_password) {
@@ -142,7 +188,7 @@ export function useAuth() {
     setError(null)
 
     try {
-      const response = await apiLogin(username, password)
+      const response = await serverClient.login(username, password)
       handleLoginResponse(response)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.')
@@ -161,7 +207,7 @@ export function useAuth() {
     setError(null)
 
     try {
-      const response = await authRegister({
+      const response = await serverClient.register({
         invite_code: code ?? undefined,
         username,
         display_name: displayName || undefined,
@@ -180,7 +226,7 @@ export function useAuth() {
     setError(null)
 
     try {
-      const response = await authBootstrap({
+      const response = await serverClient.bootstrap({
         username,
         display_name: displayName || undefined,
         password
@@ -198,7 +244,7 @@ export function useAuth() {
     setError(null)
 
     try {
-      const response = await apiDevQuickLogin(username)
+      const response = await serverClient.devQuickLogin(username)
       handleLoginResponse(response)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Dev login failed.')
@@ -213,14 +259,17 @@ export function useAuth() {
     setError(null)
 
     try {
-      await apiChangePassword(authSession.accessToken, newPassword)
+      await serverClient.changePassword(authSession.accessToken, newPassword)
 
       const updated: AuthSession = {
         ...authSession,
         user: { ...authSession.user, temp_password: false }
       }
-      persistAuthSession(updated)
+      if (useLegacyStorage) {
+        persistAuthSession(updated)
+      }
       setAuthSession(updated)
+      setAuthSessionServerUrl(useLegacyStorage ? currentOriginBaseUrl : resolvedServerBaseUrl)
       startTransition(() => setView('chat'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password.')
@@ -232,21 +281,50 @@ export function useAuth() {
   async function handleLogout() {
     if (authSession) {
       try {
-        await authLogout(authSession.accessToken, authSession.refreshToken)
+        await serverClient.logout(authSession.accessToken, authSession.refreshToken)
       } catch {
         // Best-effort logout
       }
     }
 
-    persistAuthSession(null)
+    if (useLegacyStorage) {
+      persistAuthSession(null)
+    }
     setAuthSession(null)
+    setAuthSessionServerUrl(null)
     setError(null)
+    setBanner(null)
+    setLoading(false)
     startTransition(() => setView('login'))
+  }
+
+  async function handleForgetDevice() {
+    await handleLogout()
+    if (useLegacyStorage) {
+      persistStoredDevice(null)
+    }
+    setStoredDevice(null)
   }
 
   function handleInviteContinue(code: string) {
     setInviteCode(code)
     navigateTo('create-account')
+  }
+
+  async function handleCheckUsername(username: string): Promise<{ available: boolean }> {
+    return serverClient.checkUsername(username)
+  }
+
+  async function handleValidateInvite(code: string): Promise<InviteValidation> {
+    return serverClient.validateInvite(code)
+  }
+
+  async function handleRequestAccess(name: string, message?: string): Promise<{ ok: boolean }> {
+    return serverClient.requestAccess(name, message)
+  }
+
+  async function handleRequestPasswordReset(username: string, message?: string): Promise<{ ok: boolean }> {
+    return serverClient.requestPasswordReset(username, message)
   }
 
   // Expose profileUsername for backwards compat with existing hooks
@@ -256,6 +334,7 @@ export function useAuth() {
     view,
     setView: navigateTo,
     authSession,
+    authSessionServerUrl,
     serverInfo,
     error,
     loading: authLoading,
@@ -269,18 +348,22 @@ export function useAuth() {
     handleChangePassword,
     handleLogout,
     handleInviteContinue,
+    handleCheckUsername,
+    handleValidateInvite,
+    handleRequestAccess,
+    handleRequestPasswordReset,
     // Legacy compat — these are still used by App.tsx / other hooks
-    handleForgetDevice: handleLogout,
-    setProfileUsername: (_: string | null) => {},
+    handleForgetDevice,
+    setProfileUsername: (() => {}) as (value: string | null) => void,
     username: authSession?.user.username ?? '',
-    setUsername: (_: string) => {},
+    setUsername: (() => {}) as (value: string) => void,
     deviceName: '',
-    setDeviceName: (_: string) => {},
+    setDeviceName: (() => {}) as (value: string) => void,
     handleReauthenticate: () => {},
     _handleRotatePrekeys: () => {},
-    _handleRevokeLinkedDevice: (_: string) => {},
-    refreshDeviceList: async (_: string) => {},
-    setDevices: (_: any) => {},
-    fetchMe: (() => {}) as any
+    _handleRevokeLinkedDevice: (() => {}) as (deviceId: string) => void,
+    refreshDeviceList: (async () => undefined) as (token: string) => Promise<void>,
+    setDevices: (() => {}) as (devices: unknown) => void,
+    fetchMe: (() => undefined) as () => void
   }
 }

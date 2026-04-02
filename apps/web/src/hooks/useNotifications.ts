@@ -1,69 +1,57 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatSummary } from '../lib/api.ts'
 import type { CachedMessage } from '../lib/message-cache.ts'
+import type { MergedChatSummary } from '../lib/multi-server.ts'
+import type { UserSettings } from './useSettings.ts'
 import {
   requestNotificationPermission,
   sendNotification,
   isWindowFocused
 } from '../lib/notifications.ts'
 
-const NOTIFICATION_ENABLED_STORAGE_KEY = 'vostok.notifications.enabled'
+// ── Notification sound ──────────────────────────────────────────────────
 
-function readNotificationPreference(): boolean {
-  if (typeof window === 'undefined') {
-    return true
+let notifAudioCtx: AudioContext | null = null
+
+function playNotificationSound() {
+  try {
+    if (!notifAudioCtx) notifAudioCtx = new AudioContext()
+    const osc = notifAudioCtx.createOscillator()
+    const gain = notifAudioCtx.createGain()
+    osc.type = 'sine'
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.15, notifAudioCtx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, notifAudioCtx.currentTime + 0.3)
+    osc.connect(gain).connect(notifAudioCtx.destination)
+    osc.start()
+    osc.stop(notifAudioCtx.currentTime + 0.3)
+  } catch {
+    // Audio not available — no-op
   }
-
-  const raw = window.localStorage.getItem(NOTIFICATION_ENABLED_STORAGE_KEY)
-
-  if (raw === 'false') {
-    return false
-  }
-
-  // Default to enabled
-  return true
 }
 
-/**
- * Notification hook that fires desktop notifications for incoming messages
- * when the window is not focused.
- *
- * Responsibilities:
- * - Request notification permission on mount (after auth)
- * - Watch for new incoming messages in the active chat
- * - Send a notification when:
- *   - The window is NOT focused
- *   - The message is incoming (not outgoing/system)
- *   - The chat is not a self-chat
- *   - Notifications are enabled by the user
- * - Respect privacy: don't show message content for non-decryptable messages
- */
+// ── Hook ────────────────────────────────────────────────────────────────
+
 export function useNotifications(
   authenticated: boolean,
   messageItems: CachedMessage[],
-  chatItems: ChatSummary[],
-  activeChatId: string | null
+  chatItems: MergedChatSummary[],
+  activeChatId: string | null,
+  settings?: UserSettings
 ) {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreference())
   const [permissionGranted, setPermissionGranted] = useState(false)
   const previousMessageIdsRef = useRef<Set<string>>(new Set())
   const initialLoadRef = useRef(true)
+  const desktopNotificationsEnabled = settings?.notif_desktop !== false
 
-  // Request notification permission once authenticated
+  // Request notification permission once authenticated (if desktop notifications enabled)
   useEffect(() => {
-    if (!authenticated) {
-      return
-    }
+    if (!authenticated) return
+    if (!desktopNotificationsEnabled) return
 
     void requestNotificationPermission().then((granted) => {
       setPermissionGranted(granted)
     })
-  }, [authenticated])
-
-  // Persist notification preference
-  useEffect(() => {
-    window.localStorage.setItem(NOTIFICATION_ENABLED_STORAGE_KEY, String(notificationsEnabled))
-  }, [notificationsEnabled])
+  }, [authenticated, desktopNotificationsEnabled])
 
   // Reset tracked message IDs when the active chat changes
   useEffect(() => {
@@ -71,11 +59,22 @@ export function useNotifications(
     initialLoadRef.current = true
   }, [activeChatId])
 
-  // Watch for new incoming messages and send notifications
+  // Update document title with unread badge count
   useEffect(() => {
-    if (!authenticated || !notificationsEnabled || !permissionGranted || !activeChatId) {
+    if (!settings?.notif_badge) {
+      // Restore clean title
+      document.title = 'Vostok'
       return
     }
+
+    const totalUnread = chatItems.reduce((sum, c) => sum + (c.message_count ?? 0), 0)
+    document.title = totalUnread > 0 ? `(${totalUnread}) Vostok` : 'Vostok'
+  }, [chatItems, settings?.notif_badge])
+
+  // Watch for new incoming messages and send notifications
+  useEffect(() => {
+    if (!authenticated || !permissionGranted || !activeChatId) return
+    if (!desktopNotificationsEnabled) return
 
     const previousIds = previousMessageIdsRef.current
     const currentIds = new Set(messageItems.map((m) => m.id))
@@ -89,6 +88,7 @@ export function useNotifications(
 
     // Find the active chat to check properties
     const activeChat = chatItems.find((c) => c.id === activeChatId)
+    const hasMultipleServers = new Set(chatItems.map((chat) => chat.serverId)).size > 1
 
     // Don't notify for self-chats (Saved Messages)
     if (activeChat?.is_self_chat) {
@@ -96,10 +96,27 @@ export function useNotifications(
       return
     }
 
-    // Don't notify if the window is focused -- the user can already see the messages
+    // Don't notify if the window is focused — the user can already see the messages
     if (isWindowFocused()) {
       previousMessageIdsRef.current = currentIds
       return
+    }
+
+    // Check per-chat-type notification settings
+    if (settings) {
+      const chatType = activeChat?.type
+      if (chatType === 'direct' && !settings.notif_private_msg) {
+        previousMessageIdsRef.current = currentIds
+        return
+      }
+      if (chatType === 'group' && !settings.notif_group_msg) {
+        previousMessageIdsRef.current = currentIds
+        return
+      }
+      if (chatType === 'channel' && !settings.notif_chan_msg) {
+        previousMessageIdsRef.current = currentIds
+        return
+      }
     }
 
     // Find new incoming messages that weren't in the previous set
@@ -113,28 +130,33 @@ export function useNotifications(
 
     for (const message of newIncomingMessages) {
       const chatTitle = activeChat?.title ?? 'Chat'
+      const notificationTitle =
+        hasMultipleServers && activeChat?.serverLabel
+          ? `${activeChat.serverLabel} · ${chatTitle}`
+          : chatTitle
 
-      // Respect privacy: if the message is not decryptable, show a generic body
-      const body = message.decryptable ? message.text : 'New message'
+      // Determine notification body based on preview settings
+      let showPreview = true
+      if (settings) {
+        if (!settings.notif_preview) showPreview = false
+        const chatType = activeChat?.type
+        if (chatType === 'direct' && !settings.notif_private_preview) showPreview = false
+        if (chatType === 'group' && !settings.notif_group_preview) showPreview = false
+        if (chatType === 'channel' && !settings.notif_chan_preview) showPreview = false
+      }
 
-      void sendNotification({
-        title: chatTitle,
-        body,
-        chatId: activeChatId
-      })
+      const body = showPreview && message.decryptable ? message.text : 'New message'
+
+      void sendNotification({ title: notificationTitle, body, chatId: activeChatId })
+
+      // Play notification sound if enabled
+      if (!settings || settings.notif_sound) {
+        playNotificationSound()
+      }
     }
 
     previousMessageIdsRef.current = currentIds
-  }, [messageItems, authenticated, notificationsEnabled, permissionGranted, activeChatId, chatItems])
+  }, [activeChatId, authenticated, chatItems, desktopNotificationsEnabled, messageItems, permissionGranted, settings])
 
-  function toggleNotifications() {
-    setNotificationsEnabled((current) => !current)
-  }
-
-  return {
-    notificationsEnabled,
-    setNotificationsEnabled,
-    toggleNotifications,
-    permissionGranted
-  }
+  return { permissionGranted }
 }

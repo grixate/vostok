@@ -18,6 +18,10 @@ defmodule VostokServerWeb.Endpoint do
     websocket: [serializer: [{Phoenix.Socket.V2.JSONSerializer, "~> 2.0.0"}, {Phoenix.Socket.V1.JSONSerializer, "~> 1.0.0"}]],
     longpoll: false
 
+  socket "/federation/socket", VostokServerWeb.FederationSocket,
+    websocket: [serializer: [{Phoenix.Socket.V2.JSONSerializer, "~> 2.0.0"}]],
+    longpoll: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),

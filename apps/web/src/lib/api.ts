@@ -1,3 +1,5 @@
+import { createApiRequest } from './api-request.ts'
+
 export type RegisterPayload = {
   username: string
   device_name: string
@@ -228,18 +230,47 @@ export type TurnCredentials = {
 
 export type CallSession = {
   id: string
-  chat_id: string
+  chat_id: string | null
+  call_room_id: string | null
+  scope_type: 'chat' | 'call_room'
+  scope_id: string
   started_by_device_id: string
   mode: 'voice' | 'video' | 'group'
+  media_mode: 'voice' | 'video'
   status: 'ringing' | 'active' | 'ended'
   started_at: string
   ended_at: string | null
+  end_reason?: string | null
+  display_title?: string | null
+}
+
+export type CallScope =
+  | { type: 'chat'; chatId: string }
+  | { type: 'call_room'; roomId: string }
+
+export type CallRoom = {
+  id: string
+  title: string
+  created_by_user_id: string
+  expires_at: string | null
+  closed_at: string | null
+}
+
+export type CallRoomMember = {
+  id: string
+  user_id: string
+  username: string
+  display_name: string | null
+  role: 'owner' | 'member'
+  joined_at: string | null
 }
 
 export type CallParticipant = {
   id: string
   call_id: string
   user_id: string
+  username?: string | null
+  display_name?: string | null
   device_id: string
   status: 'joined' | 'left'
   track_kind: 'audio' | 'video' | 'audio_video'
@@ -310,12 +341,7 @@ export type RegisterResponse = {
   prekey_count: number
 }
 
-type ApiErrorBody = {
-  error?: string
-  message?: string
-}
-
-const API_ROOT = '/api/v1'
+let defaultApiBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
 
 // ── Password-based auth API ─────────────────────────────────────────────
 
@@ -333,9 +359,19 @@ export type RefreshResponse = {
 export type ServerInfoResponse = {
   name: string
   version: string
-  auth_mode: 'invite_only' | 'closed' | 'dev'
+  auth_mode: 'open' | 'invite_only' | 'closed' | 'dev'
   access_requests_enabled: boolean
   bootstrap: boolean
+}
+
+export function setDefaultApiBaseUrl(baseUrl: string | null) {
+  defaultApiBaseUrl = baseUrl && baseUrl.trim() !== ''
+    ? baseUrl.trim().replace(/\/+$/, '')
+    : (typeof window !== 'undefined' ? window.location.origin : defaultApiBaseUrl)
+}
+
+export function getDefaultApiBaseUrl(): string {
+  return defaultApiBaseUrl
 }
 
 export type InviteValidation = {
@@ -741,6 +777,16 @@ export async function listRecipientDevices(
   })
 }
 
+export async function listCallRoomRecipientDevices(
+  token: string,
+  roomId: string
+): Promise<{ recipient_devices: RecipientDevice[] }> {
+  return apiRequest<{ recipient_devices: RecipientDevice[] }>(`/call-rooms/${roomId}/recipient-devices`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
 export async function createMessage(
   token: string,
   chatId: string,
@@ -1031,11 +1077,86 @@ export async function fetchTurnCredentials(
   })
 }
 
+export type CallHistoryEntry = {
+  id: string
+  chat_id: string | null
+  call_room_id: string | null
+  scope_type: 'chat' | 'call_room'
+  scope_id: string
+  display_title: string
+  participant_preview: Array<{ user_id: string; username: string; display_name: string | null }>
+  participant_count: number
+  started_by_device_id: string
+  mode: string
+  media_mode: 'voice' | 'video'
+  status: string
+  started_at: string | null
+  ended_at: string | null
+  end_reason?: string | null
+}
+
+export type ActiveCallSummary = CallSession & {
+  display_title: string
+  participant_count: number
+}
+
+export async function fetchCallHistory(
+  token: string
+): Promise<{ calls: CallHistoryEntry[] }> {
+  return apiRequest<{ calls: CallHistoryEntry[] }>('/calls/history', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function fetchActiveCalls(
+  token: string
+): Promise<{ calls: ActiveCallSummary[] }> {
+  return apiRequest<{ calls: ActiveCallSummary[] }>('/calls/active', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
 export async function fetchActiveCall(
   token: string,
   chatId: string
 ): Promise<{ call: CallSession | null }> {
   return apiRequest<{ call: CallSession | null }>(`/chats/${chatId}/calls/active`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function fetchCallRoom(
+  token: string,
+  roomId: string
+): Promise<{ room: CallRoom; members: CallRoomMember[]; active_call: CallSession | null }> {
+  return apiRequest<{ room: CallRoom; members: CallRoomMember[]; active_call: CallSession | null }>(`/call-rooms/${roomId}`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function createCallRoom(
+  token: string,
+  payload: {
+    title?: string
+    participant_user_ids: string[]
+  }
+): Promise<{ room: CallRoom; members: CallRoomMember[] }> {
+  return apiRequest<{ room: CallRoom; members: CallRoomMember[] }>('/call-rooms', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function fetchCallRoomActiveCall(
+  token: string,
+  roomId: string
+): Promise<{ call: CallSession | null }> {
+  return apiRequest<{ call: CallSession | null }>(`/call-rooms/${roomId}/calls/active`, {
     method: 'GET',
     headers: authHeader(token)
   })
@@ -1142,9 +1263,24 @@ export async function createCallSession(
   chatId: string,
   payload?: {
     mode?: 'voice' | 'video' | 'group'
+    media_mode?: 'voice' | 'video'
   }
 ): Promise<{ call: CallSession }> {
   return apiRequest<{ call: CallSession }>(`/chats/${chatId}/calls`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload ?? {})
+  })
+}
+
+export async function createCallRoomSession(
+  token: string,
+  roomId: string,
+  payload?: {
+    media_mode?: 'voice' | 'video'
+  }
+): Promise<{ call: CallSession }> {
+  return apiRequest<{ call: CallSession }>(`/call-rooms/${roomId}/calls`, {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(payload ?? {})
@@ -1345,21 +1481,44 @@ export async function deleteProfilePhoto(token: string): Promise<{ ok: boolean }
 }
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_ROOT}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {})
-    }
+  return createApiRequest(defaultApiBaseUrl)(path, init)
+}
+
+// ── Key Backup ───────────────────────────────────────────────────────────
+
+export type KeyBackupInfo = {
+  id: string
+  encrypted_blob: string  // base64
+  blob_hash: string
+  version: number
+  updated_at: string
+}
+
+export async function uploadKeyBackup(
+  token: string,
+  encryptedBlob: string,  // base64
+  blobHash: string,
+  version = 1
+): Promise<{ id: string; blob_hash: string; version: number; updated_at: string }> {
+  return apiRequest('/keys/backup', {
+    method: 'PUT',
+    headers: authHeader(token),
+    body: JSON.stringify({ encrypted_blob: encryptedBlob, blob_hash: blobHash, version })
   })
+}
 
-  const data = (await response.json().catch(() => ({}))) as T & ApiErrorBody
+export async function downloadKeyBackup(token: string): Promise<KeyBackupInfo> {
+  return apiRequest<KeyBackupInfo>('/keys/backup', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
 
-  if (!response.ok) {
-    throw new Error(data.message ?? data.error ?? 'Request failed.')
-  }
-
-  return data
+export async function deleteKeyBackup(token: string): Promise<{ deleted: boolean }> {
+  return apiRequest<{ deleted: boolean }>('/keys/backup', {
+    method: 'DELETE',
+    headers: authHeader(token)
+  })
 }
 
 function authHeader(token: string): HeadersInit {

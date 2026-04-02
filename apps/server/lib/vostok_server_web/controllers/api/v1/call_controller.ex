@@ -3,6 +3,16 @@ defmodule VostokServerWeb.Api.V1.CallController do
 
   alias VostokServer.Calls
 
+  def call_history(conn, _params) do
+    {:ok, payload} = Calls.call_history(conn.assigns.current_user.id)
+    json(conn, payload)
+  end
+
+  def active_calls(conn, _params) do
+    {:ok, payload} = Calls.active_calls(conn.assigns.current_user.id)
+    json(conn, payload)
+  end
+
   def active_call(conn, %{"chat_id" => chat_id}) do
     case Calls.active_call_for_chat(chat_id, conn.assigns.current_user.id) do
       {:ok, call} ->

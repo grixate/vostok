@@ -402,6 +402,7 @@
   left: 0;
   right: 0;
   z-index: 300;
+  pointer-events: none;
   padding: 6px 16px;
   text-align: center;
   font-size: 13px;

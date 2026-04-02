@@ -163,7 +163,13 @@ export function useKeyboardShortcuts({
             activeChatId: activeChat?.id ?? null,
             activeChatTitle: activeChat?.title ?? null,
             activeCallId: call.activeCall?.id ?? null,
-            activeCallMode: call.activeCall?.mode ?? null
+            activeCallMode: call.activeCall?.mode ?? null,
+            callCapabilityState: call.callCapabilityState,
+            callCapabilityReason: call.callCapabilityReason,
+            callCapabilityTransport: call.callCapabilityTransport,
+            callCapabilityBrowserName: call.callCapabilityBrowserName,
+            callCapabilityHostKind: call.callCapabilityHostKind,
+            browserUserAgent: typeof navigator === 'undefined' ? null : navigator.userAgent
           }
         })
         return
@@ -244,7 +250,14 @@ export function useKeyboardShortcuts({
       return
     }
 
-    if (event.shiftKey && !appContextValue_loading && activeChat && !call.activeCall) {
+    if (
+      event.shiftKey &&
+      !appContextValue_loading &&
+      activeChat &&
+      activeChat.type !== 'group' &&
+      !activeChat.is_self_chat &&
+      !call.activeCall
+    ) {
       if (event.key.toLowerCase() === 'a') {
         event.preventDefault()
         void call.handleStartCall('voice')

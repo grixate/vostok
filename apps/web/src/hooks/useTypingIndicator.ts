@@ -1,99 +1,114 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { ChatSummary } from '../lib/api.ts'
+import { getRawChatId } from '../lib/multi-server.ts'
 import { subscribeToTyping, pushTypingStart, pushTypingStop } from '../lib/realtime.ts'
 
 export function useTypingIndicator(activeChat: ChatSummary | null, token?: string | null) {
-  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map()) // userId -> username
+  const activeChatId = activeChat?.id ?? null
+  const activeRawChatId = getRawChatId(activeChatId)
+  const [typingState, setTypingState] = useState<{ chatId: string | null; users: Map<string, string> }>({
+    chatId: null,
+    users: new Map()
+  })
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // Subscribe to typing events for the active chat
   useEffect(() => {
-    if (!token || !activeChat?.id) {
-      setTypingUsers(new Map())
+    if (!token || !activeChatId || !activeRawChatId) {
       return
     }
 
-    const chatId = activeChat.id
+    const chatId = activeChatId
+    const rawChatId = activeRawChatId
+    const typingTimers = typingTimersRef.current
 
-    const unsub = subscribeToTyping(token, chatId, {
+    const unsub = subscribeToTyping(token, rawChatId, {
       onTypingStart: (userId, username) => {
-        setTypingUsers((prev) => {
-          const next = new Map(prev)
+        setTypingState((prev) => {
+          const next = new Map(prev.chatId === chatId ? prev.users : new Map())
           next.set(userId, username)
-          return next
+          return { chatId, users: next }
         })
         // Auto-clear after 5 seconds if no stop event
-        const existing = typingTimersRef.current.get(userId)
+        const existing = typingTimers.get(userId)
         if (existing) clearTimeout(existing)
-        typingTimersRef.current.set(
+        typingTimers.set(
           userId,
           setTimeout(() => {
-            setTypingUsers((prev) => {
-              const next = new Map(prev)
+            setTypingState((prev) => {
+              if (prev.chatId !== chatId) {
+                return prev
+              }
+
+              const next = new Map(prev.users)
               next.delete(userId)
-              return next
+              return { chatId, users: next }
             })
-            typingTimersRef.current.delete(userId)
+            typingTimers.delete(userId)
           }, 5000)
         )
       },
       onTypingStop: (userId) => {
-        setTypingUsers((prev) => {
-          const next = new Map(prev)
+        setTypingState((prev) => {
+          if (prev.chatId !== chatId) {
+            return prev
+          }
+
+          const next = new Map(prev.users)
           next.delete(userId)
-          return next
+          return { chatId, users: next }
         })
-        const timer = typingTimersRef.current.get(userId)
+        const timer = typingTimers.get(userId)
         if (timer) {
           clearTimeout(timer)
-          typingTimersRef.current.delete(userId)
+          typingTimers.delete(userId)
         }
       },
     })
 
     return () => {
       unsub()
-      setTypingUsers(new Map())
-      for (const timer of typingTimersRef.current.values()) clearTimeout(timer)
-      typingTimersRef.current.clear()
+      for (const timer of typingTimers.values()) clearTimeout(timer)
+      typingTimers.clear()
     }
-  }, [token, activeChat?.id])
+  }, [activeChatId, activeRawChatId, token])
 
   // Debounced typing event sender
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTypingRef = useRef(false)
 
   const sendTypingEvent = useCallback(() => {
-    if (!token || !activeChat?.id) return
+    if (!token || !activeChatId || !activeRawChatId) return
 
     if (!isTypingRef.current) {
       isTypingRef.current = true
-      pushTypingStart(token, activeChat.id)
+      pushTypingStart(token, activeRawChatId)
     }
 
     // Reset the stop timer
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
     typingTimerRef.current = setTimeout(() => {
       isTypingRef.current = false
-      if (token && activeChat?.id) {
-        pushTypingStop(token, activeChat.id)
+      if (token && activeRawChatId) {
+        pushTypingStop(token, activeRawChatId)
       }
     }, 3000)
-  }, [token, activeChat?.id])
+  }, [activeChatId, activeRawChatId, token])
 
   // Clean up on unmount or chat change
   useEffect(() => {
     return () => {
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
-      if (isTypingRef.current && token && activeChat?.id) {
-        pushTypingStop(token, activeChat.id)
+      const timer = typingTimerRef.current
+      if (timer) clearTimeout(timer)
+      if (isTypingRef.current && token && activeRawChatId) {
+        pushTypingStop(token, activeRawChatId)
       }
       isTypingRef.current = false
     }
-  }, [token, activeChat?.id])
+  }, [activeChatId, activeRawChatId, token])
 
   // Format typing text
-  const usernames = Array.from(typingUsers.values())
+  const usernames = Array.from(typingState.chatId === activeChatId ? typingState.users.values() : [])
   const typingText = formatTypingText(usernames, activeChat?.type ?? 'direct')
 
   return {

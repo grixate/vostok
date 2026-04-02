@@ -35,6 +35,8 @@ type MessageThreadProps = {
   onOpenMedia?: (url: string, type: 'image' | 'video', senderName: string, timestamp: string, fileName: string) => void
 }
 
+const EMPTY_PARTICIPANT_IDS: string[] = []
+
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -53,29 +55,29 @@ function highlightText(text: string, query: string): React.ReactNode {
 export function MessageThread({ messages, media, activeChat, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
   const { storedDevice } = useAppContext()
   const { setContextMenuMessage, draftInputRef } = useUIContext()
+  const participantUsernames = activeChat?.participant_usernames ?? EMPTY_PARTICIPANT_IDS
+  const participantUserIds = activeChat?.participant_user_ids ?? EMPTY_PARTICIPANT_IDS
 
   // Build username → userId map for avatar photos
   const usernameToUserId = useMemo(() => {
     const map = new Map<string, string>()
-    if (activeChat.participant_usernames && activeChat.participant_user_ids) {
-      for (let i = 0; i < activeChat.participant_usernames.length; i++) {
-        map.set(activeChat.participant_usernames[i], activeChat.participant_user_ids[i])
+
+    for (let i = 0; i < participantUsernames.length; i++) {
+      const userId = participantUserIds[i]
+
+      if (userId) {
+        map.set(participantUsernames[i], userId)
       }
     }
+
     return map
-  }, [activeChat.participant_usernames, activeChat.participant_user_ids])
-  const participantPhotos = useProfilePhotos(activeChat.participant_user_ids ?? [])
-  // Read the current user's profile name for sender display (storedDevice.username may be empty)
-  const currentUsername = useMemo(() => {
-    try {
-      const raw = window.localStorage.getItem('vostok.auth')
-      if (raw) {
-        const session = JSON.parse(raw) as { user?: { username?: string; display_name?: string | null } }
-        return session.user?.display_name || session.user?.username || storedDevice?.username || ''
-      }
-    } catch { /* ignore */ }
-    return storedDevice?.username || ''
-  }, [storedDevice?.username])
+  }, [participantUserIds, participantUsernames])
+  const activeServerUrl =
+    activeChat && 'serverUrl' in activeChat && typeof activeChat.serverUrl === 'string'
+      ? activeChat.serverUrl
+      : null
+  const participantPhotos = useProfilePhotos(participantUserIds, activeServerUrl)
+  const currentUsername = storedDevice?.username || ''
 
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const lastClickedIdRef = useRef<string | null>(null)
@@ -94,9 +96,13 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
   // Enter selection mode when initialSelectedMessageId changes
   useEffect(() => {
     if (initialSelectedMessageId) {
-      setSelectedMessageIds(new Set([initialSelectedMessageId]))
+      const timer = window.setTimeout(() => {
+        setSelectedMessageIds(new Set([initialSelectedMessageId]))
+      }, 0)
       lastClickedIdRef.current = initialSelectedMessageId
+      return () => window.clearTimeout(timer)
     }
+    return undefined
   }, [initialSelectedMessageId])
 
   // Track new messages for enter animation
@@ -127,24 +133,30 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
     }
 
     if (newIds.size > 0) {
-      setAnimatingIds(newIds)
+      const applyTimer = window.setTimeout(() => {
+        setAnimatingIds(newIds)
+      }, 0)
+      knownMessageIdsRef.current = currentIds
+
+      const clearTimer = window.setTimeout(() => {
+        setAnimatingIds(new Set())
+      }, 250)
+      return () => {
+        window.clearTimeout(applyTimer)
+        window.clearTimeout(clearTimer)
+      }
     }
 
     knownMessageIdsRef.current = currentIds
-
-    if (newIds.size > 0) {
-      // Clear animation classes after they complete
-      const timer = setTimeout(() => {
-        setAnimatingIds(new Set())
-      }, 250)
-      return () => clearTimeout(timer)
-    }
   }, [messages.messageItems])
 
   // Reset known message IDs when switching chats
   useEffect(() => {
     knownMessageIdsRef.current = new Set()
-    setAnimatingIds(new Set())
+    const timer = window.setTimeout(() => {
+      setAnimatingIds(new Set())
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [activeChat?.id])
 
   // --- Scroll tracking ---
@@ -161,11 +173,14 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
   const hasMoreRef = useRef(messages.hasMoreMessages)
   const loadingOlderForScrollRef = useRef(messages.loadingOlder)
   const activeChatIdForScrollRef = useRef(activeChat?.id)
-  hasMoreRef.current = messages.hasMoreMessages
-  loadingOlderForScrollRef.current = messages.loadingOlder
-  activeChatIdForScrollRef.current = activeChat?.id
 
-  const handleScroll = useCallback(() => {
+  useEffect(() => {
+    hasMoreRef.current = messages.hasMoreMessages
+    loadingOlderForScrollRef.current = messages.loadingOlder
+    activeChatIdForScrollRef.current = activeChat?.id
+  }, [activeChat?.id, messages.hasMoreMessages, messages.loadingOlder])
+
+  function handleScroll() {
     const el = stageRef.current
     if (!el) return
 
@@ -177,7 +192,7 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
     if (el.scrollTop < 200 && hasMoreRef.current && !loadingOlderForScrollRef.current && activeChatIdForScrollRef.current) {
       messages.loadOlderMessages(activeChatIdForScrollRef.current)
     }
-  }, [])
+  }
 
   // Scroll to bottom on initial load / chat switch
   useEffect(() => {
@@ -263,8 +278,11 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
 
   // Clear selection when active chat changes
   useEffect(() => {
-    setSelectedMessageIds(new Set())
+    const timer = window.setTimeout(() => {
+      setSelectedMessageIds(new Set())
+    }, 0)
     lastClickedIdRef.current = null
+    return () => window.clearTimeout(timer)
   }, [activeChat?.id])
 
   // Escape key clears selection
@@ -291,13 +309,8 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
     })
   }, [])
 
-  const handleEnterSelectionMode = useCallback((messageId: string) => {
-    setSelectedMessageIds(new Set([messageId]))
-    lastClickedIdRef.current = messageId
-  }, [])
-
   // Left-click toggles selection when in selection mode
-  const handleMessageClick = useCallback((messageId: string, _event: React.MouseEvent) => {
+  const handleMessageClick = useCallback((messageId: string) => {
     if (selectedMessageIds.size > 0) {
       toggleSelection(messageId)
     }
@@ -323,11 +336,6 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
     void navigator.clipboard.writeText(selectedTexts)
     setSelectedMessageIds(new Set())
   }, [messages.messageItems, selectedMessageIds])
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedMessageIds(new Set())
-    lastClickedIdRef.current = null
-  }, [])
 
   const handleScrollToMessage = useCallback((messageId: string) => {
     const element = messageRefsMap.current[messageId]
@@ -373,7 +381,7 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
           delete playbackUrlsRef.current[uploadId]
         })
     }
-  }, [messages.messageItems])
+  }, [media, messages.messageItems])
 
   // Merge local blob URLs from media capture (for optimistic messages) with eagerly resolved URLs
   const allPlaybackUrls = { ...media.attachmentPlaybackUrls, ...playbackUrls }
@@ -513,7 +521,6 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
             const isSelected = selectedMessageIds.has(message.id)
             const isActiveSearchMatch = searchHighlight?.activeMessageId === message.id
             const { isFirstInGroup } = groupInfo[index]
-            const isGroup = activeChat.type === 'group'
             // Resolve sender display name
             const rawSenderName = message.senderUsername ?? ''
             let senderName = rawSenderName
@@ -531,8 +538,14 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
               key={message.clientId || message.id}
               ref={(el) => { messageRefsMap.current[message.id] = el }}
               className={getWrapperClassName(message, isSelected, isActiveSearchMatch, isFirstInGroup, index)}
-              onClick={(e) => handleMessageClick(message.id, e)}
+              onClick={() => handleMessageClick(message.id)}
               onDoubleClick={() => handleDoubleClick(message)}
+              onContextMenu={(e) => {
+                if (message.side !== 'system' && !message.deletedAt) {
+                  e.preventDefault()
+                  setContextMenuMessage({ message, x: e.clientX, y: e.clientY })
+                }
+              }}
             >
             {selectedMessageIds.size > 0 && message.side !== 'system' ? (
               <button
@@ -565,7 +578,7 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
                 </div>
                 <div className="message-row__body">
                   {showSenderName ? (
-                    <span className="message-row__sender">{senderName}</span>
+                    <span className="message-row__sender" style={{ color: avatarColor }}>{senderName}</span>
                   ) : null}
                   {/* Forwarded header */}
                   {message.forwardedFrom ? (
@@ -633,12 +646,6 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
                   <MessageBubble
               side={message.side}
               timestamp={`${formatRelativeTime(message.sentAt)}${message.editedAt ? ' edited' : ''}`}
-              onContextMenu={(e) => {
-                if (message.side !== 'system' && !message.deletedAt) {
-                  e.preventDefault()
-                  setContextMenuMessage({ message, x: e.clientX, y: e.clientY })
-                }
-              }}
             >
               {message.replyToMessageId ? (
                 <span
@@ -761,10 +768,6 @@ export function MessageThread({ messages, media, activeChat, searchHighlight, in
               <MessageBubble
                 side={message.side}
                 timestamp={formatRelativeTime(message.sentAt)}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setContextMenuMessage({ message, x: e.clientX, y: e.clientY })
-                }}
               >
                 <span>{searchQuery ? highlightText(message.text, searchQuery) : message.text}</span>
               </MessageBubble>

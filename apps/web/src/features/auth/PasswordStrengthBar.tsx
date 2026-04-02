@@ -1,6 +1,6 @@
-export type PasswordStrength = 'weak' | 'fair' | 'strong'
+type PasswordStrength = 'weak' | 'fair' | 'strong'
 
-export function getPasswordStrength(password: string): PasswordStrength {
+function getPasswordStrength(password: string): PasswordStrength {
   if (password.length < 8) return 'weak'
 
   let score = 0

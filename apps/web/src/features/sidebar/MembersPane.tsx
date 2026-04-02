@@ -26,7 +26,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
     : users
 
   const memberIds = useMemo(() => users.map((u) => u.id), [users])
-  const memberPhotos = useProfilePhotos(memberIds)
+  const memberPhotos = useProfilePhotos(memberIds, chatList.activeServerUrl)
 
   function handleSelectUser(username: string) {
     chatList.startDirectChatWith(username)

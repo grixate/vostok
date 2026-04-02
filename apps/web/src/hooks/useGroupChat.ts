@@ -19,19 +19,60 @@ import {
   wrapGroupSenderKeyForRecipients
 } from '../lib/message-vault.ts'
 import { bytesToBase64 } from '../lib/base64.ts'
+import { getRawChatId, qualifyChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
 import type { AuthView } from '../types.ts'
 
+type ActiveServerScope = {
+  id: string
+  label: string
+  color: string
+  url: string
+}
+
+type ServerScopeLike =
+  | ActiveServerScope
+  | Pick<MergedChatSummary, 'serverId' | 'serverLabel' | 'serverColor' | 'serverUrl'>
+
+function normalizeServerScope(server: ServerScopeLike): ActiveServerScope {
+  if ('serverId' in server) {
+    return {
+      id: server.serverId,
+      label: server.serverLabel,
+      color: server.serverColor,
+      url: server.serverUrl
+    }
+  }
+
+  return server
+}
+
+function toMergedGroupChat(chat: ChatSummary, server: ServerScopeLike): MergedChatSummary {
+  const normalizedServer = normalizeServerScope(server)
+  const qualifiedId = qualifyChatId(normalizedServer.id, chat.id)
+  return {
+    ...chat,
+    id: qualifiedId,
+    rawId: chat.id,
+    qualifiedId,
+    serverId: normalizedServer.id,
+    serverLabel: normalizedServer.label,
+    serverColor: normalizedServer.color,
+    serverUrl: normalizedServer.url
+  }
+}
+
 export function useGroupChat(
   view: AuthView,
-  activeChat: ChatSummary | null,
+  activeChat: MergedChatSummary | null,
   profileUsername: string | null,
-  setChatItems: React.Dispatch<React.SetStateAction<ChatSummary[]>>
+  setChatItems: React.Dispatch<React.SetStateAction<MergedChatSummary[]>>,
+  activeServer: ActiveServerScope | null
 ) {
-  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
-  const [_groupSenderKeys, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
+  const [, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
 
   const activeGroupChatId = activeChat?.type === 'group' ? activeChat.id : null
 
@@ -51,12 +92,18 @@ export function useGroupChat(
     }
 
     const token = sessionToken
-    const groupChatId = activeGroupChatId
+    const groupChatId = getRawChatId(activeGroupChatId)
+    if (!groupChatId) {
+      setGroupMembers([])
+      return
+    }
+
+    const rawGroupChatId = groupChatId
     let cancelled = false
 
     async function loadGroupMembers() {
       try {
-        const response = await listGroupMembers(token, groupChatId)
+        const response = await listGroupMembers(token, rawGroupChatId)
 
         if (!cancelled) {
           setGroupMembers(response.members)
@@ -85,19 +132,34 @@ export function useGroupChat(
 
     const token2 = sessionToken
     const encryptionPrivateKeyPkcs8Base64 = storedDevice.encryptionPrivateKeyPkcs8Base64
-    const groupChatId = activeGroupChatId
+    const groupChatId = getRawChatId(activeGroupChatId)
+
+    if (!groupChatId) {
+      setGroupSenderKeys([])
+      return
+    }
+
+    const rawGroupChatId = groupChatId
+    const qualifiedGroupChatId = activeGroupChatId
     let cancelled = false
 
     async function loadGroupSenderKeys() {
       try {
-        const response = await listGroupSenderKeys(token2, groupChatId)
+        const response = await listGroupSenderKeys(token2, rawGroupChatId)
 
         if (!cancelled) {
           await storeInboundGroupSenderKeys(
-            groupChatId,
+            qualifiedGroupChatId,
             response.sender_keys,
             encryptionPrivateKeyPkcs8Base64
           )
+          if (rawGroupChatId !== qualifiedGroupChatId) {
+            await storeInboundGroupSenderKeys(
+              rawGroupChatId,
+              response.sender_keys,
+              encryptionPrivateKeyPkcs8Base64
+            )
+          }
           setGroupSenderKeys(response.sender_keys)
         }
       } catch {
@@ -124,6 +186,10 @@ export function useGroupChat(
     setLoading(true)
 
     try {
+      if (!activeServer) {
+        throw new Error('No active server is available for group creation.')
+      }
+
       const members = newGroupMembers
         .split(',')
         .map((member) => member.trim())
@@ -133,11 +199,12 @@ export function useGroupChat(
         members
       })
 
-      setChatItems((current) => mergeChat(current, response.chat))
+      const mergedChat = toMergedGroupChat(response.chat, activeServer)
+      setChatItems((current) => mergeChat(current, mergedChat))
       setNewGroupTitle('')
       setNewGroupMembers('')
       setBanner({ tone: 'success', message: `Group ready: ${response.chat.title}` })
-      return response.chat.id
+      return mergedChat.id
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create group chat.'
       setBanner({ tone: 'error', message })
@@ -157,11 +224,17 @@ export function useGroupChat(
     setLoading(true)
 
     try {
-      const response = await renameGroupChat(sessionToken, activeChat.id, {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await renameGroupChat(sessionToken, rawActiveChatId, {
         title: groupRenameTitle.trim()
       })
 
-      setChatItems((current) => mergeChat(current, response.chat))
+      setChatItems((current) => mergeChat(current, toMergedGroupChat(response.chat, activeChat)))
       setGroupRenameTitle(response.chat.title)
       setBanner({ tone: 'success', message: `Group updated: ${response.chat.title}` })
     } catch (error) {
@@ -180,7 +253,13 @@ export function useGroupChat(
     setLoading(true)
 
     try {
-      const response = await updateGroupMemberRole(sessionToken, activeChat.id, member.user_id, role)
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await updateGroupMemberRole(sessionToken, rawActiveChatId, member.user_id, role)
       setGroupMembers((current) =>
         current.map((entry) => (entry.user_id === response.member.user_id ? response.member : entry))
       )
@@ -204,7 +283,13 @@ export function useGroupChat(
     setLoading(true)
 
     try {
-      const response = await removeGroupMember(sessionToken, activeChat.id, member.user_id)
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await removeGroupMember(sessionToken, rawActiveChatId, member.user_id)
       setGroupMembers((current) => current.filter((entry) => entry.user_id !== response.member.user_id))
       setChatItems((current) =>
         current.map((chat) =>
@@ -235,8 +320,14 @@ export function useGroupChat(
     setLoading(true)
 
     try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
       const recipientDevices = (
-        await listRecipientDevices(sessionToken, activeChat.id)
+        await listRecipientDevices(sessionToken, rawActiveChatId)
       ).recipient_devices.filter((device) => device.device_id !== storedDevice.deviceId)
 
       if (recipientDevices.length === 0) {
@@ -252,7 +343,7 @@ export function useGroupChat(
       )
       const currentActiveSenderKey = getActiveGroupSenderKey(activeChat.id)
       const nextEpoch = currentActiveSenderKey ? currentActiveSenderKey.epoch + 1 : 1
-      const response = await distributeGroupSenderKeys(sessionToken, activeChat.id, {
+      const response = await distributeGroupSenderKeys(sessionToken, rawActiveChatId, {
         key_id: keyId,
         sender_key_epoch: nextEpoch,
         algorithm: 'p256-ecdh+a256gcm',
@@ -261,6 +352,10 @@ export function useGroupChat(
 
       storeGroupSenderKeyMaterial(activeChat.id, keyId, senderKeyMaterialBase64)
       setActiveGroupSenderKey(activeChat.id, keyId, nextEpoch)
+      if (rawActiveChatId !== activeChat.id) {
+        storeGroupSenderKeyMaterial(rawActiveChatId, keyId, senderKeyMaterialBase64)
+        setActiveGroupSenderKey(rawActiveChatId, keyId, nextEpoch)
+      }
       setGroupSenderKeys(response.sender_keys)
       setBanner({
         tone: 'success',

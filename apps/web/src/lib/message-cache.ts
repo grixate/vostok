@@ -35,6 +35,35 @@ export type CachedMessage = {
     count: number
     reacted: boolean
   }>
+  // Phase 1: new fields for client-as-source-of-truth
+  contentType?: number       // 1=text, 2=image, 3=video, 4=file, 5=voice, 6=sticker, 9=system
+  status?: number            // 0=sending, 1=sent, 2=delivered, 3=read, 4=failed
+  receivedAt?: string        // Local receive time (ISO string)
+  mediaMetadata?: string     // JSON string: {blob_id, file_name, size, mime, width, height, duration}
+}
+
+export type CachedConversation = {
+  id: string
+  type: number               // 1=direct, 2=group, 3=channel
+  title: string | null
+  createdAt: string
+  updatedAt: string
+  lastMessageId: string | null
+  draftText: string | null
+  mutedUntil: string | null
+  pinned: boolean
+  archived: boolean
+}
+
+export type CachedContact = {
+  userId: string
+  username: string
+  displayName: string | null
+  serverDomain: string
+  identityKey: string | null
+  verified: boolean
+  blocked: boolean
+  updatedAt: string
 }
 
 const PREVIEW_PREFIX = 'vostok.chat-preview.'
@@ -59,8 +88,15 @@ export function readChatPreview(chatId: string): string | null {
 
 const CACHE_PREFIX = 'vostok.chat-cache.'
 const DB_NAME = 'vostok-offline'
-const STORE_NAME = 'messages'
-const DB_VERSION = 1
+const DB_VERSION = 2  // Bumped from 1 → 2 for Phase 1 schema upgrade
+
+// ── IndexedDB store names ───────────────────────────────────────────────
+const STORE_MESSAGES = 'messages'
+const STORE_CONVERSATIONS = 'conversations'
+const STORE_CONTACTS = 'contacts'
+const STORE_MEDIA_CACHE = 'media_cache'
+
+// ── Message cache (upgraded) ────────────────────────────────────────────
 
 export async function readCachedMessages(chatId: string): Promise<CachedMessage[]> {
   const database = await openMessageCacheDatabase()
@@ -70,8 +106,8 @@ export async function readCachedMessages(chatId: string): Promise<CachedMessage[
   }
 
   const persisted = await new Promise<CachedMessage[] | null>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, 'readonly')
-    const request = transaction.objectStore(STORE_NAME).get(chatId)
+    const transaction = database.transaction(STORE_MESSAGES, 'readonly')
+    const request = transaction.objectStore(STORE_MESSAGES).get(chatId)
 
     request.onsuccess = () => {
       const result = request.result as { chatId: string; messages: CachedMessage[] } | undefined
@@ -102,8 +138,8 @@ export async function writeCachedMessages(chatId: string, messages: CachedMessag
   }
 
   await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, 'readwrite')
-    const request = transaction.objectStore(STORE_NAME).put({
+    const transaction = database.transaction(STORE_MESSAGES, 'readwrite')
+    const request = transaction.objectStore(STORE_MESSAGES).put({
       chatId,
       messages
     })
@@ -114,6 +150,97 @@ export async function writeCachedMessages(chatId: string, messages: CachedMessag
 
   writeLegacyCachedMessages(chatId, messages)
 }
+
+// ── Conversation cache ──────────────────────────────────────────────────
+
+export async function readCachedConversations(): Promise<CachedConversation[]> {
+  const database = await openMessageCacheDatabase()
+  if (!database) return []
+
+  return new Promise<CachedConversation[]>((resolve, reject) => {
+    const transaction = database.transaction(STORE_CONVERSATIONS, 'readonly')
+    const request = transaction.objectStore(STORE_CONVERSATIONS).getAll()
+    request.onsuccess = () => resolve(request.result ?? [])
+    request.onerror = () => reject(request.error ?? new Error('Failed to read conversations.'))
+  })
+}
+
+export async function writeCachedConversation(conversation: CachedConversation): Promise<void> {
+  const database = await openMessageCacheDatabase()
+  if (!database) return
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_CONVERSATIONS, 'readwrite')
+    const request = transaction.objectStore(STORE_CONVERSATIONS).put(conversation)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error('Failed to write conversation.'))
+  })
+}
+
+// ── Contact cache ───────────────────────────────────────────────────────
+
+export async function readCachedContacts(): Promise<CachedContact[]> {
+  const database = await openMessageCacheDatabase()
+  if (!database) return []
+
+  return new Promise<CachedContact[]>((resolve, reject) => {
+    const transaction = database.transaction(STORE_CONTACTS, 'readonly')
+    const request = transaction.objectStore(STORE_CONTACTS).getAll()
+    request.onsuccess = () => resolve(request.result ?? [])
+    request.onerror = () => reject(request.error ?? new Error('Failed to read contacts.'))
+  })
+}
+
+export async function writeCachedContact(contact: CachedContact): Promise<void> {
+  const database = await openMessageCacheDatabase()
+  if (!database) return
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_CONTACTS, 'readwrite')
+    const request = transaction.objectStore(STORE_CONTACTS).put(contact)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error('Failed to write contact.'))
+  })
+}
+
+// ── Storage management ──────────────────────────────────────────────────
+
+export async function getStorageEstimate(): Promise<{ usage: number; quota: number } | null> {
+  if (navigator.storage && navigator.storage.estimate) {
+    const estimate = await navigator.storage.estimate()
+    return { usage: estimate.usage ?? 0, quota: estimate.quota ?? 0 }
+  }
+  return null
+}
+
+export async function clearAllCaches(): Promise<void> {
+  const database = await openMessageCacheDatabase()
+  if (!database) return
+
+  const storeNames = [STORE_MESSAGES, STORE_CONVERSATIONS, STORE_CONTACTS, STORE_MEDIA_CACHE]
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(storeNames, 'readwrite')
+    for (const name of storeNames) {
+      transaction.objectStore(name).clear()
+    }
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+
+  // Clear legacy localStorage caches too
+  const keysToRemove: string[] = []
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i)
+    if (key && (key.startsWith(CACHE_PREFIX) || key.startsWith(PREVIEW_PREFIX))) {
+      keysToRemove.push(key)
+    }
+  }
+  for (const key of keysToRemove) {
+    window.localStorage.removeItem(key)
+  }
+}
+
+// ── Legacy localStorage fallback ────────────────────────────────────────
 
 function readLegacyCachedMessages(chatId: string): CachedMessage[] {
   const raw = window.localStorage.getItem(`${CACHE_PREFIX}${chatId}`)
@@ -134,6 +261,8 @@ function writeLegacyCachedMessages(chatId: string, messages: CachedMessage[]) {
   window.localStorage.setItem(`${CACHE_PREFIX}${chatId}`, JSON.stringify(messages))
 }
 
+// ── Database initialization ─────────────────────────────────────────────
+
 async function openMessageCacheDatabase(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined' || typeof window.indexedDB === 'undefined') {
     return null
@@ -142,11 +271,26 @@ async function openMessageCacheDatabase(): Promise<IDBDatabase | null> {
   return new Promise<IDBDatabase | null>((resolve) => {
     const request = window.indexedDB.open(DB_NAME, DB_VERSION)
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result
+      const oldVersion = event.oldVersion
 
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: 'chatId' })
+      // V1 → V2 migration: add conversations, contacts, media_cache stores
+      if (oldVersion < 1) {
+        database.createObjectStore(STORE_MESSAGES, { keyPath: 'chatId' })
+      }
+
+      if (oldVersion < 2) {
+        if (!database.objectStoreNames.contains(STORE_CONVERSATIONS)) {
+          database.createObjectStore(STORE_CONVERSATIONS, { keyPath: 'id' })
+        }
+        if (!database.objectStoreNames.contains(STORE_CONTACTS)) {
+          database.createObjectStore(STORE_CONTACTS, { keyPath: 'userId' })
+        }
+        if (!database.objectStoreNames.contains(STORE_MEDIA_CACHE)) {
+          const mediaStore = database.createObjectStore(STORE_MEDIA_CACHE, { keyPath: 'blobId' })
+          mediaStore.createIndex('lastAccessed', 'lastAccessed')
+        }
       }
     }
 

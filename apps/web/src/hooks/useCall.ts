@@ -1,35 +1,50 @@
-import { useState, useEffect, useRef, useEffectEvent } from 'react'
+import { useState, useEffect, useRef, useEffectEvent, useMemo, useCallback } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
 import type {
   CallKeyDistribution,
   CallParticipant,
+  CallRoom,
+  CallRoomMember,
   CallRoomState,
+  CallScope,
   CallSession,
   CallSignal,
+  TurnCredentials,
   CallWebRtcEndpointState
 } from '../lib/api.ts'
 import {
   acceptCallSession,
+  createCallRoom,
+  createCallRoomSession,
   createCallSession,
   declineCallSession,
   endCallSession,
+  fetchActiveCalls,
   fetchActiveCall,
+  fetchCallRoom,
   fetchCallKeys,
   fetchCallState,
+  fetchTurnCredentials,
   fetchCallWebRtcEndpointState,
   joinCallSession,
   leaveCallSession,
+  listCallRoomRecipientDevices,
   listRecipientDevices,
   pollCallWebRtcMediaEvents,
   provisionCallWebRtcEndpoint,
   pushCallWebRtcMediaEvent,
-  rotateCallKeys
+  rotateCallKeys,
+  sendCallSignal
 } from '../lib/api.ts'
+import { getDefaultApiBaseUrl } from '../lib/api.ts'
+import { buildApiRoot } from '../lib/api-request.ts'
 import {
   attachLocalTracksToMembrane,
   cleanupMembraneClient,
+  configureMembraneTurnServers,
   connectMembraneClient,
   createMembraneClient,
+  getMembranePeerConnection,
   receiveMembraneMediaEvent,
   removeLocalTracksFromMembrane,
   updateMembraneEndpointMetadata,
@@ -37,50 +52,165 @@ import {
   type MembraneRemoteEndpointSnapshot,
   type MembraneRemoteTrackSnapshot
 } from '../lib/membrane-native.ts'
-import { wrapGroupSenderKeyForRecipients } from '../lib/message-vault.ts'
+import { unwrapWrappedGroupKey, wrapGroupSenderKeyForRecipients } from '../lib/message-vault.ts'
 import { bytesToBase64 } from '../lib/base64.ts'
 import { subscribeToCallStream } from '../lib/realtime.ts'
+import {
+  getRawChatId,
+  type MergedChatSummary
+} from '../lib/multi-server.ts'
 import { mergeCallSignals, readMembraneNativeEventType } from '../utils/call-helpers.ts'
+import {
+  deriveDirectCallStatus,
+  isCallCapabilitySupported,
+  isDirectCall,
+  shouldRefreshTurnCredentials,
+  type CallCapabilityState,
+  type DirectCallTransportReadiness
+} from '../lib/call-runtime.ts'
+import {
+  findMatchingCallChat,
+  resolveActiveCallDiscovery
+} from '../lib/call-discovery.ts'
+import {
+  loadCallStateSnapshot,
+  loadChatScopedActiveCall,
+  resolveChatScopedActiveCallDecision
+} from '../lib/call-state.ts'
+import {
+  joinExistingCallSession,
+  leaveExistingCallSession,
+  startAdHocCallSession,
+  startChatCallSession,
+  summarizeBootstrapSuccess
+} from '../lib/call-commands.ts'
+import {
+  buildJoinPayload,
+  computeNextCallKeyEpoch,
+  latestCallKeyForDevice as resolveLatestCallKeyForDevice,
+  parseMediaSignal
+} from '../lib/call-media.ts'
+import {
+  buildDirectMediaKeySignalPayload,
+  buildDirectMediaReadySignalPayload,
+  needsNewDirectMediaKeyPair,
+  resolveLocalGeneratedGroupKey,
+  shouldSyncGroupMediaEncryption
+} from '../lib/call-encryption.ts'
+import {
+  canBootstrapCallTransport,
+  deriveTurnRefreshDelay,
+  findRemoteMediaKeySignal,
+  hasMatchingRemoteReadySignal,
+  isParticipantJoined,
+  shouldAttachLocalTracks,
+  shouldPollMembraneEndpoint,
+  shouldSyncDirectMediaEncryption
+} from '../lib/call-transport.ts'
+import {
+  attachLocalTracks as attachCallLocalTracks,
+  bootstrapActiveCallTransport,
+  syncMembraneWebRtcQueue as syncCallMembraneWebRtcQueue
+} from '../lib/call-orchestration.ts'
+import {
+  syncDirectMediaEncryption as syncCallDirectMediaEncryption,
+  syncGroupMediaEncryption as syncCallGroupMediaEncryption
+} from '../lib/call-e2ee-sync.ts'
+import {
+  MediaE2eeController,
+  deriveDirectMediaSharedKey,
+  generateDirectMediaKeyPair,
+  getCallCapability,
+  type MediaEncryptionState
+} from '../lib/media-e2ee.ts'
+import {
+  describeMediaDeviceError,
+  releaseLocalMediaResources,
+  replaceLocalMediaStream,
+  stopLocalMediaStream,
+  updateHiddenVideoTrackState
+} from '../lib/call-local-media.ts'
+import {
+  acceptIncomingCall,
+  buildEndpointPingMetadata,
+  declineIncomingCall,
+  endActiveCallSession,
+  performUnloadCallCleanup,
+  pollManualWebRtcEndpoint,
+  provisionManualWebRtcEndpoint
+} from '../lib/call-runtime-actions.ts'
 import type { AuthView } from '../types.ts'
 
 export function useCall(
   view: AuthView,
   deferredActiveChatId: string | null,
-  activeChatId: string | null
+  activeChatId: string | null,
+  chatItems: MergedChatSummary[]
 ) {
-  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   const [activeCall, setActiveCall] = useState<CallSession | null>(null)
-  const [_callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
+  const [activeCallChatId, setActiveCallChatId] = useState<string | null>(null)
+  const [activeCallRoom, setActiveCallRoom] = useState<CallRoom | null>(null)
+  const [activeCallRoomMembers, setActiveCallRoomMembers] = useState<CallRoomMember[]>([])
+  const [activeCallDisplayTitle, setActiveCallDisplayTitle] = useState<string | null>(null)
+  const [callParticipants, setCallParticipants] = useState<CallParticipant[]>([])
   const [callKeys, setCallKeys] = useState<CallKeyDistribution[]>([])
-  const [_callRoom, setCallRoom] = useState<CallRoomState | null>(null)
+  const [callRoom, setCallRoom] = useState<CallRoomState | null>(null)
   const [callWebRtcEndpoint, setCallWebRtcEndpoint] = useState<CallWebRtcEndpointState | null>(null)
-  const [_callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
+  const [callWebRtcMediaEvents, setCallWebRtcMediaEvents] = useState<string[]>([])
   const [callSignals, setCallSignals] = useState<CallSignal[]>([])
-  const [_localMediaMode, setLocalMediaMode] = useState<'none' | 'audio' | 'audio_video'>('none')
+  const [, setLocalMediaMode] = useState<'none' | 'audio' | 'audio_video'>('none')
   const [localAudioTrackCount, setLocalAudioTrackCount] = useState(0)
   const [localVideoTrackCount, setLocalVideoTrackCount] = useState(0)
-  const [_membraneClientReady, setMembraneClientReady] = useState(false)
+  const [turnCredentials, setTurnCredentials] = useState<TurnCredentials | null>(null)
+  const [transportError, setTransportError] = useState<string | null>(null)
+  const [mediaEncryptionState, setMediaEncryptionState] = useState<MediaEncryptionState>('disabled')
+  const [mediaEncryptionFingerprint, setMediaEncryptionFingerprint] = useState<string | null>(null)
+  const [currentKeyEpoch, setCurrentKeyEpoch] = useState<number | null>(null)
+  const [callCapabilityState, setCallCapabilityState] = useState<CallCapabilityState>('unsupported_browser')
+  const [callCapabilityReason, setCallCapabilityReason] = useState<string | null>(null)
+  const [isEndingCall, setIsEndingCall] = useState(false)
+  const [, setMembraneClientReady] = useState(false)
   const [membraneClientConnected, setMembraneClientConnected] = useState(false)
-  const [_membraneRemoteEndpointCount, setMembraneRemoteEndpointCount] = useState(0)
-  const [_membraneRemoteTrackCount, setMembraneRemoteTrackCount] = useState(0)
-  const [_membraneReadyTrackCount, setMembraneReadyTrackCount] = useState(0)
-  const [_membraneReadyAudioTrackCount, setMembraneReadyAudioTrackCount] = useState(0)
-  const [_membraneReadyVideoTrackCount, setMembraneReadyVideoTrackCount] = useState(0)
-  const [_membraneRemoteEndpointIds, setMembraneRemoteEndpointIds] = useState<string[]>([])
-  const [_membraneRemoteTrackIds, setMembraneRemoteTrackIds] = useState<string[]>([])
+  const [, setMembraneRemoteEndpointCount] = useState(0)
+  const [, setMembraneRemoteTrackCount] = useState(0)
+  const [, setMembraneReadyTrackCount] = useState(0)
+  const [, setMembraneReadyAudioTrackCount] = useState(0)
+  const [, setMembraneReadyVideoTrackCount] = useState(0)
+  const [, setMembraneRemoteEndpointIds] = useState<string[]>([])
+  const [, setMembraneRemoteTrackIds] = useState<string[]>([])
   const [membraneRemoteEndpoints, setMembraneRemoteEndpoints] = useState<MembraneRemoteEndpointSnapshot[]>([])
   const [membraneRemoteTracks, setMembraneRemoteTracks] = useState<MembraneRemoteTrackSnapshot[]>([])
-  const [_membraneClientEndpointId, setMembraneClientEndpointId] = useState<string | null>(null)
+  const [, setMembraneClientEndpointId] = useState<string | null>(null)
 
   const callSignalsRef = useRef<CallSignal[]>([])
   const membraneClientRef = useRef<MembraneClient | null>(null)
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
   const localMediaStreamRef = useRef<MediaStream | null>(null)
+  const transportBootstrapRef = useRef<Promise<void> | null>(null)
+  const membraneConnectRequestedCallIdRef = useRef<string | null>(null)
+  const transportStateCallIdRef = useRef<string | null>(null)
+  const activeCallScanInFlightRef = useRef(false)
+  const activeCallApiBaseUrlRef = useRef(getDefaultApiBaseUrl())
+  const mediaE2eeControllerRef = useRef<MediaE2eeController | null>(null)
+  const directMediaKeyPairRef = useRef<{ callId: string; keyPair: Awaited<ReturnType<typeof generateDirectMediaKeyPair>> } | null>(null)
+  const directMediaFingerprintRef = useRef<string | null>(null)
+  const directMediaReadySentForCallRef = useRef<string | null>(null)
+  const localGeneratedCallKeysRef = useRef<Record<string, Record<number, string>>>({})
+  const hiddenVideoTrackStateRef = useRef(new WeakMap<MediaStreamTrack, boolean>())
 
   useEffect(() => {
     callSignalsRef.current = callSignals
   }, [callSignals])
+
+  function resetTransportState() {
+    setTurnCredentials(null)
+    setTransportError(null)
+    setIsEndingCall(false)
+    transportBootstrapRef.current = null
+    membraneConnectRequestedCallIdRef.current = null
+  }
 
   function resetMembraneClient() {
     void removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
@@ -88,6 +218,7 @@ export function useCall(
     membraneClientRef.current = null
     membraneClientCallIdRef.current = null
     membraneLocalTrackIdsRef.current = []
+    membraneConnectRequestedCallIdRef.current = null
     setMembraneClientReady(false)
     setMembraneClientConnected(false)
     setMembraneRemoteEndpointCount(0)
@@ -103,19 +234,84 @@ export function useCall(
   }
 
   function resetWebRtcLab() {
+    resetTransportState()
     resetMembraneClient()
+    mediaE2eeControllerRef.current?.teardown()
+    mediaE2eeControllerRef.current = null
+    directMediaKeyPairRef.current = null
+    directMediaFingerprintRef.current = null
+    directMediaReadySentForCallRef.current = null
+    hiddenVideoTrackStateRef.current = new WeakMap()
+    setMediaEncryptionState('disabled')
+    setMediaEncryptionFingerprint(null)
+    setCurrentKeyEpoch(null)
 
-    if (localMediaStreamRef.current) {
-      for (const track of localMediaStreamRef.current.getTracks()) {
-        track.stop()
-      }
-    }
+    stopLocalMediaStream(localMediaStreamRef.current)
 
     localMediaStreamRef.current = null
     setLocalMediaMode('none')
     setLocalAudioTrackCount(0)
     setLocalVideoTrackCount(0)
   }
+
+  const localDeviceId = storedDevice?.deviceId ?? null
+  const callCapability = getCallCapability()
+  const mediaEncryptionSupported = isCallCapabilitySupported(callCapability.state)
+  const callCapabilityTransport = callCapability.transport
+  const callCapabilityBrowserName = callCapability.browserName
+  const callCapabilityHostKind = callCapability.hostKind
+  const isCallSessionReady = Boolean(sessionToken)
+  const activeCallScope: CallScope | null = useMemo(
+    () =>
+      activeCall?.scope_type === 'call_room' && activeCall.call_room_id
+        ? { type: 'call_room', roomId: activeCall.call_room_id }
+        : activeCall?.chat_id
+          ? { type: 'chat', chatId: activeCall.chat_id }
+          : null,
+    [activeCall]
+  )
+  const activeChatSummary = activeChatId
+    ? chatItems.find((chat) => chat.id === activeChatId) ?? null
+    : null
+  const directCallMode =
+    activeCall?.mode === 'voice' || activeCall?.mode === 'video' ? activeCall.mode : null
+  const transportReadiness: DirectCallTransportReadiness = {
+    localMediaReady:
+      localMediaStreamRef.current !== null && localAudioTrackCount + localVideoTrackCount > 0,
+    endpointReady: Boolean(callWebRtcEndpoint?.exists),
+    turnReady: !isDirectCall(activeCall) ? false : !shouldRefreshTurnCredentials(turnCredentials),
+    membraneConnected: membraneClientConnected
+  }
+  const directCallStatus = deriveDirectCallStatus({
+    activeCall,
+    localDeviceId,
+    transportReadiness,
+    transportError,
+    isEnding: isEndingCall
+  })
+
+  useEffect(() => {
+    setCallCapabilityState(callCapability.state)
+    setCallCapabilityReason(callCapability.reason)
+  }, [callCapability.reason, callCapability.state])
+
+  const resolveCapabilityFailureMessage = useCallback((): string => {
+    return callCapability.reason ?? 'This browser does not support encrypted calling in Vostok.'
+  }, [callCapability.reason])
+
+  const ensureCallCapability = useCallback((actionLabel: string): boolean => {
+    if (isCallCapabilitySupported(callCapability.state)) {
+      return true
+    }
+
+    const message = resolveCapabilityFailureMessage()
+    setTransportError(message)
+    setBanner({
+      tone: 'error',
+      message: `${actionLabel} is unavailable. ${message}`
+    })
+    return false
+  }, [callCapability.state, resolveCapabilityFailureMessage, setBanner])
 
   function ensureMembraneClient(): MembraneClient {
     const activeCallId = activeCall?.id ?? null
@@ -142,11 +338,13 @@ export function useCall(
           .catch(() => undefined)
       },
       onConnected(payload) {
+        setTransportError(null)
         setMembraneClientConnected(true)
         setMembraneClientEndpointId(payload.endpointId)
         setMembraneRemoteEndpointCount(payload.otherEndpointCount)
       },
       onDisconnected() {
+        membraneConnectRequestedCallIdRef.current = null
         setMembraneClientConnected(false)
         setMembraneRemoteEndpointCount(0)
         setMembraneRemoteTrackCount(0)
@@ -170,6 +368,8 @@ export function useCall(
         setMembraneRemoteTracks(payload.tracks)
       },
       onConnectionError(message) {
+        membraneConnectRequestedCallIdRef.current = null
+        setTransportError(message)
         setBanner({
           tone: 'error',
           message: `Membrane WebRTC client error: ${message}`
@@ -199,17 +399,26 @@ export function useCall(
   const handleRealtimeCallState = useEffectEvent((call: CallSession | null) => {
     if (!call || call.status === 'ended') {
       setActiveCall(null)
+      setActiveCallChatId(null)
+      setActiveCallRoom(null)
+      setActiveCallRoomMembers([])
+      setActiveCallDisplayTitle(null)
       setCallParticipants([])
       setCallRoom(null)
       setCallWebRtcEndpoint(null)
       setCallWebRtcMediaEvents([])
       callSignalsRef.current = []
       setCallSignals([])
+      resetWebRtcLab()
       return
     }
 
     // Accept ringing and active states from realtime
+    setIsEndingCall(false)
     setActiveCall(call)
+    if (call.display_title) {
+      setActiveCallDisplayTitle(call.display_title)
+    }
   })
 
   const handleRealtimeCallParticipants = useEffectEvent(
@@ -262,10 +471,38 @@ export function useCall(
     }
   })
 
+  useEffect(() => {
+    const nextCallId = activeCall?.id ?? null
+
+    if (transportStateCallIdRef.current === nextCallId) {
+      return
+    }
+
+    transportStateCallIdRef.current = nextCallId
+    if (nextCallId) {
+      activeCallApiBaseUrlRef.current = getDefaultApiBaseUrl()
+    }
+    resetTransportState()
+  }, [activeCall?.id])
+
   // Load active call on chat change
   useEffect(() => {
-    if (!sessionToken || !deferredActiveChatId || view !== 'chat') {
+    const decision =
+      sessionToken && view === 'chat'
+        ? resolveChatScopedActiveCallDecision(
+            activeCall,
+            activeCallChatId,
+            deferredActiveChatId,
+            getRawChatId
+          )
+        : { kind: 'reset_all' as const }
+
+    if (!sessionToken || view !== 'chat' || decision.kind === 'reset_all') {
       setActiveCall(null)
+      setActiveCallChatId(null)
+      setActiveCallRoom(null)
+      setActiveCallRoomMembers([])
+      setActiveCallDisplayTitle(null)
       setCallParticipants([])
       setCallKeys([])
       setCallRoom(null)
@@ -278,19 +515,51 @@ export function useCall(
     }
 
     const token0 = sessionToken
-    const chatId = deferredActiveChatId
     let cancelled = false
+
+    if (decision.kind === 'preserve_current' || decision.kind === 'preserve_other_chat') {
+      return
+    }
+
+    if (decision.kind === 'clear_current') {
+      setActiveCall(null)
+      setActiveCallChatId(null)
+      setActiveCallRoom(null)
+      setActiveCallRoomMembers([])
+      setActiveCallDisplayTitle(null)
+      return
+    }
+
+    if (decision.kind !== 'load') {
+      return
+    }
+
+    const targetRawChatId = decision.rawChatId
 
     async function loadActiveCall() {
       try {
-        const response = await fetchActiveCall(token0, chatId)
+        const response = await loadChatScopedActiveCall(
+          token0,
+          targetRawChatId,
+          deferredActiveChatId!,
+          chatItems,
+          fetchActiveCall
+        )
 
         if (!cancelled) {
           setActiveCall(response.call)
+          setActiveCallChatId(response.activeCallChatId)
+          setActiveCallRoom(null)
+          setActiveCallRoomMembers([])
+          setActiveCallDisplayTitle(response.displayTitle)
         }
       } catch {
         if (!cancelled) {
           setActiveCall(null)
+          setActiveCallChatId(null)
+          setActiveCallRoom(null)
+          setActiveCallRoomMembers([])
+          setActiveCallDisplayTitle(null)
         }
       }
     }
@@ -301,7 +570,87 @@ export function useCall(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deferredActiveChatId, sessionToken, view])
+  }, [activeCall, activeCallChatId, deferredActiveChatId, sessionToken, view])
+
+  const refreshActiveCallDiscovery = useEffectEvent(async () => {
+    if (!sessionToken || view !== 'chat' || activeCallScanInFlightRef.current) {
+      return
+    }
+
+    activeCallScanInFlightRef.current = true
+
+    try {
+      const response = await fetchActiveCalls(sessionToken)
+      const nextCall = response.calls[0] ?? null
+
+      if (!nextCall) {
+        if (!activeCall || activeCall.status === 'ringing' || activeCall.status === 'active') {
+          setActiveCall(null)
+          setActiveCallChatId(null)
+          setActiveCallRoom(null)
+          setActiveCallRoomMembers([])
+          setActiveCallDisplayTitle(null)
+        }
+        return
+      }
+
+      const discovery = resolveActiveCallDiscovery(nextCall, chatItems, {
+        activeCall,
+        activeCallChatId,
+        activeCallRoomId: activeCallRoom?.id ?? null,
+        activeCallRoomMemberCount: activeCallRoomMembers.length,
+        activeCallDisplayTitle
+      })
+
+      if (discovery.matchesCurrentCall) {
+        return
+      }
+
+      setActiveCall(nextCall)
+
+      if (nextCall.scope_type === 'chat' && nextCall.chat_id) {
+        setActiveCallChatId(discovery.nextChatId)
+        setActiveCallRoom(null)
+        setActiveCallRoomMembers([])
+        setActiveCallDisplayTitle(discovery.nextDisplayTitle)
+        return
+      }
+
+      if (discovery.requiresRoomFetch && nextCall.call_room_id) {
+        const roomResponse = await fetchCallRoom(sessionToken, nextCall.call_room_id)
+        setActiveCallChatId(null)
+        setActiveCallRoom(roomResponse.room)
+        setActiveCallRoomMembers(roomResponse.members)
+        setActiveCallDisplayTitle(roomResponse.room.title)
+      }
+    } catch {
+      // Ignore background discovery failures; the focused chat call flow remains available.
+    } finally {
+      activeCallScanInFlightRef.current = false
+    }
+  })
+
+  // Detect active and incoming calls across both chat-backed and ephemeral room scopes.
+  useEffect(() => {
+    if (!sessionToken || view !== 'chat') {
+      return
+    }
+
+    const pollIntervalMs =
+      activeCall && (activeCall.status === 'ringing' || activeCall.status === 'active')
+        ? 15_000
+        : 4_000
+
+    void refreshActiveCallDiscovery()
+
+    const intervalId = window.setInterval(() => {
+      void refreshActiveCallDiscovery()
+    }, pollIntervalMs)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [activeCall, refreshActiveCallDiscovery, sessionToken, view])
 
   // Load call state when active call changes
   useEffect(() => {
@@ -309,6 +658,8 @@ export function useCall(
       setCallParticipants([])
       setCallKeys([])
       setCallRoom(null)
+      setActiveCallRoom(null)
+      setActiveCallRoomMembers([])
       setCallWebRtcEndpoint(null)
       setCallWebRtcMediaEvents([])
       callSignalsRef.current = []
@@ -318,35 +669,44 @@ export function useCall(
     }
 
     const token = sessionToken
-    const callId = activeCall.id
+    const currentCall = activeCall
+    const callId = currentCall.id
     let cancelled = false
     setCallWebRtcMediaEvents([])
 
     async function loadCallState() {
       try {
-        const response = await fetchCallState(token, callId)
+        const snapshot = await loadCallStateSnapshot({
+          token,
+          call: currentCall,
+          activeCallChatId,
+          chatItems,
+          fetchCallState,
+          fetchCallRoom,
+          fetchCallKeys,
+          fetchCallWebRtcEndpointState,
+          findMatchingCallChat
+        })
 
         if (!cancelled) {
-          setCallParticipants(response.participants)
-          callSignalsRef.current = response.signals
-          setCallSignals(response.signals)
-          setCallRoom(response.room)
-          const callKeysResponse = await fetchCallKeys(token, callId)
-          if (!cancelled) {
-            setCallKeys(callKeysResponse.keys)
-          }
-          const endpointResponse = await fetchCallWebRtcEndpointState(token, callId)
-
-          if (!cancelled) {
-            setCallWebRtcEndpoint(endpointResponse.endpoint)
-            setCallRoom(endpointResponse.room ?? response.room)
-          }
+          setTransportError(null)
+          setCallParticipants(snapshot.participants)
+          callSignalsRef.current = snapshot.signals
+          setCallSignals(snapshot.signals)
+          setCallRoom(snapshot.room)
+          setActiveCallRoom(snapshot.activeCallRoom)
+          setActiveCallRoomMembers(snapshot.activeCallRoomMembers)
+          setActiveCallDisplayTitle(snapshot.displayTitle)
+          setCallKeys(snapshot.callKeys)
+          setCallWebRtcEndpoint(snapshot.endpoint)
         }
       } catch {
         if (!cancelled) {
           setCallParticipants([])
           setCallKeys([])
           setCallRoom(null)
+          setActiveCallRoom(null)
+          setActiveCallRoomMembers([])
           setCallWebRtcEndpoint(null)
           setCallWebRtcMediaEvents([])
           callSignalsRef.current = []
@@ -363,14 +723,195 @@ export function useCall(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCall, sessionToken, view])
 
-  // Poll Membrane WebRTC endpoint
-  useEffect(() => {
-    if (!sessionToken || !activeCall || view !== 'chat' || !callWebRtcEndpoint?.exists) {
+  const latestCallKeyForDevice = useCallback((call: CallSession | null): CallKeyDistribution | null => {
+    return resolveLatestCallKeyForDevice(call, callKeys, storedDevice?.deviceId ?? null)
+  }, [callKeys, storedDevice?.deviceId])
+
+  async function rotateGroupCallKeysFor(call: CallSession, opts?: { quiet?: boolean }) {
+    if (!sessionToken || !storedDevice || call.mode !== 'group') {
+      return null
+    }
+
+    const recipientDeviceResponse =
+      call.scope_type === 'call_room' && call.call_room_id
+        ? await listCallRoomRecipientDevices(sessionToken, call.call_room_id)
+        : call.chat_id
+          ? await listRecipientDevices(sessionToken, call.chat_id)
+          : { recipient_devices: [] }
+
+    const targetRecipients = recipientDeviceResponse.recipient_devices.filter(
+      (device) => device.device_id !== storedDevice.deviceId
+    )
+
+    if (targetRecipients.length === 0) {
+      return null
+    }
+
+    const keyMaterial = bytesToBase64(window.crypto.getRandomValues(new Uint8Array(32)))
+    const wrappedKeys = await wrapGroupSenderKeyForRecipients(keyMaterial, targetRecipients)
+    const nextEpoch = computeNextCallKeyEpoch(callKeys)
+    const nextLocalKeys = { ...(localGeneratedCallKeysRef.current[call.id] ?? {}), [nextEpoch]: keyMaterial }
+    localGeneratedCallKeysRef.current = {
+      ...localGeneratedCallKeysRef.current,
+      [call.id]: nextLocalKeys
+    }
+    const response = await rotateCallKeys(sessionToken, call.id, {
+      key_epoch: nextEpoch,
+      algorithm: 'sframe-aes-gcm-v1',
+      wrapped_keys: wrappedKeys
+    })
+
+    setCallKeys(response.keys)
+
+    if (!opts?.quiet) {
+      setBanner({
+        tone: 'success',
+        message: `Call key epoch ${nextEpoch} rotated for ${response.keys.length} participant device${response.keys.length === 1 ? '' : 's'}.`
+      })
+    }
+
+    return response.keys
+  }
+
+  function ensureMediaE2eeController() {
+    if (!mediaE2eeControllerRef.current) {
+      mediaE2eeControllerRef.current = new MediaE2eeController()
+    }
+
+    return mediaE2eeControllerRef.current
+  }
+  const bootstrapDirectCallTransport = useEffectEvent(async () => {
+    if (!canBootstrapCallTransport({
+      activeCall,
+      sessionToken,
+      storedDeviceId: storedDevice?.deviceId ?? null,
+      view
+    })) {
       return
     }
 
+    if (!sessionToken || !activeCall || !storedDevice) {
+      return
+    }
+    const currentSessionToken = sessionToken
+    const currentCall = activeCall
+    const currentDevice = storedDevice
+
+    if (!ensureCallCapability('Call transport')) {
+      return
+    }
+
+    if (transportBootstrapRef.current) {
+      await transportBootstrapRef.current
+      return
+    }
+
+    const bootstrap = (async () => {
+      setTransportError(null)
+      const result = await bootstrapActiveCallTransport({
+        currentCall,
+        currentDevice,
+        currentSessionToken,
+        turnCredentials,
+        shouldRefreshTurnCredentials,
+        fetchTurnCredentials,
+        callParticipants,
+        isParticipantJoined,
+        latestCallKey: latestCallKeyForDevice(currentCall),
+        rotateGroupCallKeysFor,
+        buildJoinPayload,
+        joinCallSession,
+        currentEndpoint: callWebRtcEndpoint,
+        currentRoom: callRoom,
+        provisionCallWebRtcEndpoint,
+        ensureMembraneClient,
+        configureMembraneTurnServers,
+        membraneClientConnected,
+        membraneConnectRequestedCallId: membraneConnectRequestedCallIdRef.current,
+        connectMembraneClient
+      })
+
+      setTurnCredentials(result.turnCredentials)
+      if (result.participants) {
+        setCallParticipants(result.participants)
+      }
+      setCallRoom(result.room)
+      setCallWebRtcEndpoint(result.endpoint)
+      membraneConnectRequestedCallIdRef.current = result.membraneConnectRequestedCallId
+    })()
+      .catch((error) => {
+        const message =
+          error instanceof Error ? error.message : 'Failed to initialize direct call transport.'
+        setTransportError(message)
+        setBanner({ tone: 'error', message })
+      })
+      .finally(() => {
+        transportBootstrapRef.current = null
+      })
+
+    transportBootstrapRef.current = bootstrap
+    await bootstrap
+  })
+
+  useEffect(() => {
+    if (!canBootstrapCallTransport({
+      activeCall,
+      sessionToken,
+      storedDeviceId: storedDevice?.deviceId ?? null,
+      view
+    })) {
+      return
+    }
+
+    void bootstrapDirectCallTransport()
+  }, [
+    activeCall,
+    callParticipants,
+    callRoom,
+    callWebRtcEndpoint,
+    membraneClientConnected,
+    sessionToken,
+    storedDevice,
+    turnCredentials,
+    view
+  ])
+
+  useEffect(() => {
+    if (!activeCall || activeCall.status !== 'active' || !turnCredentials) {
+      return
+    }
+
+    const refreshInMs = deriveTurnRefreshDelay(turnCredentials)
+
+    if (refreshInMs == null) {
+      return
+    }
+    const timeoutId = window.setTimeout(() => {
+      setTurnCredentials((current) => (shouldRefreshTurnCredentials(current) ? null : current))
+    }, refreshInMs)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [activeCall, turnCredentials])
+
+  // Poll Membrane WebRTC endpoint
+  useEffect(() => {
+    if (!shouldPollMembraneEndpoint({
+      activeCall,
+      sessionToken,
+      view,
+      endpointExists: Boolean(callWebRtcEndpoint?.exists)
+    })) {
+      return
+    }
+
+    if (!sessionToken || !activeCall) {
+      return
+    }
     const token2 = sessionToken
-    const callId = activeCall.id
+    const currentCall = activeCall
+    const callId = currentCall.id
     let cancelled = false
     let inFlight = false
 
@@ -382,11 +923,15 @@ export function useCall(
       inFlight = true
 
       try {
-        const response = await pollCallWebRtcMediaEvents(token2, callId)
+        const response = await syncCallMembraneWebRtcQueue(
+          token2,
+          callId,
+          pollCallWebRtcMediaEvents
+        )
 
         if (!cancelled) {
           setCallWebRtcEndpoint(response.endpoint)
-          handleMembraneQueueBatch(response.media_events)
+          handleMembraneQueueBatch(response.mediaEvents)
         }
       } catch {
         // Ignore transient poll errors and continue interval polling.
@@ -396,7 +941,7 @@ export function useCall(
     }
 
     void syncMembraneWebRtcQueue()
-    const intervalId = window.setInterval(() => void syncMembraneWebRtcQueue(), 3_000)
+    const intervalId = window.setInterval(() => void syncMembraneWebRtcQueue(), 1_000)
 
     return () => {
       cancelled = true
@@ -406,28 +951,34 @@ export function useCall(
 
   // Attach local tracks to Membrane
   useEffect(() => {
-    if (
-      !activeCall ||
-      !sessionToken ||
-      view !== 'chat' ||
-      !membraneClientConnected ||
-      !membraneClientRef.current ||
-      !localMediaStreamRef.current
-    ) {
-      return
-    }
-
-    if (membraneLocalTrackIdsRef.current.length > 0) {
+    if (!shouldAttachLocalTracks({
+      activeCall,
+      sessionToken,
+      view,
+      membraneClientConnected,
+      hasMembraneClient: Boolean(membraneClientRef.current),
+      hasLocalMediaStream: Boolean(localMediaStreamRef.current),
+      localTrackIdsAttached: membraneLocalTrackIdsRef.current.length > 0
+    })) {
       return
     }
 
     const membraneClient = membraneClientRef.current
     const localStream = localMediaStreamRef.current
+    if (!membraneClient || !localStream) {
+      return
+    }
+    const currentMembraneClient = membraneClient
+    const currentLocalStream = localStream
     let cancelled = false
 
     async function syncTracks() {
       try {
-        const trackIds = await attachLocalTracksToMembrane(membraneClient, localStream)
+        const trackIds = await attachCallLocalTracks(
+          currentMembraneClient,
+          currentLocalStream,
+          attachLocalTracksToMembrane
+        )
 
         if (!cancelled) {
           membraneLocalTrackIdsRef.current = trackIds
@@ -448,17 +999,196 @@ export function useCall(
     return () => {
       cancelled = true
     }
-  }, [activeCall, localAudioTrackCount, localVideoTrackCount, membraneClientConnected, sessionToken, view])
+  }, [activeCall, localAudioTrackCount, localVideoTrackCount, membraneClientConnected, sessionToken, setBanner, view])
 
-  // Subscribe to call stream
   useEffect(() => {
-    if (!sessionToken || !deferredActiveChatId || view !== 'chat') {
+    if (!activeCall || activeCall.status !== 'active') {
       return
     }
 
-    const chatId = deferredActiveChatId
+    if (!mediaEncryptionSupported) {
+      setTransportError(resolveCapabilityFailureMessage())
+      return
+    }
 
-    return subscribeToCallStream(sessionToken, chatId, {
+    if (!mediaEncryptionSupported || !membraneClientConnected) {
+      return
+    }
+
+    const connection = getMembranePeerConnection(membraneClientRef.current)
+
+    if (!connection) {
+      return
+    }
+
+    ensureMediaE2eeController().attach(connection)
+  }, [activeCall, mediaEncryptionSupported, membraneClientConnected, resolveCapabilityFailureMessage])
+
+  useEffect(() => {
+    if (!activeCall || (activeCall.status !== 'ringing' && activeCall.status !== 'active')) {
+      return
+    }
+
+    if (mediaEncryptionSupported) {
+      return
+    }
+
+    setTransportError(resolveCapabilityFailureMessage())
+  }, [activeCall, mediaEncryptionSupported, resolveCapabilityFailureMessage])
+
+  useEffect(() => {
+    const groupMediaSyncState = shouldSyncGroupMediaEncryption(
+      activeCall,
+      mediaEncryptionSupported,
+      storedDevice,
+      membraneClientConnected
+    )
+
+    if (groupMediaSyncState === 'skip') {
+      return
+    }
+
+    if (groupMediaSyncState === 'disabled') {
+      setMediaEncryptionState('disabled')
+      setMediaEncryptionFingerprint(null)
+      setCurrentKeyEpoch(null)
+      return
+    }
+
+    if (!activeCall || !storedDevice) {
+      return
+    }
+
+    const currentCall = activeCall
+    const currentDevice = storedDevice
+    let cancelled = false
+
+    async function syncGroupMediaEncryption() {
+      const result = await syncCallGroupMediaEncryption({
+        activeCall: currentCall,
+        currentDevice,
+        latestCallKey: latestCallKeyForDevice(currentCall),
+        localGeneratedCallKeys: localGeneratedCallKeysRef.current,
+        resolveLocalGeneratedGroupKey,
+        unwrapWrappedGroupKey,
+        membraneClient: membraneClientRef.current,
+        getPeerConnection: (client) => getMembranePeerConnection(client as MembraneClient | null),
+        ensureController: ensureMediaE2eeController,
+        updateControllerKey: (controller, keyMaterialBase64) => controller.updateKey(keyMaterialBase64),
+        attachController: (controller, connection) => controller.attach(connection)
+      })
+
+      if (cancelled) {
+        return
+      }
+
+      setMediaEncryptionState(result.state)
+      setCurrentKeyEpoch(result.currentKeyEpoch)
+      setMediaEncryptionFingerprint(result.fingerprint)
+    }
+
+    void syncGroupMediaEncryption()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeCall, callKeys, latestCallKeyForDevice, mediaEncryptionSupported, membraneClientConnected, storedDevice])
+
+  useEffect(() => {
+    const directMediaSyncState = shouldSyncDirectMediaEncryption(
+      activeCall,
+      mediaEncryptionSupported,
+      sessionToken,
+      membraneClientConnected
+    )
+
+    if (directMediaSyncState === 'skip') {
+      return
+    }
+
+    if (directMediaSyncState === 'disabled') {
+      setMediaEncryptionState('disabled')
+      setMediaEncryptionFingerprint(null)
+      setCurrentKeyEpoch(null)
+      return
+    }
+
+    if (directMediaSyncState === 'negotiating') {
+      setMediaEncryptionState('negotiating')
+      return
+    }
+
+    if (!activeCall || !sessionToken) {
+      return
+    }
+    const currentCall = activeCall
+    const currentSessionToken = sessionToken
+    let cancelled = false
+
+    async function syncDirectMediaEncryption() {
+      setMediaEncryptionState('negotiating')
+
+      const result = await syncCallDirectMediaEncryption({
+        activeCall: currentCall,
+        sessionToken: currentSessionToken,
+        callSignals,
+        localDeviceId,
+        currentPairEntry: directMediaKeyPairRef.current,
+        readySentForCallId: directMediaReadySentForCallRef.current,
+        needsNewDirectMediaKeyPair,
+        generateDirectMediaKeyPair,
+        sendCallSignal,
+        buildDirectMediaKeySignalPayload,
+        findRemoteMediaKeySignal,
+        parseMediaSignal,
+        deriveDirectMediaSharedKey,
+        membraneClient: membraneClientRef.current,
+        getPeerConnection: (client) => getMembranePeerConnection(client as MembraneClient | null),
+        ensureController: ensureMediaE2eeController,
+        updateControllerKey: (controller, keyMaterialBase64) => controller.updateKey(keyMaterialBase64),
+        attachController: (controller, connection) => controller.attach(connection),
+        buildDirectMediaReadySignalPayload,
+        hasMatchingRemoteReadySignal
+      })
+
+      if (cancelled) {
+        return
+      }
+
+      directMediaKeyPairRef.current = result.nextPairEntry
+      directMediaReadySentForCallRef.current = result.readySentForCallId
+      directMediaFingerprintRef.current = result.fingerprint
+      setMediaEncryptionFingerprint(result.fingerprint)
+      setCurrentKeyEpoch(result.currentKeyEpoch)
+      setMediaEncryptionState(result.state)
+    }
+
+    void syncDirectMediaEncryption().catch((error) => {
+      if (!cancelled) {
+        const message = error instanceof Error ? error.message : 'Media encryption failed.'
+        setMediaEncryptionState('error')
+        setTransportError(message)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeCall, callSignals, localDeviceId, mediaEncryptionSupported, membraneClientConnected, sessionToken])
+
+  // Subscribe to call stream
+  useEffect(() => {
+    const subscribedScope =
+      activeCallScope ??
+      (deferredActiveChatId && getRawChatId(deferredActiveChatId)
+        ? { type: 'chat', chatId: getRawChatId(deferredActiveChatId)! }
+        : null)
+
+    if (!sessionToken || !subscribedScope || view !== 'chat') {
+      return
+    }
+
+    return subscribeToCallStream(sessionToken, subscribedScope, {
       onState(call) {
         handleRealtimeCallState(call)
       },
@@ -470,21 +1200,80 @@ export function useCall(
       },
       onError: handleRealtimeCallSubscriptionError
     })
-  }, [deferredActiveChatId, sessionToken, view])
+  }, [activeCallScope, deferredActiveChatId, sessionToken, view])
 
   async function handleStartCall(mode: 'voice' | 'video' | 'group') {
-    if (!sessionToken || !activeChatId) {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId) {
+      return
+    }
+
+    if (!ensureCallCapability(mode === 'group' ? 'Group call setup' : 'Call setup')) {
       return
     }
 
     setLoading(true)
+    resetTransportState()
 
     try {
-      const response = await createCallSession(sessionToken, activeChatId, { mode })
-      setActiveCall(response.call)
-      setBanner({ tone: 'success', message: `${mode} call session is now active.` })
+      const result = await startChatCallSession(
+        sessionToken,
+        rawActiveChatId,
+        activeChatId,
+        activeChatSummary,
+        mode,
+        createCallSession
+      )
+      setActiveCall(result.call)
+      setActiveCallChatId(result.activeCallChatId)
+      setActiveCallRoom(null)
+      setActiveCallRoomMembers([])
+      setActiveCallDisplayTitle(result.displayTitle)
+      setBanner({
+        tone: 'success',
+        message: result.message
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start call.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleStartAdHocCall(participantIds: string[], mediaMode: 'voice' | 'video', title?: string) {
+    if (!sessionToken || participantIds.length === 0) {
+      return
+    }
+
+    if (!ensureCallCapability('Ad-hoc group calling')) {
+      return
+    }
+
+    setLoading(true)
+    resetTransportState()
+
+    try {
+      const result = await startAdHocCallSession(
+        sessionToken,
+        participantIds,
+        mediaMode,
+        title,
+        createCallRoom,
+        createCallRoomSession
+      )
+      setActiveCall(result.call)
+      setActiveCallChatId(null)
+      setActiveCallRoom(result.room)
+      setActiveCallRoomMembers(result.members)
+      setActiveCallDisplayTitle(result.displayTitle)
+      setBanner({
+        tone: 'success',
+        message: result.message
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start ad-hoc group call.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -496,12 +1285,21 @@ export function useCall(
       return
     }
 
+    if (!ensureCallCapability('Accepting calls')) {
+      return
+    }
+
     setLoading(true)
 
     try {
-      const response = await acceptCallSession(sessionToken, activeCall.id)
-      setActiveCall(response.call)
-      setBanner({ tone: 'success', message: 'Call accepted.' })
+      const result = await acceptIncomingCall(
+        sessionToken,
+        activeCall.id,
+        acceptCallSession
+      )
+      setTransportError(null)
+      setActiveCall(result.call)
+      setBanner({ tone: 'success', message: result.message })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to accept call.'
       setBanner({ tone: 'error', message })
@@ -515,13 +1313,21 @@ export function useCall(
       return
     }
 
+    setIsEndingCall(true)
     setLoading(true)
 
     try {
-      const response = await declineCallSession(sessionToken, activeCall.id)
-      setActiveCall(response.call.status === 'ended' ? null : response.call)
-      setBanner({ tone: 'info', message: 'Call declined.' })
+      const result = await declineIncomingCall(
+        sessionToken,
+        activeCall.id,
+        activeCallChatId,
+        declineCallSession
+      )
+      setActiveCall(result.call)
+      setActiveCallChatId(result.activeCallChatId)
+      setBanner({ tone: 'info', message: result.message })
     } catch (error) {
+      setIsEndingCall(false)
       const message = error instanceof Error ? error.message : 'Failed to decline call.'
       setBanner({ tone: 'error', message })
     } finally {
@@ -534,13 +1340,21 @@ export function useCall(
       return
     }
 
+    setIsEndingCall(true)
     setLoading(true)
 
     try {
-      const response = await endCallSession(sessionToken, activeCall.id)
-      setActiveCall(response.call.status === 'active' ? response.call : null)
-      setBanner({ tone: 'success', message: 'Call session ended.' })
+      const result = await endActiveCallSession(
+        sessionToken,
+        activeCall.id,
+        activeCallChatId,
+        endCallSession
+      )
+      setActiveCall(result.call)
+      setActiveCallChatId(result.activeCallChatId)
+      setBanner({ tone: 'success', message: result.message })
     } catch (error) {
+      setIsEndingCall(false)
       const message = error instanceof Error ? error.message : 'Failed to end call.'
       setBanner({ tone: 'error', message })
     } finally {
@@ -553,48 +1367,38 @@ export function useCall(
       return
     }
 
-    const latestCallKey =
-      activeCall.mode === 'group'
-        ? [...callKeys].sort((left, right) => right.key_epoch - left.key_epoch)[0] ?? null
-        : null
-
-    if (activeCall.mode === 'group' && !latestCallKey) {
-      setBanner({
-        tone: 'error',
-        message:
-          'Group call join is blocked until a call key epoch is distributed. Rotate call keys first.'
-      })
+    if (!ensureCallCapability('Joining the active call')) {
       return
     }
 
-    const trackKind = activeCall.mode === 'voice' ? 'audio' : 'audio_video'
     setLoading(true)
 
     try {
-      const joinPayload: {
-        track_kind: 'audio' | 'video' | 'audio_video'
-        e2ee_capable?: boolean
-        e2ee_algorithm?: string
-        e2ee_key_epoch?: number
-      } = {
-        track_kind: trackKind
+      const result = await joinExistingCallSession({
+        sessionToken,
+        activeCall,
+        storedDevice,
+        latestCallKey: latestCallKeyForDevice(activeCall),
+        rotateGroupCallKeysFor,
+        buildJoinPayload,
+        joinCallSession,
+        fetchCallWebRtcEndpointState
+      })
+
+      if ('blockedMessage' in result) {
+        setBanner({
+          tone: 'error',
+          message: result.blockedMessage
+        })
+        return
       }
 
-      if (activeCall.mode === 'group' && latestCallKey) {
-        joinPayload.e2ee_capable = true
-        joinPayload.e2ee_algorithm = latestCallKey.algorithm
-        joinPayload.e2ee_key_epoch = latestCallKey.key_epoch
-      }
-
-      const response = await joinCallSession(sessionToken, activeCall.id, joinPayload)
-      setCallParticipants(response.participants)
-      setCallRoom(response.room)
-      const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, activeCall.id)
-      setCallWebRtcEndpoint(endpointResponse.endpoint)
-      setCallRoom(endpointResponse.room ?? response.room)
+      setCallParticipants(result.participants)
+      setCallRoom(result.room)
+      setCallWebRtcEndpoint(result.endpoint)
       setBanner({
         tone: 'success',
-        message: `Joined the Membrane room as ${trackKind.replace('_', '+')} and the device endpoint is ready.`
+        message: result.message
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to join the active call.'
@@ -605,38 +1409,14 @@ export function useCall(
   }
 
   async function _handleRotateCallKeyEpoch() {
-    if (!sessionToken || !storedDevice || !activeCall || !activeChatId) {
+    if (!sessionToken || !storedDevice || !activeCall) {
       return
     }
 
     setLoading(true)
 
     try {
-      const recipientDeviceResponse = await listRecipientDevices(sessionToken, activeChatId)
-
-      const targetRecipients = recipientDeviceResponse.recipient_devices.filter(
-        (device) => device.device_id !== storedDevice.deviceId
-      )
-
-      if (targetRecipients.length === 0) {
-        throw new Error('No active recipient devices are available for call key rotation.')
-      }
-
-      const keyMaterial = bytesToBase64(window.crypto.getRandomValues(new Uint8Array(32)))
-      const wrappedKeys = await wrapGroupSenderKeyForRecipients(keyMaterial, targetRecipients)
-      const nextEpoch = Math.max(0, ...callKeys.map((key) => key.key_epoch)) + 1
-
-      const response = await rotateCallKeys(sessionToken, activeCall.id, {
-        key_epoch: nextEpoch,
-        algorithm: 'sframe-aes-gcm-v1',
-        wrapped_keys: wrappedKeys
-      })
-
-      setCallKeys(response.keys)
-      setBanner({
-        tone: 'success',
-        message: `Call key epoch ${nextEpoch} rotated for ${response.keys.length} participant device${response.keys.length === 1 ? '' : 's'}.`
-      })
+      await rotateGroupCallKeysFor(activeCall)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to rotate call key epoch.'
       setBanner({ tone: 'error', message })
@@ -650,17 +1430,24 @@ export function useCall(
       return
     }
 
+    setIsEndingCall(true)
     setLoading(true)
 
     try {
-      const response = await leaveCallSession(sessionToken, activeCall.id)
-      setCallParticipants(response.participants)
-      setCallRoom(response.room)
-      const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, activeCall.id)
-      setCallWebRtcEndpoint(endpointResponse.endpoint)
+      const result = await leaveExistingCallSession(
+        sessionToken,
+        activeCall,
+        leaveCallSession,
+        fetchCallWebRtcEndpointState
+      )
+      setIsEndingCall(false)
+      setCallParticipants(result.participants)
+      setCallRoom(result.room)
+      setCallWebRtcEndpoint(result.endpoint)
       setCallWebRtcMediaEvents([])
-      setBanner({ tone: 'success', message: 'Left the active Membrane room.' })
+      setBanner({ tone: 'success', message: result.message })
     } catch (error) {
+      setIsEndingCall(false)
       const message = error instanceof Error ? error.message : 'Failed to leave the active call.'
       setBanner({ tone: 'error', message })
     } finally {
@@ -676,12 +1463,16 @@ export function useCall(
     setLoading(true)
 
     try {
-      const response = await provisionCallWebRtcEndpoint(sessionToken, activeCall.id)
-      setCallWebRtcEndpoint(response.endpoint)
-      setCallRoom(response.room)
+      const result = await provisionManualWebRtcEndpoint(
+        sessionToken,
+        activeCall.id,
+        provisionCallWebRtcEndpoint
+      )
+      setCallWebRtcEndpoint(result.endpoint)
+      setCallRoom(result.room)
       setBanner({
         tone: 'success',
-        message: `Membrane WebRTC endpoint ready for ${response.endpoint.endpoint_id}.`
+        message: result.message
       })
     } catch (error) {
       const message =
@@ -700,25 +1491,17 @@ export function useCall(
     setLoading(true)
 
     try {
-      const response = await pollCallWebRtcMediaEvents(sessionToken, activeCall.id)
-      setCallWebRtcEndpoint(response.endpoint)
-      setCallWebRtcMediaEvents((current) =>
-        [...response.media_events.reverse(), ...current].slice(0, 8)
+      const result = await pollManualWebRtcEndpoint(
+        sessionToken,
+        activeCall.id,
+        syncCallMembraneWebRtcQueue,
+        pollCallWebRtcMediaEvents
       )
-
-      const nativeEventCount = response.media_events.reduce((count, eventPayload) => {
-        return readMembraneNativeEventType(eventPayload) === null ? count : count + 1
-      }, 0)
-
-      setBanner({
-        tone: 'success',
-        message:
-          response.media_events.length > 0
-            ? nativeEventCount > 0
-              ? `Polled ${response.media_events.length} outbound Membrane media event${response.media_events.length === 1 ? '' : 's'}, including ${nativeEventCount} native protocol event${nativeEventCount === 1 ? '' : 's'}.`
-              : `Polled ${response.media_events.length} outbound Membrane media event${response.media_events.length === 1 ? '' : 's'}.`
-            : 'Membrane WebRTC endpoint has no queued outbound media events.'
-      })
+      setCallWebRtcEndpoint(result.endpoint)
+      setCallWebRtcMediaEvents((current) =>
+        [...result.mediaEvents.reverse(), ...current].slice(0, 8)
+      )
+      setBanner({ tone: 'success', message: result.message })
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to poll the Membrane WebRTC endpoint.'
@@ -742,11 +1525,7 @@ export function useCall(
         throw new Error('Initialize WebRTC + Membrane before sending native endpoint updates.')
       }
 
-      updateMembraneEndpointMetadata(client, {
-        pinged_at: new Date().toISOString(),
-        source: 'web-client',
-        mode: activeCall.mode
-      })
+      updateMembraneEndpointMetadata(client, buildEndpointPingMetadata(activeCall))
       setBanner({
         tone: 'success',
         message: 'Endpoint metadata update sent through the Membrane WebRTC client.'
@@ -765,26 +1544,45 @@ export function useCall(
       return
     }
 
+    if (!ensureCallCapability('WebRTC initialization')) {
+      return
+    }
+
     setLoading(true)
 
     try {
-      const endpointResponse = await provisionCallWebRtcEndpoint(sessionToken, activeCall.id)
-      const client = ensureMembraneClient()
-      if (!membraneClientConnected) {
-        connectMembraneClient(client, {
-          call_id: activeCall.id,
-          device_id: storedDevice.deviceId,
-          mode: activeCall.mode,
-          source: 'web-client',
-          username: storedDevice.username
-        })
+      const result = summarizeBootstrapSuccess(await bootstrapActiveCallTransport({
+        currentCall: activeCall,
+        currentDevice: storedDevice,
+        currentSessionToken: sessionToken,
+        turnCredentials,
+        shouldRefreshTurnCredentials,
+        fetchTurnCredentials,
+        callParticipants,
+        isParticipantJoined,
+        latestCallKey: latestCallKeyForDevice(activeCall),
+        rotateGroupCallKeysFor,
+        buildJoinPayload,
+        joinCallSession,
+        currentEndpoint: callWebRtcEndpoint,
+        currentRoom: callRoom,
+        provisionCallWebRtcEndpoint,
+        ensureMembraneClient,
+        configureMembraneTurnServers,
+        membraneClientConnected,
+        membraneConnectRequestedCallId: membraneConnectRequestedCallIdRef.current,
+        connectMembraneClient
+      }))
+      setTurnCredentials(result.turnCredentials)
+      if (result.participants) {
+        setCallParticipants(result.participants)
       }
-      setCallWebRtcEndpoint(endpointResponse.endpoint)
-      setCallRoom(endpointResponse.room)
+      setCallWebRtcEndpoint(result.endpoint)
+      setCallRoom(result.room)
+      membraneConnectRequestedCallIdRef.current = result.membraneConnectRequestedCallId
       setBanner({
         tone: 'success',
-        message:
-          'Native Membrane WebRTC client initialized and connected to the provisioned endpoint.'
+        message: result.message
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize native WebRTC.'
@@ -799,53 +1597,32 @@ export function useCall(
       return
     }
 
+    if (!ensureCallCapability('Local media attachment')) {
+      return
+    }
+
     setLoading(true)
 
     try {
-      const stream = await window.navigator.mediaDevices.getUserMedia(
-        mode === 'audio'
-          ? { audio: true, video: false }
-          : {
-              audio: true,
-              video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-              }
-            }
-      )
-
-      if (localMediaStreamRef.current) {
-        for (const track of localMediaStreamRef.current.getTracks()) {
-          track.stop()
-        }
-      }
-
-      localMediaStreamRef.current = stream
-
-      if (membraneClientRef.current && membraneClientConnected) {
-        await removeLocalTracksFromMembrane(
-          membraneClientRef.current,
-          membraneLocalTrackIdsRef.current
-        )
-        membraneLocalTrackIdsRef.current = []
-        membraneLocalTrackIdsRef.current = await attachLocalTracksToMembrane(
-          membraneClientRef.current,
-          stream
-        )
-      }
-
-      setLocalMediaMode(mode)
-      setLocalAudioTrackCount(stream.getAudioTracks().length)
-      setLocalVideoTrackCount(stream.getVideoTracks().length)
-      setBanner({
-        tone: 'success',
-        message:
-          mode === 'audio'
-            ? 'Microphone attached to the native Membrane pipeline.'
-            : 'Camera and microphone attached to the native Membrane pipeline.'
+      const result = await replaceLocalMediaStream({
+        mode,
+        currentStream: localMediaStreamRef.current,
+        membraneClient: membraneClientRef.current,
+        membraneClientConnected,
+        membraneLocalTrackIds: membraneLocalTrackIdsRef.current,
+        removeLocalTracksFromMembrane,
+        getUserMedia: (constraints) => window.navigator.mediaDevices.getUserMedia(constraints),
+        attachLocalTracks: (client, stream) =>
+          attachCallLocalTracks(client, stream, attachLocalTracksToMembrane)
       })
+
+      localMediaStreamRef.current = result.stream
+      membraneLocalTrackIdsRef.current = result.trackIds
+      setLocalMediaMode(result.localMediaMode)
+      setLocalAudioTrackCount(result.localAudioTrackCount)
+      setLocalVideoTrackCount(result.localVideoTrackCount)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to attach local media.'
+      const message = describeMediaDeviceError(error)
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -853,14 +1630,13 @@ export function useCall(
   }
 
   async function _handleReleaseLocalMedia() {
-    await removeLocalTracksFromMembrane(membraneClientRef.current, membraneLocalTrackIdsRef.current)
+    await releaseLocalMediaResources(
+      membraneClientRef.current,
+      membraneLocalTrackIdsRef.current,
+      localMediaStreamRef.current,
+      removeLocalTracksFromMembrane
+    )
     membraneLocalTrackIdsRef.current = []
-
-    if (localMediaStreamRef.current) {
-      for (const track of localMediaStreamRef.current.getTracks()) {
-        track.stop()
-      }
-    }
 
     localMediaStreamRef.current = null
     setLocalMediaMode('none')
@@ -872,8 +1648,82 @@ export function useCall(
     })
   }
 
+  // ── Page unload: end call and release media ─────────────────────────
+  useEffect(() => {
+    function handleUnload() {
+      const currentStream = localMediaStreamRef.current
+      localMediaStreamRef.current = null
+      void performUnloadCallCleanup(
+        currentStream,
+        stopLocalMediaStream,
+        activeCall,
+        sessionToken,
+        activeCallApiBaseUrlRef.current,
+        fetch
+      ).catch(() => {})
+    }
+
+    window.addEventListener('beforeunload', handleUnload)
+    window.addEventListener('pagehide', handleUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      window.removeEventListener('pagehide', handleUnload)
+    }
+  }, [activeCall, sessionToken])
+
+  // ── Background tab: pause video tracks to save resources ──────────
+  useEffect(() => {
+    function handleVisibilityChange() {
+      updateHiddenVideoTrackState(
+        localMediaStreamRef.current,
+        document.hidden,
+        hiddenVideoTrackStateRef.current
+      )
+
+      if (!document.hidden) {
+        void refreshActiveCallDiscovery()
+        if (activeCall?.status === 'active' && mediaEncryptionSupported) {
+          void bootstrapDirectCallTransport()
+        }
+      }
+    }
+
+    function handlePageShow() {
+      void refreshActiveCallDiscovery()
+      if (activeCall?.status === 'active' && mediaEncryptionSupported) {
+        void bootstrapDirectCallTransport()
+      }
+    }
+
+    function handleWindowFocus() {
+      void refreshActiveCallDiscovery()
+    }
+
+    function handleWindowOnline() {
+      void refreshActiveCallDiscovery()
+      if (activeCall?.status === 'active' && mediaEncryptionSupported) {
+        void bootstrapDirectCallTransport()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pageshow', handlePageShow)
+    window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener('online', handleWindowOnline)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pageshow', handlePageShow)
+      window.removeEventListener('focus', handleWindowFocus)
+      window.removeEventListener('online', handleWindowOnline)
+    }
+  }, [activeCall, bootstrapDirectCallTransport, mediaEncryptionSupported, refreshActiveCallDiscovery])
+
   function resetCallState() {
     setActiveCall(null)
+    setActiveCallChatId(null)
+    setActiveCallRoom(null)
+    setActiveCallRoomMembers([])
+    setActiveCallDisplayTitle(null)
     setCallParticipants([])
     setCallRoom(null)
     setCallWebRtcEndpoint(null)
@@ -885,11 +1735,36 @@ export function useCall(
 
   return {
     activeCall,
+    activeCallScope,
+    activeCallChatId,
+    activeCallRoom,
+    activeCallRoomMembers,
+    activeCallDisplayTitle,
+    callParticipants,
+    callRoom,
+    callWebRtcEndpoint,
+    callWebRtcMediaEvents,
+    directCallMode,
+    directCallStatus,
+    isCallSessionReady,
+    callCapabilityState,
+    callCapabilityReason,
+    callCapabilityTransport,
+    callCapabilityBrowserName,
+    callCapabilityHostKind,
+    mediaEncryptionState,
+    mediaEncryptionSupported,
+    mediaEncryptionFingerprint,
+    currentKeyEpoch,
+    transportError,
+    transportReadiness,
+    turnCredentials,
     setActiveCall,
     callSignals,
     membraneRemoteEndpoints,
     membraneRemoteTracks,
     handleStartCall,
+    handleStartAdHocCall,
     handleAcceptCall,
     handleDeclineCall,
     handleEndCall,
@@ -902,6 +1777,7 @@ export function useCall(
     _handleInitializeWebRtc,
     _handleAttachLocalMedia,
     _handleReleaseLocalMedia,
+    localMediaStreamRef,
     resetCallState,
     resetWebRtcLab,
     setCallParticipants,

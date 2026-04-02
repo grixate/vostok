@@ -4,6 +4,7 @@ defmodule VostokServerWeb.TopicChannelTest do
   alias VostokServer.Identity
   alias VostokServer.Calls
   alias VostokServer.Messaging
+  alias VostokServer.Sync.SyncSession
   alias VostokServerWeb.{DeviceSocket, TopicChannel}
 
   setup do
@@ -110,6 +111,16 @@ defmodule VostokServerWeb.TopicChannelTest do
       call: %{
         chat_id: ^chat_id,
         id: ^call_id,
+        status: "ringing"
+      }
+    }
+
+    assert {:ok, _accepted_call} = Calls.accept_call(call_id, alice.user.id)
+
+    assert_broadcast "call:state", %{
+      call: %{
+        chat_id: ^chat_id,
+        id: ^call_id,
         status: "active"
       }
     }
@@ -210,6 +221,137 @@ defmodule VostokServerWeb.TopicChannelTest do
         signal_type: "offer"
       }
     }
+  end
+
+  test "call-room topics authorize members and broadcast scoped call state" do
+    alice = register_identity("alice-room")
+    bob = register_identity("bob-room")
+
+    assert {:ok, %{room: %{id: room_id}}} =
+             Calls.create_call_room(alice.user.id, %{
+               "title" => "Launch Room",
+               "participant_user_ids" => [bob.user.id]
+             })
+
+    assert {:ok, %{status: "connected", topic: "call-room:" <> _room_id}, _socket} =
+             DeviceSocket
+             |> socket("device_socket:#{alice.device.id}", %{
+               device_id: alice.device.id,
+               device_token: "test-token",
+               user_id: alice.user.id
+             })
+             |> subscribe_and_join(TopicChannel, "call-room:#{room_id}")
+
+    assert {:ok, call} =
+             Calls.start_call_room(room_id, alice.user.id, alice.device.id, %{
+               "media_mode" => "video"
+             })
+
+    call_id = call.id
+
+    assert_broadcast "call:state", %{
+      call: %{
+        call_room_id: ^room_id,
+        id: ^call_id,
+        scope_type: "call_room",
+        status: "ringing"
+      }
+    }
+  end
+
+  test "user sync events are routed only to intended devices and provider completion clears the session" do
+    alice = register_identity("alice-sync")
+    topic_name = "user:#{alice.user.id}"
+    requester_device_id = "requester-device"
+    provider_device_id = "provider-device"
+    observer_device_id = "observer-device"
+
+    assert {:ok, %{status: "connected"}, requester_socket} =
+             DeviceSocket
+             |> socket("device_socket:#{requester_device_id}", %{
+               device_id: requester_device_id,
+               device_token: "requester-token",
+               user_id: alice.user.id
+             })
+             |> subscribe_and_join(TopicChannel, topic_name)
+
+    assert {:ok, %{status: "connected"}, provider_socket} =
+             DeviceSocket
+             |> socket("device_socket:#{provider_device_id}", %{
+               device_id: provider_device_id,
+               device_token: "provider-token",
+               user_id: alice.user.id
+             })
+             |> subscribe_and_join(TopicChannel, topic_name)
+
+    assert {:ok, %{status: "connected"}, _observer_socket} =
+             DeviceSocket
+             |> socket("device_socket:#{observer_device_id}", %{
+               device_id: observer_device_id,
+               device_token: "observer-token",
+               user_id: alice.user.id
+             })
+             |> subscribe_and_join(TopicChannel, topic_name)
+
+    assert_reply push(requester_socket, "sync.request", %{"scope" => "full"}), :ok
+
+    assert_push "sync.request", %{
+      requesting_device_id: ^requester_device_id,
+      scope: "full"
+    }
+
+    assert_push "sync.request", %{
+      requesting_device_id: ^requester_device_id,
+      scope: "full"
+    }
+
+    refute_push "sync.request", _payload
+
+    assert_reply push(provider_socket, "sync.accept", %{
+      "requesting_device_id" => requester_device_id
+    }), :ok
+
+    assert {:ok, %{provider_device_id: ^provider_device_id}} =
+             SyncSession.get(alice.user.id, requester_device_id)
+
+    assert_push "sync.accepted", %{
+      provider_device_id: ^provider_device_id,
+      requesting_device_id: ^requester_device_id
+    }
+
+    refute_push "sync.accepted", _payload
+
+    assert_reply push(provider_socket, "sync.data", %{
+      "target_device_id" => requester_device_id,
+      "chunk" => "opaque-sync-chunk"
+    }), :ok
+
+    assert_push "sync.data", %{
+      from_device_id: ^provider_device_id,
+      target_device_id: ^requester_device_id,
+      chunk: "opaque-sync-chunk"
+    }
+
+    refute_push "sync.data", _payload
+
+    assert_reply push(provider_socket, "sync.complete", %{
+      "requesting_device_id" => requester_device_id
+    }), :ok
+
+    assert_push "sync.complete", %{
+      requesting_device_id: ^requester_device_id,
+      provider_device_id: ^provider_device_id,
+      completed_by_device_id: ^provider_device_id
+    }
+
+    assert_push "sync.complete", %{
+      requesting_device_id: ^requester_device_id,
+      provider_device_id: ^provider_device_id,
+      completed_by_device_id: ^provider_device_id
+    }
+
+    refute_push "sync.complete", _payload
+    assert {:error, :not_found} = SyncSession.get(alice.user.id, requester_device_id)
   end
 
   defp register_identity(prefix) do

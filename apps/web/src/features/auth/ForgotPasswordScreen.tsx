@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowLeft, User, CircleCheck } from 'lucide-react'
-import { requestPasswordReset } from '../../lib/api.ts'
 import type { AuthView } from '../../types.ts'
 
 type Props = {
+  onRequestPasswordReset: (username: string, message?: string) => Promise<{ ok: boolean }>
   onNavigate: (view: AuthView) => void
 }
 
-export function ForgotPasswordScreen({ onNavigate }: Props) {
+export function ForgotPasswordScreen({ onRequestPasswordReset, onNavigate }: Props) {
   const [username, setUsername] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,7 +18,7 @@ export function ForgotPasswordScreen({ onNavigate }: Props) {
     setLoading(true)
 
     try {
-      await requestPasswordReset(username, message || undefined)
+      await onRequestPasswordReset(username, message || undefined)
     } catch {
       // Always show success to prevent username enumeration
     }

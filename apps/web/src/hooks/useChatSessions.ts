@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import type { ChatDeviceSession, ChatSummary, PrekeyDeviceBundle, RecipientDevice } from '../lib/api.ts'
+import type { ChatDeviceSession, PrekeyDeviceBundle, RecipientDevice } from '../lib/api.ts'
 import {
   bootstrapChatSessions,
   fetchUserPrekeys,
@@ -16,32 +16,44 @@ import {
 } from '../lib/chat-session-vault.ts'
 import { toLocalSessionDeviceMaterial } from '../utils/crypto-helpers.ts'
 import { toSafetyNumberEntry } from '../utils/safety-helpers.ts'
-import { persistStoredDevice } from '../utils/storage.ts'
+import { getRawChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import type { AuthView, SafetyNumberEntry, StoredDevice } from '../types.ts'
 
 export function useChatSessions(
   view: AuthView,
   deferredActiveChatId: string | null,
   activeChatIdRef: React.RefObject<string | null>,
-  chatItems: ChatSummary[]
+  chatItems: MergedChatSummary[]
 ) {
-  const { sessionToken, storedDevice, setStoredDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, setStoredDevice, setLoading, setBanner } = useAppContext()
   const [chatSessions, setChatSessions] = useState<ChatDeviceSession[]>([])
   const [safetyNumbers, setSafetyNumbers] = useState<SafetyNumberEntry[]>([])
   const [verifyingSafetyDeviceId, setVerifyingSafetyDeviceId] = useState<string | null>(null)
-  const [_remotePrekeyBundles, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
+  const [, setRemotePrekeyBundles] = useState<PrekeyDeviceBundle[]>([])
+  const selectedChat = chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatItems[0] ?? null
+  const remotePrekeyUsername =
+    selectedChat && storedDevice
+      ? (selectedChat.participant_usernames.find((participant) => participant !== storedDevice.username) ??
+          storedDevice.username)
+      : null
 
   async function syncChatSessionsFromServer(
     chatId: string,
     knownRecipientDevices?: RecipientDevice[]
   ): Promise<ChatDeviceSession[]> {
+    const rawChatId = getRawChatId(chatId)
+
+    if (!rawChatId) {
+      return []
+    }
+
     if (!sessionToken || !storedDevice || activeChatIdRef.current !== chatId) {
       return []
     }
 
     const recipientDevices =
       knownRecipientDevices ??
-      (await listRecipientDevices(sessionToken, chatId)).recipient_devices
+      (await listRecipientDevices(sessionToken, rawChatId)).recipient_devices
     const bootstrapTargetDeviceIds = recipientDevices
       .filter((device) => {
         // Only bootstrap devices that don't already have a non-superseded session.
@@ -54,7 +66,7 @@ export function useChatSessions(
         // epoch 0.
         const existingSession = chatSessions.find(
           (session) =>
-            session.chat_id === chatId &&
+            session.chat_id === rawChatId &&
             session.initiator_device_id === storedDevice.deviceId &&
             session.recipient_device_id === device.device_id &&
             session.session_state !== 'superseded'
@@ -71,7 +83,7 @@ export function useChatSessions(
     } else {
       console.info(
         `[syncChatSessions] Bootstrapping ${bootstrapTargetDeviceIds.length} device(s) for chat ${chatId}: ${bootstrapTargetDeviceIds.join(', ')}. ` +
-        `Existing sessions in state: ${chatSessions.filter((s) => s.chat_id === chatId).length}`
+        `Existing sessions in state: ${chatSessions.filter((s) => s.chat_id === rawChatId).length}`
       )
     }
 
@@ -83,7 +95,7 @@ export function useChatSessions(
     const initiatorEphemeralKeys = bootstrapTargetDeviceIds.length > 0
       ? await prepareSessionBootstrap(bootstrapTargetDeviceIds)
       : {}
-    const response = await bootstrapChatSessions(sessionToken, chatId, {
+    const response = await bootstrapChatSessions(sessionToken, rawChatId, {
       initiator_ephemeral_keys: initiatorEphemeralKeys
     })
 
@@ -116,8 +128,6 @@ export function useChatSessions(
         oneTimePrekeys: consumedOneTimePrekeys.nextOneTimePrekeys
       }
 
-      persistStoredDevice(nextStoredDevice)
-
       if (activeChatIdRef.current === chatId) {
         setStoredDevice(nextStoredDevice)
       }
@@ -131,7 +141,9 @@ export function useChatSessions(
   }
 
   async function _handleRekeyActiveChatSessions(activeChatId: string | null) {
-    if (!sessionToken || !storedDevice || !activeChatId) {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !storedDevice || !activeChatId || !rawActiveChatId) {
       setBanner({ tone: 'error', message: 'Select a chat before rekeying direct-chat sessions.' })
       return
     }
@@ -139,12 +151,12 @@ export function useChatSessions(
     setLoading(true)
 
     try {
-      const recipientDevices = (await listRecipientDevices(sessionToken, activeChatId))
+      const recipientDevices = (await listRecipientDevices(sessionToken, rawActiveChatId))
         .recipient_devices
       const initiatorEphemeralKeys = await prepareSessionBootstrap(
         recipientDevices.map((device) => device.device_id)
       )
-      const response = await rekeyChatSessions(sessionToken, activeChatId, {
+      const response = await rekeyChatSessions(sessionToken, rawActiveChatId, {
         initiator_ephemeral_keys: initiatorEphemeralKeys
       })
       const synchronizedIds = await synchronizeChatSessions(
@@ -176,8 +188,6 @@ export function useChatSessions(
           oneTimePrekeys: consumedOneTimePrekeys.nextOneTimePrekeys
         }
 
-        persistStoredDevice(nextStoredDevice)
-
         if (activeChatIdRef.current === activeChatId) {
           setStoredDevice(nextStoredDevice)
         }
@@ -208,23 +218,23 @@ export function useChatSessions(
       return
     }
 
-    const selectedChat = chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatItems[0] ?? null
-
-    if (!selectedChat) {
+    if (!remotePrekeyUsername) {
       setRemotePrekeyBundles([])
       return
     }
 
-    const targetUsername =
-      selectedChat.participant_usernames.find((participant) => participant !== storedDevice.username) ??
-      storedDevice.username
-
     const token = sessionToken
+    if (!token) {
+      setRemotePrekeyBundles([])
+      return
+    }
+
+    const username = remotePrekeyUsername
     let cancelled = false
 
     async function loadRemotePrekeys() {
       try {
-        const response = await fetchUserPrekeys(token, targetUsername)
+        const response = await fetchUserPrekeys(token, username)
 
         if (!cancelled) {
           setRemotePrekeyBundles(response.devices)
@@ -241,7 +251,7 @@ export function useChatSessions(
     return () => {
       cancelled = true
     }
-  }, [chatItems, deferredActiveChatId, sessionToken, storedDevice, view])
+  }, [remotePrekeyUsername, sessionToken, storedDevice, view])
 
   // Load safety numbers
   useEffect(() => {
@@ -252,11 +262,19 @@ export function useChatSessions(
 
     const token2 = sessionToken
     const chatId = deferredActiveChatId
+    const rawChatId = getRawChatId(chatId)
+
+    if (!rawChatId) {
+      setSafetyNumbers([])
+      return
+    }
+
+    const targetChatId = rawChatId
     let cancelled = false
 
     async function loadSafetyNumbersForChat() {
       try {
-        const response = await listSafetyNumbers(token2, chatId)
+        const response = await listSafetyNumbers(token2, targetChatId)
 
         if (!cancelled) {
           setSafetyNumbers(response.safety_numbers.map(toSafetyNumberEntry))
@@ -276,14 +294,16 @@ export function useChatSessions(
   }, [deferredActiveChatId, sessionToken, view])
 
   async function handleVerifyPeerSafetyNumber(peerDeviceId: string, activeChatId: string | null) {
-    if (!sessionToken || !activeChatId) {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId) {
       return
     }
 
     setVerifyingSafetyDeviceId(peerDeviceId)
 
     try {
-      const response = await verifySafetyNumber(sessionToken, activeChatId, peerDeviceId)
+      const response = await verifySafetyNumber(sessionToken, rawActiveChatId, peerDeviceId)
       setSafetyNumbers((current) =>
         current.map((entry) =>
           entry.peerDeviceId === response.safety_number.peer_device_id

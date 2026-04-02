@@ -1,15 +1,24 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { Zap, User, PenLine, Lock, CircleCheck, CircleX, Eye, EyeOff } from 'lucide-react'
 import { PasswordStrengthBar } from './PasswordStrengthBar.tsx'
-import { checkUsername } from '../../lib/api.ts'
 
 type Props = {
+  serverUrl?: string
+  serverName?: string | null
   error: string | null
   loading: boolean
+  onCheckUsername: (username: string) => Promise<{ available: boolean }>
   onBootstrap: (username: string, displayName: string, password: string) => void
 }
 
-export function ServerBootstrapScreen({ error, loading, onBootstrap }: Props) {
+export function ServerBootstrapScreen({
+  serverUrl,
+  serverName,
+  error,
+  loading,
+  onCheckUsername,
+  onBootstrap
+}: Props) {
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -23,15 +32,17 @@ export function ServerBootstrapScreen({ error, loading, onBootstrap }: Props) {
       return
     }
     try {
-      const result = await checkUsername(value)
+      const result = await onCheckUsername(value)
       setUsernameAvailable(result.available)
     } catch {
       setUsernameAvailable(null)
     }
-  }, [])
+  }, [onCheckUsername])
 
   useEffect(() => {
-    if (!username) { setUsernameAvailable(null); return }
+    if (username.length < 3) {
+      return
+    }
     const timer = setTimeout(() => checkAvailability(username), 300)
     return () => clearTimeout(timer)
   }, [username, checkAvailability])
@@ -59,7 +70,9 @@ export function ServerBootstrapScreen({ error, loading, onBootstrap }: Props) {
           <Zap size={48} color="var(--accent)" strokeWidth={1.75} />
         </div>
         <h1 className="auth-card__title" style={{ fontSize: 20, fontWeight: 600 }}>Set Up Your Server</h1>
-        <p className="auth-card__subtitle">Create the administrator account to get started.</p>
+        <p className="auth-card__subtitle">
+          Create the administrator account to get started on {serverName ?? serverUrl ?? window.location.host}.
+        </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-input-row">
@@ -80,7 +93,10 @@ export function ServerBootstrapScreen({ error, loading, onBootstrap }: Props) {
               placeholder="Username"
               required
               value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              onChange={(e) => {
+                setUsernameAvailable(null)
+                setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+              }}
               disabled={loading}
             />
             {usernameAvailable === true && <CircleCheck size={18} color="#22C55E" />}

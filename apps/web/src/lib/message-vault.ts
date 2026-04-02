@@ -262,9 +262,10 @@ export async function storeInboundGroupSenderKeys(
 
 export async function encryptMessageWithGroupSenderKey(
   plaintext: string,
-  chatId: string,
+  storageChatId: string,
   keyId: string,
-  epoch: number
+  epoch: number,
+  protocolChatId?: string
 ): Promise<{
   ciphertext: string
   header: string
@@ -274,14 +275,15 @@ export async function encryptMessageWithGroupSenderKey(
 }> {
   ensureWebCrypto()
 
-  const normalizedChatId = chatId.trim()
+  const normalizedStorageChatId = storageChatId.trim()
+  const normalizedProtocolChatId = (protocolChatId ?? storageChatId).trim()
   const normalizedKeyId = keyId.trim()
 
-  if (!normalizedChatId || !normalizedKeyId) {
+  if (!normalizedStorageChatId || !normalizedProtocolChatId || !normalizedKeyId) {
     throw new Error('A chat id and sender key id are required for group sender-key encryption.')
   }
 
-  const ring = readGroupSenderKeyRing(normalizedChatId)
+  const ring = readGroupSenderKeyRing(normalizedStorageChatId)
   const keyMaterialBase64 = ring[normalizedKeyId]
 
   if (!keyMaterialBase64) {
@@ -301,7 +303,7 @@ export async function encryptMessageWithGroupSenderKey(
     new TextEncoder().encode(
       JSON.stringify({
         algorithm: GROUP_SENDER_KEY_ALGORITHM,
-        chat_id: normalizedChatId,
+        chat_id: normalizedProtocolChatId,
         key_id: normalizedKeyId,
         epoch: Number.isInteger(epoch) && epoch >= 0 ? epoch : 0,
         content_iv: bytesToBase64(contentIv)
@@ -569,6 +571,13 @@ async function unwrapGroupSenderKeyEnvelope(
   )
 
   return bytesToBase64(unwrappedKey)
+}
+
+export async function unwrapWrappedGroupKey(
+  wrappedKeyBase64: string,
+  encryptionPrivateKeyPkcs8Base64?: string
+): Promise<string | null> {
+  return unwrapGroupSenderKeyEnvelope(wrappedKeyBase64, encryptionPrivateKeyPkcs8Base64)
 }
 
 async function importAesKey(rawKey: Uint8Array, usages: KeyUsage[]): Promise<CryptoKey> {

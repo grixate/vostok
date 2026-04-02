@@ -1,12 +1,19 @@
 import type { ChatSummary } from '../lib/api.ts'
 import type { CachedMessage } from '../lib/message-cache.ts'
 
-export function mergeChat(current: ChatSummary[], next: ChatSummary): ChatSummary[] {
+export function mergeChat<T extends ChatSummary>(current: T[], next: Partial<T> & ChatSummary): T[] {
+  const existing = current.find((chat) => chat.id === next.id)
   const filtered = current.filter((chat) => chat.id !== next.id)
-  return [next, ...filtered]
+  const merged = existing ? { ...existing, ...next } : next
+  return [merged as T, ...filtered]
 }
 
-export function syncChatSummary(current: ChatSummary[], chatId: string, messages: CachedMessage[]): ChatSummary[] {
+export function syncChatSummary<T extends ChatSummary>(
+  current: T[],
+  chatId: string,
+  messages: CachedMessage[],
+  isActiveChat = true
+): T[] {
   const chat = current.find((entry) => entry.id === chatId)
 
   if (!chat) {
@@ -14,8 +21,9 @@ export function syncChatSummary(current: ChatSummary[], chatId: string, messages
   }
 
   const latestMessageAt = messages.at(-1)?.sentAt ?? chat.latest_message_at
-  // The chat is currently being viewed, so there are no unread messages.
-  const updated = { ...chat, latest_message_at: latestMessageAt, message_count: 0 }
+  // Only clear unread count when the chat is currently being viewed.
+  const messageCount = isActiveChat ? 0 : (chat.message_count ?? 0) + messages.length
+  const updated = { ...chat, latest_message_at: latestMessageAt, message_count: messageCount }
 
   // Only reorder to top when a genuinely new message arrived.
   // If latest_message_at didn't change, update in-place to avoid jumpy sidebar.

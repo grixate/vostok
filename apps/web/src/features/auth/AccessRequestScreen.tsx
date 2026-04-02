@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowLeft, User, CircleCheck } from 'lucide-react'
-import { requestAccess } from '../../lib/api.ts'
 import type { AuthView } from '../../types.ts'
 
 type Props = {
+  onRequestAccess: (name: string, message?: string) => Promise<{ ok: boolean }>
   onNavigate: (view: AuthView) => void
 }
 
-export function AccessRequestScreen({ onNavigate }: Props) {
+export function AccessRequestScreen({ onRequestAccess, onNavigate }: Props) {
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,7 +20,7 @@ export function AccessRequestScreen({ onNavigate }: Props) {
     setError(null)
 
     try {
-      await requestAccess(name, message || undefined)
+      await onRequestAccess(name, message || undefined)
       setSubmitted(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send request.')

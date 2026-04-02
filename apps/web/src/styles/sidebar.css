@@ -27,7 +27,7 @@
   align-items: center;
   justify-content: space-between;
   height: 60px;
-  padding: 0 4px;
+  padding: 0 4px 0 18px;
 }
 
 .sidebar__title-group {
@@ -351,17 +351,17 @@
 }
 
 .chat-list-item__badge {
-  border-radius: 11px;
+  border-radius: 50%;
   min-width: 22px;
   height: 22px;
-  padding: 0 6px;
+  padding: 0 5px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  background: var(--gradient-accent);
-  color: var(--text-on-accent);
+  background: var(--accent);
+  color: #FFFFFF;
   transition: transform 150ms ease;
 }
 
@@ -803,7 +803,7 @@
 
 .sidebar-empty-state__subtitle {
   font-size: 13px;
-  color: #888888;
+  color: var(--text-secondary);
 }
 
 .sidebar-empty-state__btn {

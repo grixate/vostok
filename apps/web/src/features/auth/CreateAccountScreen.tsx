@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { ArrowLeft, User, PenLine, Lock, CircleCheck, CircleX, Eye, EyeOff } from 'lucide-react'
 import { PasswordStrengthBar } from './PasswordStrengthBar.tsx'
-import { checkUsername } from '../../lib/api.ts'
 import type { AuthView, ServerInfo } from '../../types.ts'
 
 type Props = {
   inviteCode: string | null
   serverInfo: ServerInfo | null
+  serverUrl?: string
+  serverName?: string | null
   error: string | null
   loading: boolean
+  onCheckUsername: (username: string) => Promise<{ available: boolean }>
   onRegister: (inviteCode: string | null, username: string, displayName: string, password: string) => void
   onNavigate: (view: AuthView) => void
 }
@@ -18,7 +20,17 @@ function generateDevUsername(): string {
   return `dev_user_${n}`
 }
 
-export function CreateAccountScreen({ inviteCode, serverInfo, error, loading, onRegister, onNavigate }: Props) {
+export function CreateAccountScreen({
+  inviteCode,
+  serverInfo,
+  serverUrl,
+  serverName,
+  error,
+  loading,
+  onCheckUsername,
+  onRegister,
+  onNavigate
+}: Props) {
   const isDevMode = serverInfo?.auth_mode === 'dev'
 
   const [username, setUsername] = useState('')
@@ -27,9 +39,8 @@ export function CreateAccountScreen({ inviteCode, serverInfo, error, loading, on
   const [confirmPassword, setConfirmPassword] = useState(isDevMode ? 'password' : '')
   const [showPassword, setShowPassword] = useState(false)
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
-  const [checkingUsername, setCheckingUsername] = useState(false)
 
-  const serverUrl = window.location.host
+  const serverDisplay = serverName ?? serverInfo?.name ?? serverUrl ?? window.location.host
 
   const checkAvailability = useCallback(async (value: string) => {
     if (value.length < 3) {
@@ -37,20 +48,16 @@ export function CreateAccountScreen({ inviteCode, serverInfo, error, loading, on
       return
     }
 
-    setCheckingUsername(true)
     try {
-      const result = await checkUsername(value)
+      const result = await onCheckUsername(value)
       setUsernameAvailable(result.available)
     } catch {
       setUsernameAvailable(null)
-    } finally {
-      setCheckingUsername(false)
     }
-  }, [])
+  }, [onCheckUsername])
 
   useEffect(() => {
-    if (!username) {
-      setUsernameAvailable(null)
+    if (username.length < 3) {
       return
     }
 
@@ -100,7 +107,7 @@ export function CreateAccountScreen({ inviteCode, serverInfo, error, loading, on
             {isDevMode ? 'Create Dev Account' : 'Create Your Account'}
           </h1>
           <p className="auth-card__subtitle auth-card__subtitle--left">
-            Joining {serverInfo?.name ?? serverUrl}
+            Joining {serverDisplay}
           </p>
         </div>
 
@@ -112,14 +119,20 @@ export function CreateAccountScreen({ inviteCode, serverInfo, error, loading, on
               placeholder="Username"
               required
               value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              onChange={(e) => {
+                setUsernameAvailable(null)
+                setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+              }}
               disabled={loading}
             />
             {isDevMode && (
               <button
                 type="button"
                 className="auth-random-btn"
-                onClick={() => setUsername(generateDevUsername())}
+                onClick={() => {
+                  setUsernameAvailable(null)
+                  setUsername(generateDevUsername())
+                }}
                 tabIndex={-1}
               >
                 Random

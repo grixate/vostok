@@ -176,9 +176,19 @@ if config_env() in [:dev, :test] do
     System.get_env("VOSTOK_AUTH_MODE") ||
       System.get_env("VOSTOK_REGISTRATION_MODE", "invite_only")
 
+  message_ttl_hours =
+    case System.get_env("VOSTOK_MESSAGE_TTL_HOURS") do
+      nil -> 720
+      val -> String.to_integer(val)
+    end
+
   config :vostok_server,
     auth_mode: auth_mode,
     registration_mode: auth_mode,
+    message_ttl_hours: message_ttl_hours,
+    vapid_public_key: System.get_env("VOSTOK_VAPID_PUBLIC_KEY"),
+    vapid_private_key: System.get_env("VOSTOK_VAPID_PRIVATE_KEY"),
+    vapid_subject: System.get_env("VOSTOK_VAPID_SUBJECT", "mailto:admin@localhost"),
     server_name: System.get_env("VOSTOK_SERVER_NAME", "Vostok"),
     federation_port: env_integer.("VOSTOK_FEDERATION_PORT", 5555),
     federation_domain: System.get_env("VOSTOK_FEDERATION_DOMAIN", host),
