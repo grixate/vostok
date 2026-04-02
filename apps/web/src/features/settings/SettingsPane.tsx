@@ -364,8 +364,6 @@ function GeneralSection({ s }: { s: SettingsHook }) {
       <SectionLabel>Interface</SectionLabel>
       <GroupCard>
         <ToggleRow label="Show Unread Counter" on={settings.general_unread_counter} onToggle={() => toggle('general_unread_counter')} />
-        <ToggleRow label="Compact Mode" on={settings.general_compact} onToggle={() => toggle('general_compact')} />
-        <ToggleRow label="Show Avatars" on={settings.general_show_avatars} onToggle={() => toggle('general_show_avatars')} />
         <ToggleRow label="Animations" on={settings.general_animations} onToggle={() => toggle('general_animations')} last />
       </GroupCard>
       <SectionLabel>Shortcuts</SectionLabel>
@@ -978,12 +976,6 @@ function AppearanceSection({ s }: { s: SettingsHook }) {
       <div style={{ marginBottom: 8 }}>
         <ThemePicker />
       </div>
-      <SectionLabel>Chat Display</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Compact Mode" on={settings.general_compact} onToggle={() => toggle('general_compact')} />
-        <ToggleRow label="Show Avatars" on={settings.general_show_avatars} onToggle={() => toggle('general_show_avatars')} />
-        <ToggleRow label="Show Timestamps" on={settings.appearance_timestamps} onToggle={() => toggle('appearance_timestamps')} last />
-      </GroupCard>
     </>
   )
 }
