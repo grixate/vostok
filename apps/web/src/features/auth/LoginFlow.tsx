@@ -1,6 +1,8 @@
 import type { useAuth } from '../../hooks/useAuth.ts'
 import type { useServers } from '../../hooks/useServers.ts'
 import type { AuthView } from '../../types.ts'
+import { WelcomeScreen } from './WelcomeScreen.tsx'
+import { RestoreBackupScreen } from './RestoreBackupScreen.tsx'
 import { LoginScreen } from './LoginScreen.tsx'
 import { InviteCodeScreen } from './InviteCodeScreen.tsx'
 import { CreateAccountScreen } from './CreateAccountScreen.tsx'
@@ -31,6 +33,12 @@ export function LoginFlow({ auth, servers }: LoginFlowProps) {
   }
 
   switch (auth.view) {
+    case 'welcome':
+      return <WelcomeScreen servers={servers} onNavigate={navigate} />
+
+    case 'restore-backup':
+      return <RestoreBackupScreen servers={servers} onNavigate={navigate} />
+
     case 'server-bootstrap':
       return (
         <ServerBootstrapScreen
@@ -91,7 +99,6 @@ export function LoginFlow({ auth, servers }: LoginFlowProps) {
     default:
       return (
         <LoginScreen
-          servers={servers}
           serverInfo={auth.serverInfo}
           serverUrl={selectedServerUrl}
           serverName={selectedServer?.label ?? auth.serverInfo?.name ?? null}

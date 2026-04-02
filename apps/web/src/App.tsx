@@ -45,6 +45,7 @@ import { Sidebar } from './features/sidebar/Sidebar.tsx'
 import { ConversationPane } from './features/conversation/ConversationPane.tsx'
 import { ToastStack } from './features/overlays/ToastStack.tsx'
 import { ConnectionStatusBar } from './features/overlays/ConnectionStatusBar.tsx'
+import { BackupReminderBanner } from './components/BackupReminderBanner.tsx'
 
 const LoginFlow = lazy(async () => {
   const module = await import('./features/auth/LoginFlow.tsx')
@@ -123,6 +124,7 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats')
+  const [initialSettingsSection, setInitialSettingsSection] = useState<string | null>(null)
 
   const chatSearchInputRef = useRef<HTMLInputElement | null>(null)
   const chatFilterInputRef = useRef<HTMLInputElement | null>(null)
@@ -149,6 +151,7 @@ function App() {
     moreMenuOpen, setMoreMenuOpen,
     profileOverlayOpen, setProfileOverlayOpen,
     settingsOverlayOpen, setSettingsOverlayOpen,
+    initialSettingsSection, setInitialSettingsSection,
     attachPopoverOpen, setAttachPopoverOpen,
     shortcutsOpen, setShortcutsOpen,
     toasts, showToast,
@@ -254,13 +257,8 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
       setDefaultApiBaseUrl(fallbackBaseUrl)
       setDefaultRealtimeBaseUrl(fallbackBaseUrl)
 
-      if (sessionToken !== fallbackAuthToken) {
-        setSessionToken(fallbackAuthToken)
-      }
-
-      if (storedDevice !== null) {
-        setStoredDevice(null)
-      }
+      setSessionToken((prev) => prev === fallbackAuthToken ? prev : fallbackAuthToken)
+      setStoredDevice((prev) => prev === null ? prev : null)
 
       return
     }
@@ -268,41 +266,40 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
     setDefaultApiBaseUrl(activeServerScope.server.url)
     setDefaultRealtimeBaseUrl(activeServerScope.server.url)
 
-    if (sessionToken !== activeServerScope.token) {
-      setSessionToken(activeServerScope.token)
-    }
+    setSessionToken((prev) => prev === activeServerScope.token ? prev : activeServerScope.token)
 
     const nextStoredDevice = activeServerScope.device ?? null
-    if (!storedDevicesEqual(storedDevice, nextStoredDevice)) {
-      setStoredDevice(nextStoredDevice)
-    }
+    setStoredDevice((prev) => storedDevicesEqual(prev, nextStoredDevice) ? prev : nextStoredDevice)
+
+    // storedDevice and sessionToken are excluded from deps — they are only
+    // written here via functional updaters that check current state internally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeServer?.url,
     activeServerScope,
     fallbackAuthToken,
-    sessionToken,
-    storedDevice,
     setSessionToken,
     setStoredDevice
   ])
 
+  // Keep the persisted server record in sync with runtime device changes
+  // (prekey consumption, device bootstrap).  We use a ref to avoid a dep
+  // cycle: effect-253 syncs server→context and this syncs context→server.
+  const storedDeviceRef = useRef(storedDevice)
+  storedDeviceRef.current = storedDevice
+
+  const activeServerRef = useRef(activeServer)
+  activeServerRef.current = activeServer
+
   useEffect(() => {
-    if (!activeServer || !activeServerScope) {
-      return
-    }
+    const device = storedDeviceRef.current
+    const server = activeServerRef.current
 
-    if (storedDevice == null) {
-      return
-    }
+    if (!server || device == null) return
+    if (storedDevicesEqual(server.device ?? null, device)) return
 
-    if (storedDevicesEqual(activeServer.device ?? null, storedDevice)) {
-      return
-    }
-
-    // Keep the persisted server record in sync with runtime device changes,
-    // especially after prekey consumption or device bootstrap updates.
-    updateServer(activeServer.id, { device: storedDevice })
-  }, [activeServer, activeServerScope, storedDevice, updateServer])
+    updateServer(server.id, { device })
+  }, [storedDevice, updateServer])
 
   // Ref-based callback so useChatList (called first) can notify useMessages
   // (called later) about chat:activity events on non-active, existing chats.
@@ -570,6 +567,7 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
         {shortcutsOpen ? <KeyboardShortcutsOverlay /> : null}
       </Suspense>
       <ConnectionStatusBar />
+      <BackupReminderBanner />
       <ToastStack />
     </div>
   )

@@ -1,13 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { Zap, User, Lock, Eye, EyeOff, Plus, Server, Trash2 } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { Zap, User, Lock, Eye, EyeOff } from 'lucide-react'
 import type { AuthView, ServerInfo } from '../../types.ts'
-import type { useServers } from '../../hooks/useServers.ts'
-import { DEFAULT_MULTI_SERVER_COLOR } from '../../constants.ts'
-import { createServerApiClient } from '../../lib/server-api.ts'
-import { defaultServerLabel, normalizeServerUrl } from '../../lib/multi-server.ts'
 
 type Props = {
-  servers: ReturnType<typeof useServers>
   serverInfo: ServerInfo | null
   serverUrl: string
   serverName: string | null
@@ -32,7 +27,6 @@ function formatServerHost(url: string): string {
 }
 
 export function LoginScreen({
-  servers,
   serverInfo,
   serverUrl,
   serverName,
@@ -47,18 +41,9 @@ export function LoginScreen({
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState(isDevMode ? 'password' : '')
   const [showPassword, setShowPassword] = useState(false)
-  const [draftUrl, setDraftUrl] = useState('')
-  const [draftLabel, setDraftLabel] = useState('')
-  const [serverError, setServerError] = useState<string | null>(null)
-  const [addingServer, setAddingServer] = useState(false)
 
   const hasError = !!error
-  const selectedServer = servers.activeServer
   const serverTitle = serverInfo?.name ?? serverName ?? formatServerHost(serverUrl)
-  const sortedServers = useMemo(
-    () => [...servers.servers].sort((left, right) => left.sortOrder - right.sortOrder),
-    [servers.servers]
-  )
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -70,51 +55,6 @@ export function LoginScreen({
     onDevQuickLogin(name)
   }
 
-  async function handleAddServer(event: FormEvent) {
-    event.preventDefault()
-
-    const normalizedUrl = normalizeServerUrl(draftUrl)
-    if (!normalizedUrl) {
-      setServerError('Enter a valid server URL.')
-      return
-    }
-
-    setAddingServer(true)
-    setServerError(null)
-
-    try {
-      const client = createServerApiClient(normalizedUrl)
-      const nextServerInfo = await client.getServerInfo().catch(() => null)
-      const existingServer = servers.servers.find(
-        (entry) => normalizeServerUrl(entry.url) === normalizedUrl
-      )
-      const nextLabel = draftLabel.trim() || defaultServerLabel(nextServerInfo?.name)
-
-      if (existingServer) {
-        servers.updateServer(existingServer.id, {
-          label: nextLabel,
-          serverInfo: nextServerInfo ?? existingServer.serverInfo,
-          enabled: true
-        })
-        servers.setActiveServerId(existingServer.id)
-      } else {
-        const created = servers.addServer(normalizedUrl, nextLabel, DEFAULT_MULTI_SERVER_COLOR)
-        servers.updateServer(created.id, {
-          serverInfo: nextServerInfo
-        })
-        servers.setActiveServerId(created.id)
-      }
-
-      setDraftUrl('')
-      setDraftLabel('')
-      onNavigate(nextServerInfo?.bootstrap ? 'server-bootstrap' : 'login')
-    } catch (addError) {
-      setServerError(addError instanceof Error ? addError.message : 'Failed to add server.')
-    } finally {
-      setAddingServer(false)
-    }
-  }
-
   return (
     <div className="auth-shell">
       {isDevMode && (
@@ -123,98 +63,6 @@ export function LoginScreen({
         </div>
       )}
       <div className="auth-card">
-        <div className="auth-server-panel">
-          <div className="auth-server-panel__header">
-            <div>
-              <p className="auth-server-panel__eyebrow">Server</p>
-              <h2 className="auth-server-panel__title">{selectedServer?.label ?? serverTitle}</h2>
-              <p className="auth-server-panel__subtitle">{formatServerHost(serverUrl)}</p>
-            </div>
-          </div>
-
-          {sortedServers.length > 0 ? (
-            <div className="auth-server-list">
-              {sortedServers.map((entry) => {
-                const isSelected = entry.id === selectedServer?.id
-                const status = servers.statusByServerId[entry.id]
-                const statusText =
-                  status === 'connected'
-                    ? 'Connected'
-                    : status === 'connecting'
-                      ? 'Connecting'
-                      : status === 'auth_required'
-                        ? 'Sign in required'
-                        : status === 'error'
-                          ? (servers.lastErrorByServerId[entry.id] ?? 'Connection issue')
-                          : entry.enabled
-                            ? 'Ready'
-                            : 'Disabled'
-
-                return (
-                  <div
-                    key={entry.id}
-                    className={`auth-server-item${isSelected ? ' auth-server-item--active' : ''}`}
-                  >
-                    <button
-                      className="auth-server-item__select"
-                      type="button"
-                      onClick={() => {
-                        servers.setActiveServerId(entry.id)
-                        onNavigate('login')
-                      }}
-                    >
-                      <span
-                        className="auth-server-item__swatch"
-                        style={{ background: entry.color }}
-                      />
-                      <span className="auth-server-item__content">
-                        <span className="auth-server-item__label">{entry.label}</span>
-                        <span className="auth-server-item__meta">{formatServerHost(entry.url)} · {statusText}</span>
-                      </span>
-                    </button>
-                    <button
-                      className="auth-server-item__remove"
-                      type="button"
-                      onClick={() => servers.removeServer(entry.id)}
-                      aria-label={`Remove ${entry.label}`}
-                    >
-                      <Trash2 size={14} strokeWidth={1.75} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          ) : null}
-
-          <form className="auth-server-add" onSubmit={handleAddServer}>
-            <div className="auth-input-row">
-              <Server size={18} color="var(--text-muted)" strokeWidth={1.75} />
-              <input
-                className="auth-input"
-                placeholder="https://chat.example.com"
-                value={draftUrl}
-                onChange={(event) => setDraftUrl(event.target.value)}
-                disabled={addingServer}
-              />
-            </div>
-            <div className="auth-input-row">
-              <User size={18} color="var(--text-muted)" strokeWidth={1.75} />
-              <input
-                className="auth-input"
-                placeholder="Optional label"
-                value={draftLabel}
-                onChange={(event) => setDraftLabel(event.target.value)}
-                disabled={addingServer}
-              />
-            </div>
-            {serverError ? <p className="auth-error">{serverError}</p> : null}
-            <button className="auth-link auth-link--accent auth-link--row" type="submit" disabled={addingServer}>
-              {addingServer ? <span className="auth-spinner" /> : <Plus size={16} strokeWidth={1.75} />}
-              <span>{addingServer ? 'Adding server…' : 'Add Server'}</span>
-            </button>
-          </form>
-        </div>
-
         <div className="auth-card__logo">
           <Zap size={40} color="var(--accent)" strokeWidth={1.75} />
         </div>

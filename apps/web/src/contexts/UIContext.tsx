@@ -34,6 +34,8 @@ export type UIContextValue = {
   setProfileOverlayOpen: Dispatch<SetStateAction<boolean>>
   settingsOverlayOpen: boolean
   setSettingsOverlayOpen: Dispatch<SetStateAction<boolean>>
+  initialSettingsSection: string | null
+  setInitialSettingsSection: Dispatch<SetStateAction<string | null>>
   attachPopoverOpen: boolean
   setAttachPopoverOpen: Dispatch<SetStateAction<boolean>>
   shortcutsOpen: boolean

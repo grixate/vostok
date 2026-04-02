@@ -4,6 +4,7 @@ import { NewMessagePanel } from './NewMessagePanel.tsx'
 import { useConnectionStatus } from '../../hooks/useConnectionStatus.ts'
 import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
+import { Cloud } from 'lucide-react'
 import {
   BackIcon,
   EditIcon,
@@ -20,7 +21,7 @@ type SidebarHeaderProps = {
 }
 
 export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
-  const { chatFilterInputRef } = useUIContext()
+  const { chatFilterInputRef, setSettingsOverlayOpen, setInitialSettingsSection } = useUIContext()
   const connectionStatus = useConnectionStatus()
   const dotColor = { connected: 'var(--green)', connecting: 'var(--color-warning)', disconnected: 'var(--label3)', error: 'var(--danger)' }[connectionStatus]
 
@@ -88,6 +89,16 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               aria-label={`Connection: ${connectionStatus}`}
             />
           </div>
+          <Tooltip text="Servers">
+            <button
+              className="sidebar__compose-btn"
+              type="button"
+              aria-label="Servers"
+              onClick={() => { setInitialSettingsSection('servers'); setSettingsOverlayOpen(true) }}
+            >
+              <Cloud size={16} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
           <Tooltip text="New message">
             <button
               className="sidebar__compose-btn"

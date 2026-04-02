@@ -430,6 +430,50 @@
   to { transform: translateY(0); }
 }
 
+/* ─── Backup Reminder Banner ─────────────────────────────────────────────── */
+
+.backup-reminder-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 299;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: rgba(255, 149, 0, 0.12);
+  animation: status-bar-in 200ms ease;
+}
+
+.backup-reminder-banner__text {
+  font-size: 13px;
+  font-weight: var(--emphasis-weight);
+  color: #FF9500;
+}
+
+.backup-reminder-banner__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.backup-reminder-banner__btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 149, 0, 0.3);
+  background: transparent;
+  color: #FF9500;
+  cursor: pointer;
+}
+
+.backup-reminder-banner__btn--primary {
+  background: rgba(255, 149, 0, 0.15);
+}
+
 /* ─── Keyboard Shortcuts Overlay ─────────────────────────────────────────── */
 
 .shortcuts-overlay__backdrop {

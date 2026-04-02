@@ -53,6 +53,8 @@ export function useServers() {
   const [servers, setServers] = useState<ServerEntry[]>(() => loadServers())
   const [activeServerId, setActiveServerIdState] = useState<string | null>(() => readActiveServerId())
   const [statusByServerId, setStatusByServerId] = useState<Record<string, ServerConnectionStatus>>({})
+  const statusByServerIdRef = useRef(statusByServerId)
+  statusByServerIdRef.current = statusByServerId
   const [chatsByServerId, setChatsByServerId] = useState<Map<string, ChatSummary[]>>(new Map())
   const [onlineUserIdsByServerId, setOnlineUserIdsByServerId] = useState<Map<string, Set<string>>>(new Map())
   const [lastErrorByServerId, setLastErrorByServerId] = useState<Record<string, string | null>>({})
@@ -221,16 +223,18 @@ export function useServers() {
         continue
       }
 
+      // Note: accessToken is intentionally excluded — the bootstrap itself
+      // refreshes the token (line 270), which changes accessToken, which would
+      // change the key, causing the guard to fail and re-bootstrap infinitely.
       const bootstrapKey = JSON.stringify({
         refreshToken: server.auth.refreshToken,
-        accessToken: server.auth.accessToken,
         deviceId: server.device?.deviceId ?? null
       })
 
       if (
         connection.bootstrapKey === bootstrapKey &&
         connection.bootstrappingKey == null &&
-        statusByServerId[server.id] === 'connected'
+        statusByServerIdRef.current[server.id] === 'connected'
       ) {
         continue
       }
@@ -423,15 +427,14 @@ export function useServers() {
       }
     }
 
-    const activeConnections = connectionsRef.current
-
-    return () => {
-      for (const connection of activeConnections.values()) {
-        connection.unsubscribeUser?.()
-        connection.unsubscribePresence?.()
-      }
-    }
-  }, [applyServerUpdate, refreshServerChats, servers, setServerStatus, statusByServerId, updateChatsForServer])
+    // Note: statusByServerId is intentionally excluded — it is written by this
+    // effect (via setServerStatus) and only read as an optimisation guard.
+    // No cleanup function here — subscriptions are managed by the bootstrap
+    // logic itself (it unsubscribes before re-subscribing at lines 375-376),
+    // and by removeServer.  Returning a cleanup would tear down live WebSocket
+    // subscriptions every time `servers` changes during bootstrap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyServerUpdate, refreshServerChats, servers, setServerStatus, updateChatsForServer])
 
   useEffect(() => {
     const selectedServer = activeServerId

@@ -365,6 +365,17 @@ function ensureDeviceSocket(token: string): Socket {
     return deviceSocket
   }
 
+  // If a socket already exists and is connected, keep it alive — just
+  // record the new token so reconnections use it.  Tearing down the socket
+  // on every token refresh kills all live channels (chat, presence, calls)
+  // and triggers a cascade of reconnections.
+  if (deviceSocket && connectionStatus === 'connected') {
+    deviceSocketToken = token
+    // Update params so reconnections use the fresh token
+    ;(deviceSocket as Socket & { params: () => Record<string, string> }).params = () => ({ token })
+    return deviceSocket
+  }
+
   if (deviceSocket) {
     deviceSocket.disconnect()
   }

@@ -90,7 +90,7 @@ export function createServerApiClient(baseUrl: string): ServerApiClient {
       }),
 
     devQuickLogin: (username) =>
-      request<LoginResponse>('/dev/login', {
+      request<LoginResponse>('/dev/quick-login', {
         method: 'POST',
         body: JSON.stringify({ username })
       }),

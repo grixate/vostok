@@ -13,19 +13,32 @@ export function usePresence(sessionToken: string | null) {
   const visibleOnlineUserIds = sessionToken ? onlineUserIds : EMPTY_ONLINE_USER_IDS
   const onlineRef = useRef(onlineUserIds)
 
+  // Stabilize the token: only update when transitioning between null and
+  // non-null (login/logout).  Token refreshes during bootstrap change the
+  // value but the global device socket (managed by ensureDeviceSocket) should
+  // not be torn down and recreated for every refresh — that kills all
+  // channels on the socket, including ones set up by the server bootstrap.
+  const [stableToken, setStableToken] = useState(sessionToken)
+  useEffect(() => {
+    // Only react to null↔non-null transitions
+    if ((!stableToken) !== (!sessionToken)) {
+      setStableToken(sessionToken)
+    }
+  }, [sessionToken, stableToken])
+
   useEffect(() => {
     onlineRef.current = visibleOnlineUserIds
   }, [visibleOnlineUserIds])
 
   useEffect(() => {
-    if (!sessionToken) return
+    if (!stableToken) return
 
-    return subscribeToPresence(sessionToken, {
+    return subscribeToPresence(stableToken, {
       onSync(userIds) {
         setOnlineUserIds(userIds)
       }
     })
-  }, [sessionToken])
+  }, [stableToken])
 
   const isUserOnline = useCallback(
     (userId: string) => onlineRef.current.has(userId),

@@ -1,6 +1,8 @@
 import type { SignedPrekeyPair, PrekeyPair } from './lib/device-auth'
 
 export type AuthView =
+  | 'welcome'
+  | 'restore-backup'
   | 'login'
   | 'invite-code'
   | 'create-account'

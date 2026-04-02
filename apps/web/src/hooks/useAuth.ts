@@ -23,7 +23,7 @@ export function useAuth(serverBaseUrl?: string | null) {
   ))
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
   const [view, setView] = useState<AuthView>(() => (
-    useLegacyStorage && readAuthSession() ? 'chat' : 'login'
+    useLegacyStorage && readAuthSession() ? 'chat' : 'welcome'
   ))
   const [error, setError] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(false)

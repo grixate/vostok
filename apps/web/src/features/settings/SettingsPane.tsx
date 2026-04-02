@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, type ReactNode, type CSSPrope
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { ProfilePhotoModal } from './ProfilePhotoModal.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
-import { useConnectionStatus } from '../../hooks/useConnectionStatus.ts'
 import { buildProfilePhotoUrl, useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
 import { BottomTabBar } from '../sidebar/BottomTabBar.tsx'
 import type { useAuth } from '../../hooks/useAuth.ts'
@@ -10,14 +9,24 @@ import type { useChatSessions } from '../../hooks/useChatSessions.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useServers } from '../../hooks/useServers.ts'
 import { type UserSettings } from '../../hooks/useSettings.ts'
-import { DEFAULT_MULTI_SERVER_COLOR } from '../../constants.ts'
 import { listDevices, revokeDevice, updateProfile, fetchMe } from '../../lib/api.ts'
 import { buildApiRoot } from '../../lib/api-request.ts'
-import { createServerApiClient } from '../../lib/server-api.ts'
-import { defaultServerLabel, normalizeServerUrl } from '../../lib/multi-server.ts'
 import type { DeviceInfo } from '../../lib/api.ts'
 import { getCallCapability } from '../../lib/media-e2ee.ts'
 import { ThemePicker } from './ThemePicker.tsx'
+import { ServerManagementSection } from './ServerManagementSection.tsx'
+import {
+  Toggle,
+  ToggleRow,
+  ChevronRow,
+  RadioRow,
+  InfoRow,
+  ButtonRow,
+  SectionLabel,
+  GroupCard,
+  rowStyle,
+  lastRowMod,
+} from './SettingsPrimitives.tsx'
 import {
   BackIcon,
   RefreshIcon,
@@ -40,6 +49,7 @@ import {
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
 type Section =
+  | 'servers'
   | 'general'
   | 'my-profile'
   | 'notifications'
@@ -48,7 +58,6 @@ type Section =
   | 'active-sessions'
   | 'appearance'
   | 'chat-folders'
-  | 'server-federation'
   | 'encryption'
 
 type SettingsPaneProps = {
@@ -60,123 +69,10 @@ type SettingsPaneProps = {
   onClose: () => void
 }
 
-// ─── Toggle Component ───────────────────────────────────────────────────────────
-
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      className={`toggle ${on ? 'toggle--on' : ''}`}
-      onClick={onToggle}
-    >
-      <span className="toggle__thumb" />
-    </button>
-  )
-}
-
-// ─── Reusable Row Components ────────────────────────────────────────────────────
-
-function ToggleRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void; last?: boolean }) {
-  return (
-    <div className="settings-section__row settings-section__row--info">
-      <span style={{ flex: 1 }}>{label}</span>
-      <Toggle on={on} onToggle={onToggle} />
-    </div>
-  )
-}
-
-function ChevronRow({ label, secondary, onClick }: { label: string; secondary?: string; onClick?: () => void; last?: boolean }) {
-  return (
-    <button type="button" className="settings-section__row" onClick={onClick}>
-      <span style={{ flex: 1 }}>{label}</span>
-      {secondary && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{secondary}</span>}
-      <ChevronRightIcon />
-    </button>
-  )
-}
-
-function RadioRow({ label, active, onSelect }: { label: string; active: boolean; onSelect: () => void; last?: boolean }) {
-  return (
-    <button type="button" className="settings-section__row" onClick={onSelect}>
-      <span style={{ flex: 1 }}>{label}</span>
-      <span
-        style={{
-          width: 22,
-          height: 22,
-          borderRadius: 11,
-          border: active ? 'none' : '2px solid var(--text-secondary)',
-          background: active ? 'var(--accent)' : 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        {active && <span style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />}
-      </span>
-    </button>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: string; last?: boolean }) {
-  return (
-    <div className="settings-section__row settings-section__row--info">
-      <span style={{ flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{value}</span>
-    </div>
-  )
-}
-
-function ButtonRow({ label, color, onClick }: { label: string; color?: 'accent' | 'danger'; onClick?: () => void; last?: boolean }) {
-  const c = color === 'danger' ? 'var(--status-error)' : 'var(--accent)'
-  return (
-    <button type="button" className="settings-section__row" onClick={onClick} style={{ color: c, fontWeight: 600 }}>
-      {label}
-    </button>
-  )
-}
-
-// ─── Group wrapper ──────────────────────────────────────────────────────────────
-
-function SectionLabel({ children, description }: { children: ReactNode; description?: string }) {
-  return (
-    <>
-      <div className="settings-section__group-title" style={{ paddingTop: 18 }}>
-        {children}
-      </div>
-      {description && <p className="settings-section__group-desc">{description}</p>}
-    </>
-  )
-}
-
-function GroupCard({ children }: { children: ReactNode }) {
-  return (
-    <div className="settings-section__group">
-      {children}
-    </div>
-  )
-}
-
-// ─── Shared row styles (used by sections that build custom rows) ───────────────
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  height: 48,
-  padding: '0 20px',
-  fontSize: 14,
-  color: 'var(--label)',
-  background: 'none',
-  borderBottom: '1px solid var(--border-subtle)',
-  width: '100%',
-}
-
-const lastRowMod: CSSProperties = { borderBottom: 'none' }
-
 // ─── Section title mapping ──────────────────────────────────────────────────────
 
 const SECTION_TITLES: Record<Section, string> = {
+  'servers': 'Servers',
   'general': 'General',
   'my-profile': 'My Profile',
   'notifications': 'Notifications and Sounds',
@@ -185,7 +81,6 @@ const SECTION_TITLES: Record<Section, string> = {
   'active-sessions': 'Active Sessions',
   'appearance': 'Appearance',
   'chat-folders': 'Chat Folders',
-  'server-federation': 'Server and Federation',
   'encryption': 'Encryption',
 }
 
@@ -196,6 +91,7 @@ type NavEntry = { id: Section; label: string; icon: ReactNode; badge?: string; s
 const LI = 20 // lucide icon size
 
 const NAV_ITEMS: NavEntry[] = [
+  { id: 'servers', label: 'Servers', icon: <Cloud size={LI} strokeWidth={1.75} /> },
   { id: 'general', label: 'General', icon: <SettingsIcon /> },
   { id: 'notifications', label: 'Notifications and Sounds', icon: <Bell size={LI} strokeWidth={1.75} /> },
   { id: 'privacy', label: 'Privacy and Security', icon: <LockIcon /> },
@@ -206,7 +102,6 @@ const NAV_ITEMS: NavEntry[] = [
 ]
 
 const NAV_ITEMS_BOTTOM: NavEntry[] = [
-  { id: 'server-federation', label: 'Server and Federation', icon: <Cloud size={LI} strokeWidth={1.75} />, secondary: 'vostok.example.com' },
   { id: 'encryption', label: 'Encryption', icon: <ShieldIcon /> },
 ]
 
@@ -223,11 +118,21 @@ type SettingsHook = {
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHook, onClose }: SettingsPaneProps) {
-  const { setSidebarTab, setSettingsOverlayOpen } = useUIContext()
-  const [activeSection, setActiveSection] = useState<Section>('general')
+  const { setSidebarTab, setSettingsOverlayOpen, initialSettingsSection, setInitialSettingsSection } = useUIContext()
+  const [activeSection, setActiveSection] = useState<Section>(() => {
+    if (initialSettingsSection && initialSettingsSection in SECTION_TITLES) {
+      return initialSettingsSection as Section
+    }
+    return 'general'
+  })
   const [mobileShowDetail, setMobileShowDetail] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const token = servers.activeServerScope?.token ?? auth.authSession?.accessToken ?? null
+
+  // Clear the initial section after it's consumed
+  useEffect(() => {
+    if (initialSettingsSection) setInitialSettingsSection(null)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track mobile viewport
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 600)
@@ -325,12 +230,13 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
           {NAV_ITEMS_BOTTOM.map((item) => (
             <NavButton
               key={item.id}
-              item={item.id === 'server-federation'
+              item={item.id === 'servers'
                 ? {
                     ...item,
                     secondary:
-                      servers.activeServer?.label ??
-                      (servers.servers.length > 0 ? `${servers.servers.length} configured` : 'No servers')
+                      servers.servers.length > 1
+                        ? `${servers.servers.length} servers connected`
+                        : servers.activeServer?.label ?? 'No servers'
                   }
                 : item}
               active={activeSection === item.id}
@@ -435,7 +341,7 @@ function SectionContent({ section, auth, chatSessions, chatList, servers, onClos
     case 'active-sessions': return <ActiveSessionsSection token={token} />
     case 'appearance': return <AppearanceSection s={s} />
     case 'chat-folders': return <ChatFoldersSection s={s} />
-    case 'server-federation': return <ServerFederationSection s={s} servers={servers} />
+    case 'servers': return <ServerManagementSection servers={servers} />
     case 'encryption': return <EncryptionSection />
   }
 }
@@ -1102,360 +1008,6 @@ function ChatFoldersSection({ s }: { s: SettingsHook }) {
       <GroupCard>
         <ToggleRow label="Show Folder Tabs" on={settings.folders_show_tabs} onToggle={() => toggle('folders_show_tabs')} last />
       </GroupCard>
-    </>
-  )
-}
-
-// ─── Server and Federation ──────────────────────────────────────────────────────
-
-function ServerFederationSection({ servers }: { s: SettingsHook; servers: ReturnType<typeof useServers> }) {
-  const connectionStatus = useConnectionStatus()
-  const [selectedServerId, setSelectedServerId] = useState<string | null>(servers.activeServer?.id ?? servers.servers[0]?.id ?? null)
-  const [draftUrl, setDraftUrl] = useState('')
-  const [draftLabel, setDraftLabel] = useState('')
-  const [draftColor, setDraftColor] = useState(DEFAULT_MULTI_SERVER_COLOR)
-  const [loginUsername, setLoginUsername] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
-  const [working, setWorking] = useState<string | null>(null)
-  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null)
-
-  useEffect(() => {
-    if (selectedServerId && servers.servers.some((server) => server.id === selectedServerId)) {
-      return
-    }
-
-    setSelectedServerId(servers.activeServer?.id ?? servers.servers[0]?.id ?? null)
-  }, [selectedServerId, servers.activeServer?.id, servers.servers])
-
-  const selectedServer =
-    servers.servers.find((server) => server.id === selectedServerId) ??
-    servers.activeServer ??
-    servers.servers[0] ??
-    null
-
-  const selectedServerStatus = selectedServer
-    ? servers.statusByServerId[selectedServer.id] ?? 'disconnected'
-    : 'disconnected'
-  const activeConnectionStatus = servers.activeServer?.id === selectedServer?.id
-    ? connectionStatus
-    : selectedServerStatus
-
-  const statusTheme = {
-    connected: { color: 'var(--green, #34C759)', label: 'Connected' },
-    connecting: { color: 'var(--color-warning)', label: 'Connecting...' },
-    disconnected: { color: 'var(--text-secondary)', label: 'Disconnected' },
-    offline: { color: 'var(--status-warning, #f0a030)', label: 'Offline' },
-    auth_required: { color: 'var(--status-warning, #f0a030)', label: 'Sign in required' },
-    error: { color: 'var(--status-error)' , label: 'Error' }
-  }[activeConnectionStatus]
-
-  async function handleAddServer(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const normalizedUrl = normalizeServerUrl(draftUrl)
-    if (!normalizedUrl) {
-      setMessage({ tone: 'error', text: 'Enter a valid server URL.' })
-      return
-    }
-
-    const existing = servers.servers.find((server) => normalizeServerUrl(server.url) === normalizedUrl)
-    if (existing) {
-      servers.setActiveServerId(existing.id)
-      setSelectedServerId(existing.id)
-      setMessage({ tone: 'info', text: 'That server is already configured.' })
-      return
-    }
-
-    setWorking('add')
-
-    try {
-      const client = createServerApiClient(normalizedUrl)
-      let serverInfo = null
-      try {
-        serverInfo = await client.getServerInfo()
-      } catch {
-        // Allow adding a server entry even if discovery is temporarily unavailable.
-      }
-
-      const entry = servers.addServer(
-        normalizedUrl,
-        draftLabel.trim() || defaultServerLabel(serverInfo?.name),
-        draftColor
-      )
-
-      if (serverInfo) {
-        servers.updateServer(entry.id, { serverInfo, label: draftLabel.trim() || defaultServerLabel(serverInfo.name) })
-      }
-
-      servers.setActiveServerId(entry.id)
-      setSelectedServerId(entry.id)
-      setDraftUrl('')
-      setDraftLabel('')
-      setDraftColor(DEFAULT_MULTI_SERVER_COLOR)
-      setLoginUsername('')
-      setLoginPassword('')
-      setMessage({ tone: 'success', text: 'Server added. Sign in to start syncing it.' })
-    } catch (error) {
-      setMessage({
-        tone: 'error',
-        text: error instanceof Error ? error.message : 'Failed to add the server.'
-      })
-    } finally {
-      setWorking(null)
-    }
-  }
-
-  async function handleLoginSelectedServer(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!selectedServer) {
-      return
-    }
-
-    if (!loginUsername.trim() || !loginPassword) {
-      setMessage({ tone: 'error', text: 'Enter a username and password for the selected server.' })
-      return
-    }
-
-    setWorking('login')
-
-    try {
-      const client = createServerApiClient(selectedServer.url)
-      const [serverInfo, response] = await Promise.all([
-        selectedServer.serverInfo ? Promise.resolve(selectedServer.serverInfo) : client.getServerInfo().catch(() => null),
-        client.login(loginUsername.trim(), loginPassword)
-      ])
-
-      servers.attachAuthSession(
-        selectedServer.id,
-        {
-          accessToken: response.access_token,
-          refreshToken: response.refresh_token,
-          user: {
-            id: response.user.id,
-            username: response.user.username,
-            display_name: response.user.display_name,
-            role: response.user.role,
-            temp_password: response.user.temp_password
-          }
-        },
-        serverInfo
-      )
-      servers.setActiveServerId(selectedServer.id)
-      setMessage({ tone: 'success', text: `Signed in to ${selectedServer.label}.` })
-      setLoginPassword('')
-    } catch (error) {
-      setMessage({
-        tone: 'error',
-        text: error instanceof Error ? error.message : 'Failed to sign in to the selected server.'
-      })
-    } finally {
-      setWorking(null)
-    }
-  }
-
-  function renderStatus(serverId: string) {
-    const status = servers.statusByServerId[serverId] ?? 'disconnected'
-    const theme = {
-      connected: { color: 'var(--green, #34C759)', label: 'Connected' },
-      connecting: { color: 'var(--color-warning)', label: 'Connecting...' },
-      disconnected: { color: 'var(--text-secondary)', label: 'Disconnected' },
-      offline: { color: 'var(--status-warning, #f0a030)', label: 'Offline' },
-      auth_required: { color: 'var(--status-warning, #f0a030)', label: 'Sign in required' },
-      error: { color: 'var(--status-error)', label: 'Error' }
-    }[status]
-
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.color }}>
-        <span style={{ width: 8, height: 8, borderRadius: 4, background: theme.color }} />
-        {theme.label}
-      </span>
-    )
-  }
-
-  return (
-    <>
-      <SectionLabel description="Manage the servers this client connects to">Connected Servers</SectionLabel>
-      <GroupCard>
-        {servers.servers.length > 0 ? (
-          servers.servers.map((server, index) => {
-            const isSelected = server.id === selectedServer?.id
-            const host = (() => {
-              try {
-                return new URL(server.url).host
-              } catch {
-                return server.url
-              }
-            })()
-
-            return (
-              <button
-                key={server.id}
-                type="button"
-                onClick={() => setSelectedServerId(server.id)}
-                style={{
-                  ...rowStyle,
-                  ...(index === servers.servers.length - 1 ? lastRowMod : {}),
-                  height: 'auto',
-                  minHeight: 72,
-                  padding: '14px 20px',
-                  justifyContent: 'space-between',
-                  background: isSelected ? 'var(--bg-surface-2)' : 'none',
-                  border: 'none',
-                  textAlign: 'left'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 999, background: server.color, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span>{server.label}</span>
-                      {server.id === servers.activeServer?.id ? (
-                        <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>ACTIVE</span>
-                      ) : null}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {host}
-                    </div>
-                    <div style={{ marginTop: 6 }}>{renderStatus(server.id)}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                  {server.auth?.user.username ? `@${server.auth.user.username}` : 'Signed out'}
-                </div>
-              </button>
-            )
-          })
-        ) : (
-          <div style={{ padding: '18px 20px', fontSize: 14, color: 'var(--text-secondary)' }}>
-            No servers are configured yet.
-          </div>
-        )}
-      </GroupCard>
-
-      {selectedServer ? (
-        <>
-          <SectionLabel>Selected Server</SectionLabel>
-          <GroupCard>
-            <InfoRow label="Address" value={selectedServer.url} />
-            <InfoRow label="Status" value={statusTheme.label} />
-            <InfoRow label="Account" value={selectedServer.auth?.user.username ? `@${selectedServer.auth.user.username}` : 'Not signed in'} />
-            <InfoRow label="Auth Mode" value={selectedServer.serverInfo?.auth_mode ?? 'Unknown'} />
-            <InfoRow label="Version" value={selectedServer.serverInfo?.version ?? 'Unknown'} />
-            {servers.lastErrorByServerId[selectedServer.id] ? (
-              <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--status-error)', borderBottom: '1px solid var(--border-subtle)' }}>
-                {servers.lastErrorByServerId[selectedServer.id]}
-              </div>
-            ) : null}
-            <div style={{ display: 'flex', gap: 10, padding: '14px 20px', flexWrap: 'wrap' }}>
-              {selectedServer.id !== servers.activeServer?.id ? (
-                <button
-                  type="button"
-                  className="mini-action"
-                  onClick={() => servers.setActiveServerId(selectedServer.id)}
-                >
-                  Use This Server
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="mini-action"
-                onClick={() => servers.updateServer(selectedServer.id, { enabled: !selectedServer.enabled })}
-              >
-                {selectedServer.enabled ? 'Disable Sync' : 'Enable Sync'}
-              </button>
-              {selectedServer.auth ? (
-                <button
-                  type="button"
-                  className="mini-action"
-                  onClick={() => servers.logoutServer(selectedServer.id)}
-                >
-                  Sign Out
-                </button>
-              ) : null}
-              {servers.servers.length > 1 ? (
-                <button
-                  type="button"
-                  className="mini-action"
-                  onClick={() => servers.removeServer(selectedServer.id)}
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-            <div style={{ padding: '0 20px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
-              {selectedServer.auth?.user.role === 'admin'
-                ? 'This account can access server administration features for the selected server.'
-                : 'Federation and server administration stay scoped to the selected server and remain hidden unless this account is an admin.'}
-            </div>
-          </GroupCard>
-
-          {!selectedServer.auth ? (
-            <>
-              <SectionLabel description="Sign in to sync chats, devices, and presence for this server">Sign In To Selected Server</SectionLabel>
-              <GroupCard>
-                <form onSubmit={handleLoginSelectedServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
-                  <input
-                    type="text"
-                    placeholder="Username"
-                    value={loginUsername}
-                    onChange={(event) => setLoginUsername(event.target.value)}
-                    style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                    style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
-                  />
-                  <button type="submit" className="primary-action" disabled={working === 'login'}>
-                    {working === 'login' ? 'Signing In…' : 'Sign In'}
-                  </button>
-                </form>
-              </GroupCard>
-            </>
-          ) : null}
-        </>
-      ) : null}
-
-      <SectionLabel description="Add another Vostok server and keep it isolated from your existing account state">Add Server</SectionLabel>
-      <GroupCard>
-        <form onSubmit={handleAddServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
-          <input
-            type="url"
-            placeholder="https://chat.example.com"
-            value={draftUrl}
-            onChange={(event) => setDraftUrl(event.target.value)}
-            style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
-          />
-          <input
-            type="text"
-            placeholder="Server label (optional)"
-            value={draftLabel}
-            onChange={(event) => setDraftLabel(event.target.value)}
-            style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
-          />
-          <label style={{ display: 'grid', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Accent Color
-            <input
-              type="color"
-              value={draftColor}
-              onChange={(event) => setDraftColor(event.target.value)}
-              style={{ width: 56, height: 36, border: 'none', background: 'none', padding: 0 }}
-            />
-          </label>
-          <button type="submit" className="primary-action" disabled={working === 'add'}>
-            {working === 'add' ? 'Adding…' : 'Add Server'}
-          </button>
-        </form>
-      </GroupCard>
-
-      {message ? (
-        <div style={{ marginTop: 12, fontSize: 13, color: message.tone === 'error' ? 'var(--status-error)' : message.tone === 'success' ? 'var(--green, #34C759)' : 'var(--text-secondary)' }}>
-          {message.text}
-        </div>
-      ) : null}
     </>
   )
 }

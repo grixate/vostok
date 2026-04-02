@@ -101,15 +101,21 @@ export function useChatList(
       _setActiveChatId((current) => {
         const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(current) : valueOrUpdater
         persistActiveChatId(next)
-        const nextServerId = getServerIdFromQualifiedChatId(next)
-        if (nextServerId) {
-          servers.setActiveServerId(nextServerId)
-        }
         return next
       })
     },
-    [servers]
+    []
   )
+
+  // Sync active server when active chat changes — kept outside the
+  // setState updater to avoid dispatching cross-component state updates
+  // during React's render phase (which causes "Maximum update depth" errors).
+  useEffect(() => {
+    const serverId = getServerIdFromQualifiedChatId(activeChatId)
+    if (serverId) {
+      servers.setActiveServerId(serverId)
+    }
+  }, [activeChatId, servers.setActiveServerId])
 
   useEffect(() => {
     if (view !== 'chat') {
