@@ -765,33 +765,46 @@ function AutoDownloadGroup({
 
 // ─── Data & Storage ─────────────────────────────────────────────────────────────
 
+const KEEP_MEDIA_PRESETS = [
+  { label: '3 days', seconds: 259200 },
+  { label: '1 week', seconds: 604800 },
+  { label: '1 month', seconds: 2592000 },
+  { label: '3 months', seconds: 7776000 },
+  { label: 'Forever', seconds: 0 },
+]
+
+const CACHE_LIMIT_PRESETS = [
+  { label: '256 MB', bytes: 256 * 1024 * 1024 },
+  { label: '512 MB', bytes: 512 * 1024 * 1024 },
+  { label: '1 GB', bytes: 1024 * 1024 * 1024 },
+  { label: '2 GB', bytes: 2 * 1024 * 1024 * 1024 },
+  { label: '5 GB', bytes: 5 * 1024 * 1024 * 1024 },
+  { label: 'No limit', bytes: 0 },
+]
+
+function keepMediaLabel(seconds: number): string {
+  const preset = KEEP_MEDIA_PRESETS.find((p) => p.seconds === seconds)
+  return preset?.label ?? 'Custom'
+}
+
+function cacheLimitLabel(bytes: number): string {
+  const preset = CACHE_LIMIT_PRESETS.find((p) => p.bytes === bytes)
+  return preset?.label ?? 'Custom'
+}
+
 function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: string | null }) {
-  const { settings, toggle } = s
-  const [storageEstimate, setStorageEstimate] = useState<string>(() => (
-    typeof navigator !== 'undefined' && typeof navigator.storage?.estimate === 'function'
-      ? '...'
-      : 'Unknown'
-  ))
+  const { settings, updateSetting } = s
   const [clearing, setClearing] = useState(false)
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [expandedSetting, setExpandedSetting] = useState<'keep' | 'limit' | null>(null)
 
-  useEffect(() => {
-    if (navigator.storage?.estimate) {
-      navigator.storage.estimate().then((est) => {
-        const usageMB = Math.round((est.usage ?? 0) / (1024 * 1024))
-        setStorageEstimate(`${usageMB} MB`)
-      }).catch(() => setStorageEstimate('Unknown'))
-    }
-  }, [clearing])
-
-  const handleClearCache = async () => {
+  const handleClearAll = async () => {
     setClearing(true)
     try {
-      // Clear Cache API
       if ('caches' in window) {
         const keys = await caches.keys()
         await Promise.all(keys.map((k) => caches.delete(k)))
       }
-      // Clear IndexedDB stores
       const dbs = await indexedDB.databases?.() ?? []
       for (const db of dbs) {
         if (db.name) indexedDB.deleteDatabase(db.name)
@@ -800,18 +813,71 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
       // best effort
     }
     setClearing(false)
+    setClearConfirm(false)
   }
 
   return (
     <>
-      <SectionLabel>Storage Usage</SectionLabel>
+      <SectionLabel>Storage</SectionLabel>
       <GroupCard>
         <ServerStorageBar serverUrl={serverUrl} />
-        <InfoRow label="Local Storage" value={storageEstimate} />
-        <ChevronRow label="Cache Limit" secondary="2 GB" />
-        <ChevronRow label="Keep Media" secondary="Forever" />
-        <ButtonRow label={clearing ? 'Clearing...' : 'Clear Cache'} color="danger" onClick={handleClearCache} last />
       </GroupCard>
+
+      <GroupCard>
+        <ChevronRow
+          label="Keep Media"
+          secondary={keepMediaLabel(settings.data_keep_media_seconds)}
+          onClick={() => setExpandedSetting(expandedSetting === 'keep' ? null : 'keep')}
+        />
+        {expandedSetting === 'keep' && (
+          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {KEEP_MEDIA_PRESETS.map((preset) => (
+              <RadioRow
+                key={preset.label}
+                label={preset.label}
+                active={settings.data_keep_media_seconds === preset.seconds}
+                onSelect={() => { updateSetting('data_keep_media_seconds', preset.seconds); setExpandedSetting(null) }}
+              />
+            ))}
+          </div>
+        )}
+        <ChevronRow
+          label="Cache Limit"
+          secondary={cacheLimitLabel(settings.data_cache_limit_bytes)}
+          onClick={() => setExpandedSetting(expandedSetting === 'limit' ? null : 'limit')}
+        />
+        {expandedSetting === 'limit' && (
+          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {CACHE_LIMIT_PRESETS.map((preset) => (
+              <RadioRow
+                key={preset.label}
+                label={preset.label}
+                active={settings.data_cache_limit_bytes === preset.bytes}
+                onSelect={() => { updateSetting('data_cache_limit_bytes', preset.bytes); setExpandedSetting(null) }}
+              />
+            ))}
+          </div>
+        )}
+      </GroupCard>
+
+      <GroupCard>
+        {clearConfirm ? (
+          <div style={{ padding: 20, display: 'grid', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Clear all local data?</p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+              This will remove all cached messages, downloaded media, and local settings from this device.
+              You will NOT be logged out. E2EE device keys will also be cleared.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" className="mini-action" onClick={() => setClearConfirm(false)}>Cancel</button>
+              <ButtonRow label={clearing ? 'Clearing...' : 'Clear Everything'} color="danger" onClick={handleClearAll} />
+            </div>
+          </div>
+        ) : (
+          <ButtonRow label="Clear All Local Data" color="danger" onClick={() => setClearConfirm(true)} />
+        )}
+      </GroupCard>
+
       <AutoDownloadGroup label="Auto-Download — Private Chats" chatKey="private_chats" settings={settings} updateSetting={s.updateSetting} />
       <AutoDownloadGroup label="Auto-Download — Group Chats" chatKey="group_chats" settings={settings} updateSetting={s.updateSetting} />
       <ServerStorageAdmin serverUrl={serverUrl} />

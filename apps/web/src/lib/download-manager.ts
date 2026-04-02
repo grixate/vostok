@@ -9,6 +9,7 @@ import { decryptAttachmentFile } from './attachment-vault.ts'
 import { confirmMediaDelivery } from './api.ts'
 import { buildApiRoot } from './api-request.ts'
 import { formatBytes } from './client-storage.ts'
+import type { StorageTracker } from './storage-tracker.ts'
 
 // ─── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export class DownloadManager {
   private token: string | null
   private apiBaseUrl: string
   private globalListeners = new Set<() => void>()
+  private storageTracker: StorageTracker | null = null
+  private chatIdByUploadId = new Map<string, string>()
 
   constructor(
     settings: AutoDownloadSettings,
@@ -88,6 +91,30 @@ export class DownloadManager {
 
   updateApiBaseUrl(url: string) {
     this.apiBaseUrl = url
+  }
+
+  setStorageTracker(tracker: StorageTracker) {
+    this.storageTracker = tracker
+  }
+
+  setChatIdForUpload(uploadId: string, chatId: string) {
+    this.chatIdByUploadId.set(uploadId, chatId)
+  }
+
+  evictLocally(uploadId: string): void {
+    const entry = this.entries.get(uploadId)
+    if (!entry) return
+
+    if (entry.state.status === 'ready') {
+      URL.revokeObjectURL(entry.state.playbackUrl)
+    }
+    if (entry.state.status === 'downloading' || entry.state.status === 'decrypting') {
+      entry.abortController?.abort()
+      this.activeCount = Math.max(0, this.activeCount - 1)
+    }
+
+    this.setState(entry, { status: 'idle' })
+    this.chatIdByUploadId.delete(uploadId)
   }
 
   // ── Auto-download evaluation ─────────────────────────────────────────────
@@ -337,6 +364,13 @@ export class DownloadManager {
       }
 
       this.setState(entry, { status: 'ready', playbackUrl })
+
+      // Record in storage tracker
+      if (this.storageTracker) {
+        const category = inferMediaKindForDownload(attachment.contentType, attachment.fileName)
+        const chatId = this.chatIdByUploadId.get(attachment.uploadId) ?? ''
+        this.storageTracker.record(attachment.uploadId, category, chatId, attachment.size)
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         // Already handled by cancel()

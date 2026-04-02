@@ -1,3 +1,61 @@
+/* ─── Storage Bar ────────────────────────────────────────────────────────── */
+
+.storage-bar {
+  padding: 16px 20px;
+}
+
+.storage-bar__track {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  gap: 1px;
+}
+
+.storage-bar__segment {
+  min-width: 2px;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.storage-bar__total {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.storage-bar__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.storage-bar__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.storage-bar__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.storage-bar__legend-label {
+  flex: 1;
+  color: var(--label);
+}
+
+.storage-bar__legend-size {
+  color: var(--text-secondary);
+}
+
 /* ─── Download Arrow ──────────────────────────────────────────────────────── */
 
 .download-arrow {

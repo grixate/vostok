@@ -82,6 +82,7 @@ defmodule VostokServerWeb.Router do
     get "/users", UserController, :index
     get "/users/:username/devices/prekeys", PrekeyController, :show
     get "/me", ChatController, :me
+    get "/me/storage", ServerController, :my_storage
     patch "/me/profile", ChatController, :update_profile
     post "/me/profile/photo", ChatController, :upload_profile_photo
     get "/me/profile/photo", ChatController, :serve_profile_photo
@@ -203,6 +204,7 @@ defmodule VostokServerWeb.Router do
 
     # Storage management
     get "/storage/status", StorageAdminController, :status
+    get "/storage/usage-by-user", StorageAdminController, :usage_by_user
     get "/storage/policies", StorageAdminController, :list_policies
     put "/storage/policies", StorageAdminController, :update_policy
     post "/storage/evict", StorageAdminController, :trigger_eviction

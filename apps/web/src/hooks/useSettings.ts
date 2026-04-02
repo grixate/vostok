@@ -55,6 +55,9 @@ export type UserSettings = {
   sessions_auto_terminate: boolean
   // Auto-download (structured)
   auto_download?: AutoDownloadSettings
+  // Storage management
+  data_keep_media_seconds: number
+  data_cache_limit_bytes: number
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -107,6 +110,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   // Sessions
   sessions_confirm_new: false,
   sessions_auto_terminate: false,
+  // Storage management
+  data_keep_media_seconds: 2592000,  // 30 days
+  data_cache_limit_bytes: 1073741824, // 1 GB
 }
 
 function readFromStorage(): Partial<UserSettings> | null {

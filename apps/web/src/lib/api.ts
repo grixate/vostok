@@ -931,6 +931,35 @@ export async function fetchMediaUpload(token: string, uploadId: string): Promise
   })
 }
 
+export type MyStorageResponse = {
+  usage_bytes: number
+  file_count: number
+  by_type: Record<string, { bytes: number; count: number }>
+  server_total_bytes: number
+  server_max_bytes: number
+  server_usage_ratio: number
+}
+
+export async function fetchMyStorage(token: string): Promise<MyStorageResponse> {
+  return apiRequest<MyStorageResponse>('/me/storage', {
+    method: 'GET',
+    headers: authHeader(token),
+  })
+}
+
+export type AdminStorageByUserResponse = {
+  users: { user_id: string; username: string; display_name: string | null; usage_bytes: number; file_count: number }[]
+  total_bytes: number
+  total_files: number
+}
+
+export async function fetchAdminStorageByUser(token: string): Promise<AdminStorageByUserResponse> {
+  return apiRequest<AdminStorageByUserResponse>('/admin/storage/usage-by-user', {
+    method: 'GET',
+    headers: authHeader(token),
+  })
+}
+
 export async function confirmMediaDelivery(token: string, mediaId: string): Promise<void> {
   await apiRequest<{ ok: boolean }>(`/media/${mediaId}/confirm`, {
     method: 'POST',

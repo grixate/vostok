@@ -1,6 +1,9 @@
 defmodule VostokServerWeb.Api.V1.StorageAdminController do
   use VostokServerWeb, :controller
 
+  import Ecto.Query
+  alias VostokServer.Repo
+  alias VostokServer.Media.Upload
   alias VostokServer.Storage.{HotCache, Monitor, EvictionWorker, PolicyEngine, ObjectStore}
 
   def status(conn, _params) do
@@ -58,6 +61,34 @@ defmodule VostokServerWeb.Api.V1.StorageAdminController do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: "Invalid profile. Must be one of: minimal, standard, archival"})
+  end
+
+  def usage_by_user(conn, _params) do
+    results =
+      from(u in Upload,
+        where: u.media_status == "available" and u.status == "completed",
+        join: d in assoc(u, :uploader_device),
+        join: user in assoc(d, :user),
+        group_by: [user.id, user.username, user.display_name],
+        select: %{
+          user_id: user.id,
+          username: user.username,
+          display_name: user.display_name,
+          usage_bytes: coalesce(sum(u.uploaded_byte_size), 0),
+          file_count: count(u.id)
+        },
+        order_by: [desc: sum(u.uploaded_byte_size)]
+      )
+      |> Repo.all()
+
+    total_bytes = Enum.reduce(results, 0, fn row, acc -> acc + (row.usage_bytes || 0) end)
+    total_files = Enum.reduce(results, 0, fn row, acc -> acc + row.file_count end)
+
+    json(conn, %{
+      users: results,
+      total_bytes: total_bytes,
+      total_files: total_files
+    })
   end
 
   def test_object_store(conn, _params) do
