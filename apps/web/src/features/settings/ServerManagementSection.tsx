@@ -425,7 +425,7 @@ export function ServerManagementSection({ servers }: Props) {
   return (
     <>
       {/* Server list */}
-      <SectionLabel description="Manage the servers this client connects to">Connected Servers</SectionLabel>
+      <SectionLabel>Connected Servers</SectionLabel>
       <GroupCard>
         {servers.servers.length > 0 ? (
           servers.servers.map((server, index) => {
@@ -520,7 +520,7 @@ export function ServerManagementSection({ servers }: Props) {
           {/* Sign in form for unauthenticated server */}
           {!selectedServer.auth && (
             <>
-              <SectionLabel description="Sign in to sync chats, devices, and presence for this server">Sign In</SectionLabel>
+              <SectionLabel>Sign In</SectionLabel>
               <GroupCard>
                 <form onSubmit={handleLoginSelectedServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
                   <input type="text" placeholder="Username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} style={inputStyle} />
@@ -536,7 +536,7 @@ export function ServerManagementSection({ servers }: Props) {
       )}
 
       {/* Add server */}
-      <SectionLabel description="Add another Vostok server">Add Server</SectionLabel>
+      <SectionLabel>Add Server</SectionLabel>
       <GroupCard>
         <form onSubmit={handleAddServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
           <input type="url" placeholder="https://chat.example.com" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} style={inputStyle} />
@@ -564,7 +564,7 @@ export function ServerManagementSection({ servers }: Props) {
       )}
 
       {/* ── Backup section ──────────────────────────────────────────────── */}
-      <SectionLabel description="Back up your server list and credentials to a .vostok file">Backup</SectionLabel>
+      <SectionLabel>Backup</SectionLabel>
       <GroupCard>
         <div style={{ ...rowStyle, height: 'auto', padding: '14px 20px', flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
           <span style={{ fontSize: 14 }}>{formatBackupAge()}</span>

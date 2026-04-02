@@ -532,7 +532,7 @@ function NotificationsSection({ s }: { s: SettingsHook }) {
 
   return (
     <>
-      <SectionLabel description="Control how you receive alerts">Desktop Notifications</SectionLabel>
+      <SectionLabel>Desktop Notifications</SectionLabel>
       <GroupCard>
         <ToggleRow label="Desktop Notifications" on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
         <ToggleRow label="Notification Sound" on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
@@ -577,7 +577,7 @@ function PrivacySection(
 
   return (
     <>
-      <SectionLabel description="Control who can see your information">Privacy</SectionLabel>
+      <SectionLabel>Privacy</SectionLabel>
       <GroupCard>
         <ToggleRow label="Last Seen" on={settings.privacy_last_seen} onToggle={() => toggle('privacy_last_seen')} />
         <ToggleRow label="Profile Photo" on={settings.privacy_profile_photo} onToggle={() => toggle('privacy_profile_photo')} />
@@ -585,7 +585,7 @@ function PrivacySection(
         <ToggleRow label="Read Receipts" on={settings.privacy_read_receipts} onToggle={() => toggle('privacy_read_receipts')} />
         <ToggleRow label="Typing Indicators" on={settings.privacy_typing_indicators} onToggle={() => toggle('privacy_typing_indicators')} last />
       </GroupCard>
-      <SectionLabel description="Manage your account protection">Security</SectionLabel>
+      <SectionLabel>Security</SectionLabel>
       <GroupCard>
         <ToggleRow label="Two-Factor Authentication" on={settings.privacy_two_factor} onToggle={() => toggle('privacy_two_factor')} />
         <ToggleRow label="Login Alerts" on={settings.privacy_login_alerts} onToggle={() => toggle('privacy_login_alerts')} />
@@ -1008,7 +1008,7 @@ function EncryptionSection() {
 
   return (
     <>
-      <SectionLabel description="End-to-end encryption protects your messages">Encryption Status</SectionLabel>
+      <SectionLabel>Encryption Status</SectionLabel>
       <GroupCard>
         <div style={{ ...rowStyle }}>
           <span style={{ flex: 1 }}>End-to-End Encryption</span>
@@ -1017,7 +1017,7 @@ function EncryptionSection() {
         <InfoRow label="Algorithm" value="Double Ratchet (X3DH)" last />
       </GroupCard>
 
-      <SectionLabel description="Direct, group, and room calls require browser support for encrypted media transforms">
+      <SectionLabel>
         Call Media Compatibility
       </SectionLabel>
       <GroupCard>
