@@ -4,81 +4,60 @@ import { Tooltip } from '../../components/Tooltip.tsx'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { useCall } from '../../hooks/useCall.ts'
-import type { useViewportLayout } from '../../hooks/useViewportLayout.ts'
 import type { usePresence } from '../../hooks/usePresence.ts'
 import type { ChatSummary } from '../../lib/api.ts'
-import { readAuthSession } from '../../utils/storage.ts'
 import {
-  BackIcon,
   PhoneIcon,
-  MoreVertIcon,
   SearchIcon,
+  VideoCamIcon,
 } from '../../icons/index.tsx'
 import { useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
 
 type ConversationHeaderProps = {
   activeChat: ChatSummary | null
+  currentUserId?: string | null
+  serverLabel?: string | null
+  serverUrl?: string | null
   groupChat: ReturnType<typeof useGroupChat>
   call: ReturnType<typeof useCall>
-  layout: ReturnType<typeof useViewportLayout>
   typingUsers: string[]
   presence: ReturnType<typeof usePresence>
   onClickTitle?: () => void
   onBack?: () => void
 }
 
-function TypingIndicator() {
-  return (
-    <span className="typing-indicator">
-      <span className="typing-indicator__text">typing</span>
-      <span className="typing-dot" />
-      <span className="typing-dot" />
-      <span className="typing-dot" />
-    </span>
-  )
-}
-
-function formatTypingSubtitle(typingUsers: string[], chatType: string): React.ReactNode {
-  if (typingUsers.length === 0) {
-    return null
-  }
-
-  if (chatType === 'group') {
-    if (typingUsers.length === 1) {
-      return <>{typingUsers[0]} is <TypingIndicator /></>
-    }
-
-    if (typingUsers.length === 2) {
-      return <>{typingUsers[0]} and {typingUsers[1]} are <TypingIndicator /></>
-    }
-
-    return <>{typingUsers[0]} and {typingUsers.length - 1} others are <TypingIndicator /></>
-  }
-
-  return <TypingIndicator />
-}
-
-function getOtherUserId(activeChat: ChatSummary): string | null {
+function getOtherUserId(activeChat: ChatSummary, currentUserId: string | null | undefined): string | null {
   if (activeChat.is_self_chat || activeChat.type === 'group') return null
-  const currentUserId = readAuthSession()?.user.id ?? null
   return activeChat.participant_user_ids?.find((id) => id !== currentUserId) ?? null
 }
 
-export function ConversationHeader({ activeChat, groupChat, call, layout, typingUsers, presence, onClickTitle, onBack }: ConversationHeaderProps) {
+export function ConversationHeader({ activeChat, currentUserId, serverLabel, serverUrl, groupChat, call, typingUsers, presence, onClickTitle, onBack }: ConversationHeaderProps) {
   const {
     setChatSearchOpen,
     setChatSearchQuery,
   } = useUIContext()
+  const otherUserId = activeChat ? getOtherUserId(activeChat, currentUserId) : null
+  const otherPhotoUrl = useProfilePhoto(activeChat?.is_self_chat ? null : otherUserId, serverUrl)
 
   if (!activeChat) {
     return null
   }
 
-  const otherUserId = getOtherUserId(activeChat)
-  const otherPhotoUrl = useProfilePhoto(activeChat.is_self_chat ? null : otherUserId)
   const isPresenceOnline = otherUserId ? presence.onlineUserIds.has(otherUserId) : false
   // If user is typing, they're clearly online
   const isOnline = isPresenceOnline || (typingUsers.length > 0 && !activeChat.is_self_chat && activeChat.type !== 'group')
+  const supportsCalling = !activeChat.is_self_chat
+  const callingUnavailable = call.callCapabilityState !== 'supported' || !call.isCallSessionReady
+  const callTooltip = callingUnavailable
+    ? (!call.isCallSessionReady
+        ? 'Calls are still loading for this account.'
+        : (call.callCapabilityReason ?? 'Calls are unavailable on this browser.'))
+    : 'Call'
+  const videoTooltip = callingUnavailable
+    ? (!call.isCallSessionReady
+        ? 'Calls are still loading for this account.'
+        : (call.callCapabilityReason ?? 'Calls are unavailable on this browser.'))
+    : 'Video call'
 
   const presenceSubtitle = isPresenceOnline ? 'online' : 'last seen recently'
   const defaultSubtitle = activeChat.is_self_chat
@@ -92,11 +71,16 @@ export function ConversationHeader({ activeChat, groupChat, call, layout, typing
         ? `${typingUsers[0]} is typing...`
         : 'typing...')
     : defaultSubtitle
+  const combinedSubtitle = serverLabel
+    ? subtitleText
+      ? `${serverLabel} · ${subtitleText}`
+      : serverLabel
+    : subtitleText
 
   return (
     <ConversationHeaderUI
       title={activeChat.title}
-      subtitle={subtitleText}
+      subtitle={combinedSubtitle}
       avatarColor={chatAvatarColor(activeChat.title, activeChat.is_self_chat)}
       avatarInitial={activeChat.is_self_chat ? '\uD83D\uDD16' : activeChat.title.slice(0, 1)}
       avatarUrl={otherPhotoUrl}
@@ -105,11 +89,30 @@ export function ConversationHeader({ activeChat, groupChat, call, layout, typing
       onClickInfo={onClickTitle}
       actions={(
         <>
-          {!activeChat.is_self_chat ? (
+          {supportsCalling ? (
             <>
-              <Tooltip text="Call">
-                <button className="conversation-header__btn" type="button" aria-label="Call" onClick={() => call.handleStartCall('voice')}>
+              <Tooltip text={callTooltip}>
+                <button
+                  className="conversation-header__btn"
+                  type="button"
+                  aria-label="Call"
+                  onClick={() => call.handleStartCall('voice')}
+                  disabled={callingUnavailable}
+                  title={callTooltip}
+                >
                   <PhoneIcon />
+                </button>
+              </Tooltip>
+              <Tooltip text={videoTooltip}>
+                <button
+                  className="conversation-header__btn"
+                  type="button"
+                  aria-label="Video call"
+                  onClick={() => call.handleStartCall('video')}
+                  disabled={callingUnavailable}
+                  title={videoTooltip}
+                >
+                  <VideoCamIcon />
                 </button>
               </Tooltip>
             </>

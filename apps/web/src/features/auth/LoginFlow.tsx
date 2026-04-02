@@ -1,4 +1,5 @@
 import type { useAuth } from '../../hooks/useAuth.ts'
+import type { useServers } from '../../hooks/useServers.ts'
 import type { AuthView } from '../../types.ts'
 import { LoginScreen } from './LoginScreen.tsx'
 import { InviteCodeScreen } from './InviteCodeScreen.tsx'
@@ -10,12 +11,15 @@ import { ServerBootstrapScreen } from './ServerBootstrapScreen.tsx'
 
 type LoginFlowProps = {
   auth: ReturnType<typeof useAuth>
+  servers: ReturnType<typeof useServers>
 }
 
-export function LoginFlow({ auth }: LoginFlowProps) {
+export function LoginFlow({ auth, servers }: LoginFlowProps) {
   const navigate = (view: AuthView) => {
     auth.setView(view)
   }
+  const selectedServer = servers.activeServer
+  const selectedServerUrl = selectedServer?.url ?? window.location.origin
 
   // Show nothing while checking stored session
   if (auth.initializing) {
@@ -30,8 +34,11 @@ export function LoginFlow({ auth }: LoginFlowProps) {
     case 'server-bootstrap':
       return (
         <ServerBootstrapScreen
+          serverUrl={selectedServerUrl}
+          serverName={selectedServer?.label ?? auth.serverInfo?.name ?? null}
           error={auth.error}
           loading={auth.loading}
+          onCheckUsername={auth.handleCheckUsername}
           onBootstrap={auth.handleBootstrap}
         />
       )
@@ -39,6 +46,7 @@ export function LoginFlow({ auth }: LoginFlowProps) {
     case 'invite-code':
       return (
         <InviteCodeScreen
+          onValidateInvite={auth.handleValidateInvite}
           onContinue={auth.handleInviteContinue}
           onNavigate={navigate}
         />
@@ -49,18 +57,26 @@ export function LoginFlow({ auth }: LoginFlowProps) {
         <CreateAccountScreen
           inviteCode={auth.inviteCode}
           serverInfo={auth.serverInfo}
+          serverUrl={selectedServerUrl}
+          serverName={selectedServer?.label ?? auth.serverInfo?.name ?? null}
           error={auth.error}
           loading={auth.loading}
+          onCheckUsername={auth.handleCheckUsername}
           onRegister={auth.handleRegister}
           onNavigate={navigate}
         />
       )
 
     case 'access-request':
-      return <AccessRequestScreen onNavigate={navigate} />
+      return <AccessRequestScreen onRequestAccess={auth.handleRequestAccess} onNavigate={navigate} />
 
     case 'forgot-password':
-      return <ForgotPasswordScreen onNavigate={navigate} />
+      return (
+        <ForgotPasswordScreen
+          onRequestPasswordReset={auth.handleRequestPasswordReset}
+          onNavigate={navigate}
+        />
+      )
 
     case 'force-password-change':
       return (
@@ -75,7 +91,10 @@ export function LoginFlow({ auth }: LoginFlowProps) {
     default:
       return (
         <LoginScreen
+          servers={servers}
           serverInfo={auth.serverInfo}
+          serverUrl={selectedServerUrl}
+          serverName={selectedServer?.label ?? auth.serverInfo?.name ?? null}
           error={auth.error}
           loading={auth.loading}
           onLogin={auth.handleLogin}

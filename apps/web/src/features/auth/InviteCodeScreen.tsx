@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ArrowLeft, Ticket, CircleCheck, CircleX, Loader2 } from 'lucide-react'
-import { validateInvite } from '../../lib/api.ts'
+import type { InviteValidation } from '../../lib/api.ts'
 import type { AuthView } from '../../types.ts'
 
 type Props = {
+  onValidateInvite: (code: string) => Promise<InviteValidation>
   onContinue: (code: string) => void
   onNavigate: (view: AuthView) => void
 }
 
 type ValidationState = 'idle' | 'checking' | 'valid' | 'invalid'
 
-export function InviteCodeScreen({ onContinue, onNavigate }: Props) {
+export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: Props) {
   const [code, setCode] = useState('')
   const [validation, setValidation] = useState<ValidationState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
@@ -24,7 +25,7 @@ export function InviteCodeScreen({ onContinue, onNavigate }: Props) {
 
     setValidation('checking')
     try {
-      const result = await validateInvite(value)
+      const result = await onValidateInvite(value)
       if (result.valid) {
         setValidation('valid')
         setServerName(result.server_name ?? '')
@@ -36,11 +37,10 @@ export function InviteCodeScreen({ onContinue, onNavigate }: Props) {
       setValidation('invalid')
       setErrorMessage('Could not validate code.')
     }
-  }, [])
+  }, [onValidateInvite])
 
   useEffect(() => {
-    if (!code) {
-      setValidation('idle')
+    if (code.length < 4) {
       return
     }
 
@@ -71,7 +71,12 @@ export function InviteCodeScreen({ onContinue, onNavigate }: Props) {
               placeholder="XXXX-XXXX-XXXX-XXXX"
               maxLength={16}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+              onChange={(e) => {
+                setValidation('idle')
+                setErrorMessage('')
+                setServerName('')
+                setCode(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))
+              }}
               style={{ textAlign: 'center', letterSpacing: 2, fontFamily: 'JetBrains Mono, monospace' }}
             />
           </div>

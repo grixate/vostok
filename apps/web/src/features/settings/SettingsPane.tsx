@@ -1,16 +1,22 @@
-import { useState, useEffect, useRef, useCallback, type CSSProperties, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, type ReactNode, type CSSProperties } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { ProfilePhotoModal } from './ProfilePhotoModal.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { useConnectionStatus } from '../../hooks/useConnectionStatus.ts'
-import { useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
+import { buildProfilePhotoUrl, useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
 import { BottomTabBar } from '../sidebar/BottomTabBar.tsx'
 import type { useAuth } from '../../hooks/useAuth.ts'
 import type { useChatSessions } from '../../hooks/useChatSessions.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
-import { useSettings } from '../../hooks/useSettings.ts'
+import type { useServers } from '../../hooks/useServers.ts'
+import { type UserSettings } from '../../hooks/useSettings.ts'
+import { DEFAULT_MULTI_SERVER_COLOR } from '../../constants.ts'
 import { listDevices, revokeDevice, updateProfile, fetchMe } from '../../lib/api.ts'
+import { buildApiRoot } from '../../lib/api-request.ts'
+import { createServerApiClient } from '../../lib/server-api.ts'
+import { defaultServerLabel, normalizeServerUrl } from '../../lib/multi-server.ts'
 import type { DeviceInfo } from '../../lib/api.ts'
+import { getCallCapability } from '../../lib/media-e2ee.ts'
 import { ThemePicker } from './ThemePicker.tsx'
 import {
   BackIcon,
@@ -26,7 +32,6 @@ import {
   Bell,
   Database,
   Paintbrush,
-  Globe,
   Folder,
   Cloud,
   Camera,
@@ -42,7 +47,6 @@ type Section =
   | 'data-storage'
   | 'active-sessions'
   | 'appearance'
-  | 'language'
   | 'chat-folders'
   | 'server-federation'
   | 'encryption'
@@ -51,6 +55,8 @@ type SettingsPaneProps = {
   auth: ReturnType<typeof useAuth>
   chatSessions: ReturnType<typeof useChatSessions>
   chatList: ReturnType<typeof useChatList>
+  servers: ReturnType<typeof useServers>
+  settingsHook: SettingsHook
   onClose: () => void
 }
 
@@ -60,66 +66,28 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
+      className={`toggle ${on ? 'toggle--on' : ''}`}
       onClick={onToggle}
-      style={{
-        width: 44,
-        height: 26,
-        borderRadius: 13,
-        border: 'none',
-        cursor: 'pointer',
-        background: on ? 'var(--accent)' : 'var(--bg-surface-3)',
-        position: 'relative',
-        flexShrink: 0,
-        transition: 'background 0.2s',
-      }}
     >
-      <span
-        style={{
-          position: 'absolute',
-          top: 3,
-          left: on ? 21 : 3,
-          width: 20,
-          height: 20,
-          borderRadius: 10,
-          background: '#fff',
-          transition: 'left 0.2s',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-        }}
-      />
+      <span className="toggle__thumb" />
     </button>
   )
 }
 
 // ─── Reusable Row Components ────────────────────────────────────────────────────
 
-const rowStyle: CSSProperties = {
-  height: 52,
-  display: 'flex',
-  alignItems: 'center',
-  padding: '0 20px',
-  gap: 12,
-  borderBottom: '1px solid var(--border-subtle)',
-  background: 'none',
-  width: '100%',
-  cursor: 'default',
-  fontSize: 14,
-  color: 'var(--label)',
-}
-
-const lastRowMod: CSSProperties = { borderBottom: 'none' }
-
-function ToggleRow({ label, on, onToggle, last }: { label: string; on: boolean; onToggle: () => void; last?: boolean }) {
+function ToggleRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void; last?: boolean }) {
   return (
-    <div style={{ ...rowStyle, ...(last ? lastRowMod : {}) }}>
+    <div className="settings-section__row settings-section__row--info">
       <span style={{ flex: 1 }}>{label}</span>
       <Toggle on={on} onToggle={onToggle} />
     </div>
   )
 }
 
-function ChevronRow({ label, secondary, onClick, last }: { label: string; secondary?: string; onClick?: () => void; last?: boolean }) {
+function ChevronRow({ label, secondary, onClick }: { label: string; secondary?: string; onClick?: () => void; last?: boolean }) {
   return (
-    <button type="button" onClick={onClick} style={{ ...rowStyle, ...(last ? lastRowMod : {}), cursor: 'pointer', border: 'none', textAlign: 'left' }}>
+    <button type="button" className="settings-section__row" onClick={onClick}>
       <span style={{ flex: 1 }}>{label}</span>
       {secondary && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{secondary}</span>}
       <ChevronRightIcon />
@@ -127,9 +95,9 @@ function ChevronRow({ label, secondary, onClick, last }: { label: string; second
   )
 }
 
-function RadioRow({ label, active, onSelect, last }: { label: string; active: boolean; onSelect: () => void; last?: boolean }) {
+function RadioRow({ label, active, onSelect }: { label: string; active: boolean; onSelect: () => void; last?: boolean }) {
   return (
-    <button type="button" onClick={onSelect} style={{ ...rowStyle, ...(last ? lastRowMod : {}), cursor: 'pointer', border: 'none', textAlign: 'left', borderBottom: last ? 'none' : '1px solid var(--border-subtle)' }}>
+    <button type="button" className="settings-section__row" onClick={onSelect}>
       <span style={{ flex: 1 }}>{label}</span>
       <span
         style={{
@@ -150,19 +118,19 @@ function RadioRow({ label, active, onSelect, last }: { label: string; active: bo
   )
 }
 
-function InfoRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
+function InfoRow({ label, value }: { label: string; value: string; last?: boolean }) {
   return (
-    <div style={{ ...rowStyle, ...(last ? lastRowMod : {}) }}>
+    <div className="settings-section__row settings-section__row--info">
       <span style={{ flex: 1 }}>{label}</span>
       <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{value}</span>
     </div>
   )
 }
 
-function ButtonRow({ label, color, onClick, last }: { label: string; color?: 'accent' | 'danger'; onClick?: () => void; last?: boolean }) {
+function ButtonRow({ label, color, onClick }: { label: string; color?: 'accent' | 'danger'; onClick?: () => void; last?: boolean }) {
   const c = color === 'danger' ? 'var(--status-error)' : 'var(--accent)'
   return (
-    <button type="button" onClick={onClick} style={{ ...rowStyle, ...(last ? lastRowMod : {}), cursor: 'pointer', border: 'none', color: c, fontWeight: 600, textAlign: 'left' }}>
+    <button type="button" className="settings-section__row" onClick={onClick} style={{ color: c, fontWeight: 600 }}>
       {label}
     </button>
   )
@@ -170,21 +138,41 @@ function ButtonRow({ label, color, onClick, last }: { label: string; color?: 'ac
 
 // ─── Group wrapper ──────────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: ReactNode }) {
+function SectionLabel({ children, description }: { children: ReactNode; description?: string }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-secondary)', padding: '18px 20px 6px' }}>
-      {children}
-    </div>
+    <>
+      <div className="settings-section__group-title" style={{ paddingTop: 18 }}>
+        {children}
+      </div>
+      {description && <p className="settings-section__group-desc">{description}</p>}
+    </>
   )
 }
 
 function GroupCard({ children }: { children: ReactNode }) {
   return (
-    <div style={{ borderRadius: 12, background: 'var(--bg-surface-1)', overflow: 'hidden', marginBottom: 4 }}>
+    <div className="settings-section__group">
       {children}
     </div>
   )
 }
+
+// ─── Shared row styles (used by sections that build custom rows) ───────────────
+
+const rowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  height: 48,
+  padding: '0 20px',
+  fontSize: 14,
+  color: 'var(--label)',
+  background: 'none',
+  borderBottom: '1px solid var(--border-subtle)',
+  width: '100%',
+}
+
+const lastRowMod: CSSProperties = { borderBottom: 'none' }
 
 // ─── Section title mapping ──────────────────────────────────────────────────────
 
@@ -196,7 +184,6 @@ const SECTION_TITLES: Record<Section, string> = {
   'data-storage': 'Data and Storage',
   'active-sessions': 'Active Sessions',
   'appearance': 'Appearance',
-  'language': 'Language',
   'chat-folders': 'Chat Folders',
   'server-federation': 'Server and Federation',
   'encryption': 'Encryption',
@@ -215,7 +202,6 @@ const NAV_ITEMS: NavEntry[] = [
   { id: 'data-storage', label: 'Data and Storage', icon: <Database size={LI} strokeWidth={1.75} /> },
   { id: 'active-sessions', label: 'Active Sessions', icon: <MonitorIcon />, badge: '4' },
   { id: 'appearance', label: 'Appearance', icon: <Paintbrush size={LI} strokeWidth={1.75} /> },
-  { id: 'language', label: 'Language', icon: <Globe size={LI} strokeWidth={1.75} />, secondary: 'English' },
   { id: 'chat-folders', label: 'Chat Folders', icon: <Folder size={LI} strokeWidth={1.75} /> },
 ]
 
@@ -226,17 +212,22 @@ const NAV_ITEMS_BOTTOM: NavEntry[] = [
 
 // ─── Settings hook result type ──────────────────────────────────────────────────
 
-type SettingsHook = ReturnType<typeof useSettings>
+type SettingsHook = {
+  settings: UserSettings
+  updateSetting: <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => void
+  toggle: (key: keyof UserSettings) => void
+  resetGroup: (prefix: string) => void
+  synced: boolean
+}
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
-export function SettingsPane({ auth, chatSessions, chatList, onClose }: SettingsPaneProps) {
+export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHook, onClose }: SettingsPaneProps) {
   const { setSidebarTab, setSettingsOverlayOpen } = useUIContext()
   const [activeSection, setActiveSection] = useState<Section>('general')
   const [mobileShowDetail, setMobileShowDetail] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const token = auth.authSession?.accessToken ?? null
-  const settingsHook = useSettings(token)
+  const token = servers.activeServerScope?.token ?? auth.authSession?.accessToken ?? null
 
   // Track mobile viewport
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 600)
@@ -260,10 +251,11 @@ export function SettingsPane({ auth, chatSessions, chatList, onClose }: Settings
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const profileInitial = auth.profileUsername?.[0]?.toUpperCase() ?? '?'
-  const profileName = auth.profileUsername ?? 'Unknown'
-  const settingsUserId = auth.authSession?.user.id
-  const settingsPhotoUrl = useProfilePhoto(settingsUserId)
+  const profileUsername = servers.activeServer?.auth?.user.username ?? auth.profileUsername
+  const profileInitial = profileUsername?.[0]?.toUpperCase() ?? '?'
+  const profileName = profileUsername ?? 'Unknown'
+  const settingsUserId = servers.activeServer?.auth?.user.id ?? auth.authSession?.user.id
+  const settingsPhotoUrl = useProfilePhoto(settingsUserId, servers.activeServer?.url)
 
   return (
     <div className="settings-pane" style={{ display: 'flex', height: '100%', width: '100%' }}>
@@ -301,35 +293,18 @@ export function SettingsPane({ auth, chatSessions, chatList, onClose }: Settings
           <button
             type="button"
             onClick={() => handleSelectSection('my-profile')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 8px',
-              width: '100%',
-              border: 'none',
-              background: activeSection === 'my-profile' ? 'var(--bg-surface-1)' : 'none',
-              borderRadius: 12,
-              cursor: 'pointer',
-              textAlign: 'left',
-              marginBottom: 4,
-            }}
+            className={`settings-profile-card${activeSection === 'my-profile' ? ' settings-profile-card--active' : ''}`}
           >
             {settingsPhotoUrl ? (
-              <img src={settingsPhotoUrl} alt={profileName} style={{ width: 62, height: 62, borderRadius: 31, objectFit: 'cover', flexShrink: 0 }} />
+              <img src={settingsPhotoUrl} alt={profileName} className="settings-profile-card__avatar" />
             ) : (
-              <div style={{
-                width: 62, height: 62, borderRadius: 31, flexShrink: 0,
-                background: 'linear-gradient(135deg, var(--accent), #FF9500)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 24, fontWeight: 700, color: '#fff',
-              }}>
+              <div className="settings-profile-card__avatar settings-profile-card__avatar--fallback">
                 {profileInitial}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{profileName}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>@{auth.profileUsername ?? ''}</div>
+            <div className="settings-profile-card__info">
+              <div className="settings-profile-card__name">{profileName}</div>
+              <div className="settings-profile-card__handle">@{profileUsername ?? ''}</div>
             </div>
             <ChevronRightIcon />
           </button>
@@ -350,7 +325,14 @@ export function SettingsPane({ auth, chatSessions, chatList, onClose }: Settings
           {NAV_ITEMS_BOTTOM.map((item) => (
             <NavButton
               key={item.id}
-              item={item}
+              item={item.id === 'server-federation'
+                ? {
+                    ...item,
+                    secondary:
+                      servers.activeServer?.label ??
+                      (servers.servers.length > 0 ? `${servers.servers.length} configured` : 'No servers')
+                  }
+                : item}
               active={activeSection === item.id}
               onClick={() => handleSelectSection(item.id)}
             />
@@ -393,12 +375,13 @@ export function SettingsPane({ auth, chatSessions, chatList, onClose }: Settings
         </div>
 
         {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 32px' }}>
+        <div key={activeSection} className="settings-pane__body--animate" style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 32px' }}>
           <SectionContent
             section={activeSection}
             auth={auth}
             chatSessions={chatSessions}
             chatList={chatList}
+            servers={servers}
             onClose={onClose}
             settingsHook={settingsHook}
             token={token}
@@ -416,27 +399,13 @@ function NavButton({ item, active, onClick }: { item: NavEntry; active: boolean;
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        width: '100%',
-        height: 52,
-        padding: '0 16px',
-        border: 'none',
-        borderRadius: 12,
-        background: active ? 'var(--accent-bg, rgba(255,85,0,0.08))' : 'none',
-        cursor: 'pointer',
-        fontSize: 14,
-        color: active ? 'var(--accent)' : 'var(--label)',
-        textAlign: 'left',
-        fontWeight: active ? 600 : 400,
-      }}
+      className={`settings-pane__nav-item${active ? ' settings-pane__nav-item--active' : ''}`}
+      style={{ borderRadius: 12, padding: '0 16px', fontSize: 14, fontWeight: active ? 600 : 400 }}
     >
-      <span style={{ display: 'flex', color: item.id === 'my-profile' ? 'var(--accent)' : active ? 'var(--accent)' : 'var(--text-secondary)' }}>{item.icon}</span>
-      <span style={{ flex: 1 }}>{item.label}</span>
+      <span className="settings-pane__nav-icon" style={{ color: active ? 'var(--accent)' : undefined }}>{item.icon}</span>
+      <span className="settings-pane__nav-label">{item.label}</span>
       {item.badge && (
-        <span style={{ background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 10, padding: '2px 7px', lineHeight: '16px' }}>
+        <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 11, fontWeight: 700, borderRadius: 10, padding: '2px 7px', lineHeight: '16px' }}>
           {item.badge}
         </span>
       )}
@@ -448,19 +417,25 @@ function NavButton({ item, active, onClick }: { item: NavEntry; active: boolean;
 
 // ─── Section Content Router ─────────────────────────────────────────────────────
 
-function SectionContent({ section, auth, chatSessions, chatList, onClose, settingsHook, token }: { section: Section; settingsHook: SettingsHook; token: string | null } & SettingsPaneProps) {
+function SectionContent({ section, auth, chatSessions, chatList, servers, onClose, settingsHook, token }: { section: Section; settingsHook: SettingsHook; token: string | null } & SettingsPaneProps) {
   const s = settingsHook
   switch (section) {
     case 'general': return <GeneralSection s={s} />
-    case 'my-profile': return <MyProfileSection token={token} auth={auth} />
+    case 'my-profile': return (
+      <MyProfileSection
+        token={token}
+        serverUrl={servers.activeServer?.url ?? null}
+        userId={servers.activeServer?.auth?.user.id ?? auth.authSession?.user.id ?? null}
+        profileUsername={servers.activeServer?.auth?.user.username ?? auth.profileUsername}
+      />
+    )
     case 'notifications': return <NotificationsSection s={s} />
     case 'privacy': return <PrivacySection s={s} auth={auth} chatSessions={chatSessions} chatList={chatList} onClose={onClose} />
-    case 'data-storage': return <DataStorageSection s={s} />
-    case 'active-sessions': return <ActiveSessionsSection token={token} auth={auth} />
+    case 'data-storage': return <DataStorageSection s={s} serverUrl={servers.activeServer?.url ?? null} />
+    case 'active-sessions': return <ActiveSessionsSection token={token} />
     case 'appearance': return <AppearanceSection s={s} />
-    case 'language': return <LanguageSection s={s} />
     case 'chat-folders': return <ChatFoldersSection s={s} />
-    case 'server-federation': return <ServerFederationSection s={s} />
+    case 'server-federation': return <ServerFederationSection s={s} servers={servers} />
     case 'encryption': return <EncryptionSection />
   }
 }
@@ -496,13 +471,6 @@ function GeneralSection({ s }: { s: SettingsHook }) {
       <GroupCard>
         <ButtonRow label="View Keyboard Shortcuts" color="accent" onClick={() => setShortcutsOpen(true)} last />
       </GroupCard>
-      <SectionLabel>Advanced</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Send Analytics" on={settings.general_analytics} onToggle={() => toggle('general_analytics')} />
-        <ToggleRow label="Hardware Acceleration" on={settings.general_hw_accel} onToggle={() => toggle('general_hw_accel')} />
-        <ToggleRow label="Auto-Updates" on={settings.general_auto_updates} onToggle={() => toggle('general_auto_updates')} />
-        <ToggleRow label="Log Debug Info" on={settings.general_debug_log} onToggle={() => toggle('general_debug_log')} last />
-      </GroupCard>
       <SectionLabel>Send Key</SectionLabel>
       <GroupCard>
         <RadioRow label="Enter" active={settings.general_send_key === 'enter'} onSelect={() => updateSetting('general_send_key', 'enter')} />
@@ -514,24 +482,32 @@ function GeneralSection({ s }: { s: SettingsHook }) {
 
 // ─── My Profile ─────────────────────────────────────────────────────────────────
 
-function MyProfileSection({ token, auth }: { token: string | null; auth: ReturnType<typeof useAuth> }) {
+function MyProfileSection({
+  token,
+  serverUrl,
+  userId,
+  profileUsername
+}: {
+  token: string | null
+  serverUrl: string | null
+  userId: string | null
+  profileUsername: string | null
+}) {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [uname, setUname] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [loaded, setLoaded] = useState(false)
   const [photoModalOpen, setPhotoModalOpen] = useState(false)
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null)
 
   // Check if profile photo exists (public URL, no auth needed)
-  const userId = auth.authSession?.user.id
   useEffect(() => {
     if (!userId) return
-    const url = `/api/v1/users/${userId}/photo`
+    const url = buildProfilePhotoUrl(userId, serverUrl)
     fetch(url)
       .then((r) => r.ok ? setProfilePhotoUrl(`${url}?v=${Date.now()}`) : null)
       .catch(() => null)
-  }, [userId])
+  }, [serverUrl, userId])
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load profile from /me on mount
@@ -541,14 +517,12 @@ function MyProfileSection({ token, auth }: { token: string | null; auth: ReturnT
       setDisplayName(data.user.display_name ?? '')
       setBio(data.user.bio ?? '')
       setUname(data.user.username ?? '')
-      setLoaded(true)
     }).catch(() => {
       // Fall back to what we have locally
-      setDisplayName(auth.profileUsername ?? '')
-      setUname(auth.profileUsername ?? '')
-      setLoaded(true)
+      setDisplayName(profileUsername ?? '')
+      setUname(profileUsername ?? '')
     })
-  }, [token, auth.profileUsername])
+  }, [profileUsername, token, userId])
 
   const debouncedSave = useCallback((fields: { display_name?: string; bio?: string; username?: string }) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -639,7 +613,7 @@ function MyProfileSection({ token, auth }: { token: string | null; auth: ReturnT
           onClose={() => setPhotoModalOpen(false)}
           onPhotoUpdated={(url) => {
             if (url && userId) {
-              setProfilePhotoUrl(`/api/v1/users/${userId}/photo?v=${Date.now()}`)
+              setProfilePhotoUrl(buildProfilePhotoUrl(userId, serverUrl, true))
             } else {
               setProfilePhotoUrl(null)
             }
@@ -657,7 +631,7 @@ function NotificationsSection({ s }: { s: SettingsHook }) {
 
   return (
     <>
-      <SectionLabel>Desktop Notifications</SectionLabel>
+      <SectionLabel description="Control how you receive alerts">Desktop Notifications</SectionLabel>
       <GroupCard>
         <ToggleRow label="Desktop Notifications" on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
         <ToggleRow label="Notification Sound" on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
@@ -694,12 +668,15 @@ function NotificationsSection({ s }: { s: SettingsHook }) {
 
 // ─── Privacy ────────────────────────────────────────────────────────────────────
 
-function PrivacySection({ s, auth, chatSessions, chatList, onClose }: { s: SettingsHook } & SettingsPaneProps) {
+function PrivacySection(
+  { s, auth, chatSessions, chatList, onClose }:
+  { s: SettingsHook; auth: ReturnType<typeof useAuth>; chatSessions: ReturnType<typeof useChatSessions>; chatList: ReturnType<typeof useChatList>; onClose: () => void }
+) {
   const { settings, toggle } = s
 
   return (
     <>
-      <SectionLabel>Privacy</SectionLabel>
+      <SectionLabel description="Control who can see your information">Privacy</SectionLabel>
       <GroupCard>
         <ToggleRow label="Last Seen" on={settings.privacy_last_seen} onToggle={() => toggle('privacy_last_seen')} />
         <ToggleRow label="Profile Photo" on={settings.privacy_profile_photo} onToggle={() => toggle('privacy_profile_photo')} />
@@ -707,7 +684,7 @@ function PrivacySection({ s, auth, chatSessions, chatList, onClose }: { s: Setti
         <ToggleRow label="Read Receipts" on={settings.privacy_read_receipts} onToggle={() => toggle('privacy_read_receipts')} />
         <ToggleRow label="Typing Indicators" on={settings.privacy_typing_indicators} onToggle={() => toggle('privacy_typing_indicators')} last />
       </GroupCard>
-      <SectionLabel>Security</SectionLabel>
+      <SectionLabel description="Manage your account protection">Security</SectionLabel>
       <GroupCard>
         <ToggleRow label="Two-Factor Authentication" on={settings.privacy_two_factor} onToggle={() => toggle('privacy_two_factor')} />
         <ToggleRow label="Login Alerts" on={settings.privacy_login_alerts} onToggle={() => toggle('privacy_login_alerts')} />
@@ -759,19 +736,21 @@ function PrivacySection({ s, auth, chatSessions, chatList, onClose }: { s: Setti
 
 // ─── Data and Storage ───────────────────────────────────────────────────────────
 
-function ServerStorageBar() {
+function ServerStorageBar({ serverUrl }: { serverUrl: string | null }) {
   const { sessionToken } = useAppContext()
   const [usage, setUsage] = useState<{ usage_bytes: number; max_bytes: number; usage_ratio: number } | null>(null)
 
   useEffect(() => {
     if (!sessionToken) return
-    fetch('/api/v1/server/storage', {
+    const apiRoot = buildApiRoot(serverUrl ?? window.location.origin)
+
+    fetch(`${apiRoot}/server/storage`, {
       headers: { Authorization: `Bearer ${sessionToken}` }
     })
       .then((r) => r.ok ? r.json() : null)
       .then(setUsage)
       .catch(() => {})
-  }, [sessionToken])
+  }, [serverUrl, sessionToken])
 
   if (!usage) return null
 
@@ -793,9 +772,13 @@ function ServerStorageBar() {
   )
 }
 
-function DataStorageSection({ s }: { s: SettingsHook }) {
+function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: string | null }) {
   const { settings, toggle } = s
-  const [storageEstimate, setStorageEstimate] = useState<string>('...')
+  const [storageEstimate, setStorageEstimate] = useState<string>(() => (
+    typeof navigator !== 'undefined' && typeof navigator.storage?.estimate === 'function'
+      ? '...'
+      : 'Unknown'
+  ))
   const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
@@ -804,8 +787,6 @@ function DataStorageSection({ s }: { s: SettingsHook }) {
         const usageMB = Math.round((est.usage ?? 0) / (1024 * 1024))
         setStorageEstimate(`${usageMB} MB`)
       }).catch(() => setStorageEstimate('Unknown'))
-    } else {
-      setStorageEstimate('Unknown')
     }
   }, [clearing])
 
@@ -832,7 +813,7 @@ function DataStorageSection({ s }: { s: SettingsHook }) {
     <>
       <SectionLabel>Storage Usage</SectionLabel>
       <GroupCard>
-        <ServerStorageBar />
+        <ServerStorageBar serverUrl={serverUrl} />
         <InfoRow label="Local Storage" value={storageEstimate} />
         <ChevronRow label="Cache Limit" secondary="2 GB" />
         <ChevronRow label="Keep Media" secondary="Forever" />
@@ -845,11 +826,7 @@ function DataStorageSection({ s }: { s: SettingsHook }) {
         <ToggleRow label="Documents" on={settings.data_auto_documents} onToggle={() => toggle('data_auto_documents')} />
         <ToggleRow label="Voice Messages" on={settings.data_auto_voice} onToggle={() => toggle('data_auto_voice')} last />
       </GroupCard>
-      <SectionLabel>Network</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Data Compression" on={settings.data_compression} onToggle={() => toggle('data_compression')} last />
-      </GroupCard>
-      <ServerStorageAdmin />
+      <ServerStorageAdmin serverUrl={serverUrl} />
     </>
   )
 }
@@ -862,7 +839,7 @@ const STORAGE_PROFILES = {
 
 type ProfileKey = keyof typeof STORAGE_PROFILES
 
-function ServerStorageAdmin() {
+function ServerStorageAdmin({ serverUrl }: { serverUrl: string | null }) {
   const { sessionToken } = useAppContext()
   const [status, setStatus] = useState<{
     hot_cache?: { usage_bytes: number; max_bytes: number; usage_ratio: number; path: string }
@@ -875,13 +852,15 @@ function ServerStorageAdmin() {
 
   const fetchStatus = useCallback(() => {
     if (!sessionToken) return
-    fetch('/api/v1/admin/storage/status', {
+    const apiRoot = buildApiRoot(serverUrl ?? window.location.origin)
+
+    fetch(`${apiRoot}/admin/storage/status`, {
       headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
     })
       .then((r) => r.ok ? r.json() : null)
       .then(setStatus)
       .catch(() => setStatus(null))
-  }, [sessionToken])
+  }, [serverUrl, sessionToken])
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
 
@@ -897,8 +876,9 @@ function ServerStorageAdmin() {
 
   const handleProfileSwitch = (profile: ProfileKey) => {
     if (!sessionToken || switching || profile === activeProfile) return
+    const apiRoot = buildApiRoot(serverUrl ?? window.location.origin)
     setSwitching(true)
-    fetch('/api/v1/admin/storage/profile', {
+    fetch(`${apiRoot}/admin/storage/profile`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile })
@@ -961,8 +941,9 @@ function ServerStorageAdmin() {
           color="accent"
           onClick={() => {
             if (!sessionToken || evicting) return
+            const apiRoot = buildApiRoot(serverUrl ?? window.location.origin)
             setEvicting(true)
-            fetch('/api/v1/admin/storage/evict', {
+            fetch(`${apiRoot}/admin/storage/evict`, {
               method: 'POST',
               headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
               body: '{}'
@@ -977,11 +958,12 @@ function ServerStorageAdmin() {
 
 // ─── Active Sessions ────────────────────────────────────────────────────────────
 
-function ActiveSessionsSection({ token, auth }: { token: string | null; auth: ReturnType<typeof useAuth> }) {
+function ActiveSessionsSection({ token }: { token: string | null }) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [revoking, setRevoking] = useState<string | null>(null)
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null)
+  const [nowTs, setNowTs] = useState(() => Date.now())
 
   useEffect(() => {
     if (!token) return
@@ -995,6 +977,13 @@ function ActiveSessionsSection({ token, auth }: { token: string | null; auth: Re
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [token])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowTs(Date.now())
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const handleRevoke = async (deviceId: string) => {
     if (!token) return
@@ -1020,7 +1009,7 @@ function ActiveSessionsSection({ token, auth }: { token: string | null; auth: Re
   const formatTime = (iso: string | null) => {
     if (!iso) return 'Unknown'
     const d = new Date(iso)
-    const diff = Date.now() - d.getTime()
+    const diff = nowTs - d.getTime()
     if (diff < 60_000) return 'Just now'
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)} min ago`
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} hours ago`
@@ -1090,45 +1079,15 @@ function AppearanceSection({ s }: { s: SettingsHook }) {
       </div>
       <SectionLabel>Chat Display</SectionLabel>
       <GroupCard>
-        <ToggleRow label="Compact Mode" on={settings.appearance_compact} onToggle={() => toggle('appearance_compact')} />
-        <ToggleRow label="Show Avatars" on={settings.appearance_show_avatars} onToggle={() => toggle('appearance_show_avatars')} />
-        <ToggleRow label="Show Timestamps" on={settings.appearance_timestamps} onToggle={() => toggle('appearance_timestamps')} />
-        <ToggleRow label="Floating Reactions" on={settings.appearance_floating_reactions} onToggle={() => toggle('appearance_floating_reactions')} last />
+        <ToggleRow label="Compact Mode" on={settings.general_compact} onToggle={() => toggle('general_compact')} />
+        <ToggleRow label="Show Avatars" on={settings.general_show_avatars} onToggle={() => toggle('general_show_avatars')} />
+        <ToggleRow label="Show Timestamps" on={settings.appearance_timestamps} onToggle={() => toggle('appearance_timestamps')} last />
       </GroupCard>
     </>
   )
 }
 
-// ─── Language ───────────────────────────────────────────────────────────────────
-
-function LanguageSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle, updateSetting } = s
-
-  const langs = [
-    { id: 'en', label: 'English' },
-    { id: 'de', label: 'Deutsch' },
-    { id: 'es', label: 'Espanol' },
-    { id: 'fr', label: 'Francais' },
-    { id: 'ru', label: 'Russkiy' },
-  ]
-
-  return (
-    <>
-      <SectionLabel>Available Languages</SectionLabel>
-      <GroupCard>
-        {langs.map((l, i) => (
-          <RadioRow key={l.id} label={l.label} active={settings.language === l.id} onSelect={() => updateSetting('language', l.id)} last={i === langs.length - 1} />
-        ))}
-      </GroupCard>
-      <SectionLabel>Translation</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Auto-Translate" on={settings.lang_auto_translate} onToggle={() => toggle('lang_auto_translate')} />
-        <ToggleRow label="Only Unfamiliar Languages" on={settings.lang_only_unfamiliar} onToggle={() => toggle('lang_only_unfamiliar')} />
-        <ToggleRow label="Show Original Text" on={settings.lang_show_original} onToggle={() => toggle('lang_show_original')} last />
-      </GroupCard>
-    </>
-  )
-}
+// ─── Language (removed — no i18n system) ────────────────────────────────────────
 
 // ─── Stickers and Emoji ─────────────────────────────────────────────────────────
 
@@ -1149,37 +1108,354 @@ function ChatFoldersSection({ s }: { s: SettingsHook }) {
 
 // ─── Server and Federation ──────────────────────────────────────────────────────
 
-function ServerFederationSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle } = s
+function ServerFederationSection({ servers }: { s: SettingsHook; servers: ReturnType<typeof useServers> }) {
   const connectionStatus = useConnectionStatus()
-  const statusColor = { connected: 'var(--green, #34C759)', connecting: 'var(--color-warning)', disconnected: 'var(--text-secondary)', error: 'var(--danger)' }[connectionStatus]
-  const statusLabel = { connected: 'Connected', connecting: 'Connecting...', disconnected: 'Disconnected', error: 'Error' }[connectionStatus]
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(servers.activeServer?.id ?? servers.servers[0]?.id ?? null)
+  const [draftUrl, setDraftUrl] = useState('')
+  const [draftLabel, setDraftLabel] = useState('')
+  const [draftColor, setDraftColor] = useState(DEFAULT_MULTI_SERVER_COLOR)
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [working, setWorking] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null)
 
-  // Extract server address from API base
-  let serverAddress = 'Unknown'
-  try {
-    const url = new URL(window.location.origin)
-    serverAddress = url.hostname
-  } catch { /* ignore */ }
+  useEffect(() => {
+    if (selectedServerId && servers.servers.some((server) => server.id === selectedServerId)) {
+      return
+    }
+
+    setSelectedServerId(servers.activeServer?.id ?? servers.servers[0]?.id ?? null)
+  }, [selectedServerId, servers.activeServer?.id, servers.servers])
+
+  const selectedServer =
+    servers.servers.find((server) => server.id === selectedServerId) ??
+    servers.activeServer ??
+    servers.servers[0] ??
+    null
+
+  const selectedServerStatus = selectedServer
+    ? servers.statusByServerId[selectedServer.id] ?? 'disconnected'
+    : 'disconnected'
+  const activeConnectionStatus = servers.activeServer?.id === selectedServer?.id
+    ? connectionStatus
+    : selectedServerStatus
+
+  const statusTheme = {
+    connected: { color: 'var(--green, #34C759)', label: 'Connected' },
+    connecting: { color: 'var(--color-warning)', label: 'Connecting...' },
+    disconnected: { color: 'var(--text-secondary)', label: 'Disconnected' },
+    offline: { color: 'var(--status-warning, #f0a030)', label: 'Offline' },
+    auth_required: { color: 'var(--status-warning, #f0a030)', label: 'Sign in required' },
+    error: { color: 'var(--status-error)' , label: 'Error' }
+  }[activeConnectionStatus]
+
+  async function handleAddServer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedUrl = normalizeServerUrl(draftUrl)
+    if (!normalizedUrl) {
+      setMessage({ tone: 'error', text: 'Enter a valid server URL.' })
+      return
+    }
+
+    const existing = servers.servers.find((server) => normalizeServerUrl(server.url) === normalizedUrl)
+    if (existing) {
+      servers.setActiveServerId(existing.id)
+      setSelectedServerId(existing.id)
+      setMessage({ tone: 'info', text: 'That server is already configured.' })
+      return
+    }
+
+    setWorking('add')
+
+    try {
+      const client = createServerApiClient(normalizedUrl)
+      let serverInfo = null
+      try {
+        serverInfo = await client.getServerInfo()
+      } catch {
+        // Allow adding a server entry even if discovery is temporarily unavailable.
+      }
+
+      const entry = servers.addServer(
+        normalizedUrl,
+        draftLabel.trim() || defaultServerLabel(serverInfo?.name),
+        draftColor
+      )
+
+      if (serverInfo) {
+        servers.updateServer(entry.id, { serverInfo, label: draftLabel.trim() || defaultServerLabel(serverInfo.name) })
+      }
+
+      servers.setActiveServerId(entry.id)
+      setSelectedServerId(entry.id)
+      setDraftUrl('')
+      setDraftLabel('')
+      setDraftColor(DEFAULT_MULTI_SERVER_COLOR)
+      setLoginUsername('')
+      setLoginPassword('')
+      setMessage({ tone: 'success', text: 'Server added. Sign in to start syncing it.' })
+    } catch (error) {
+      setMessage({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Failed to add the server.'
+      })
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  async function handleLoginSelectedServer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedServer) {
+      return
+    }
+
+    if (!loginUsername.trim() || !loginPassword) {
+      setMessage({ tone: 'error', text: 'Enter a username and password for the selected server.' })
+      return
+    }
+
+    setWorking('login')
+
+    try {
+      const client = createServerApiClient(selectedServer.url)
+      const [serverInfo, response] = await Promise.all([
+        selectedServer.serverInfo ? Promise.resolve(selectedServer.serverInfo) : client.getServerInfo().catch(() => null),
+        client.login(loginUsername.trim(), loginPassword)
+      ])
+
+      servers.attachAuthSession(
+        selectedServer.id,
+        {
+          accessToken: response.access_token,
+          refreshToken: response.refresh_token,
+          user: {
+            id: response.user.id,
+            username: response.user.username,
+            display_name: response.user.display_name,
+            role: response.user.role,
+            temp_password: response.user.temp_password
+          }
+        },
+        serverInfo
+      )
+      servers.setActiveServerId(selectedServer.id)
+      setMessage({ tone: 'success', text: `Signed in to ${selectedServer.label}.` })
+      setLoginPassword('')
+    } catch (error) {
+      setMessage({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Failed to sign in to the selected server.'
+      })
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  function renderStatus(serverId: string) {
+    const status = servers.statusByServerId[serverId] ?? 'disconnected'
+    const theme = {
+      connected: { color: 'var(--green, #34C759)', label: 'Connected' },
+      connecting: { color: 'var(--color-warning)', label: 'Connecting...' },
+      disconnected: { color: 'var(--text-secondary)', label: 'Disconnected' },
+      offline: { color: 'var(--status-warning, #f0a030)', label: 'Offline' },
+      auth_required: { color: 'var(--status-warning, #f0a030)', label: 'Sign in required' },
+      error: { color: 'var(--status-error)', label: 'Error' }
+    }[status]
+
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.color }}>
+        <span style={{ width: 8, height: 8, borderRadius: 4, background: theme.color }} />
+        {theme.label}
+      </span>
+    )
+  }
 
   return (
     <>
-      <SectionLabel>Home Server</SectionLabel>
+      <SectionLabel description="Manage the servers this client connects to">Connected Servers</SectionLabel>
       <GroupCard>
-        <InfoRow label="Address" value={serverAddress} />
-        <div style={{ ...rowStyle }}>
-          <span style={{ flex: 1 }}>Status</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: statusColor }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, background: statusColor }} />
-            {statusLabel}
-          </span>
+        {servers.servers.length > 0 ? (
+          servers.servers.map((server, index) => {
+            const isSelected = server.id === selectedServer?.id
+            const host = (() => {
+              try {
+                return new URL(server.url).host
+              } catch {
+                return server.url
+              }
+            })()
+
+            return (
+              <button
+                key={server.id}
+                type="button"
+                onClick={() => setSelectedServerId(server.id)}
+                style={{
+                  ...rowStyle,
+                  ...(index === servers.servers.length - 1 ? lastRowMod : {}),
+                  height: 'auto',
+                  minHeight: 72,
+                  padding: '14px 20px',
+                  justifyContent: 'space-between',
+                  background: isSelected ? 'var(--bg-surface-2)' : 'none',
+                  border: 'none',
+                  textAlign: 'left'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 999, background: server.color, flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>{server.label}</span>
+                      {server.id === servers.activeServer?.id ? (
+                        <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>ACTIVE</span>
+                      ) : null}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {host}
+                    </div>
+                    <div style={{ marginTop: 6 }}>{renderStatus(server.id)}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  {server.auth?.user.username ? `@${server.auth.user.username}` : 'Signed out'}
+                </div>
+              </button>
+            )
+          })
+        ) : (
+          <div style={{ padding: '18px 20px', fontSize: 14, color: 'var(--text-secondary)' }}>
+            No servers are configured yet.
+          </div>
+        )}
+      </GroupCard>
+
+      {selectedServer ? (
+        <>
+          <SectionLabel>Selected Server</SectionLabel>
+          <GroupCard>
+            <InfoRow label="Address" value={selectedServer.url} />
+            <InfoRow label="Status" value={statusTheme.label} />
+            <InfoRow label="Account" value={selectedServer.auth?.user.username ? `@${selectedServer.auth.user.username}` : 'Not signed in'} />
+            <InfoRow label="Auth Mode" value={selectedServer.serverInfo?.auth_mode ?? 'Unknown'} />
+            <InfoRow label="Version" value={selectedServer.serverInfo?.version ?? 'Unknown'} />
+            {servers.lastErrorByServerId[selectedServer.id] ? (
+              <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--status-error)', borderBottom: '1px solid var(--border-subtle)' }}>
+                {servers.lastErrorByServerId[selectedServer.id]}
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 10, padding: '14px 20px', flexWrap: 'wrap' }}>
+              {selectedServer.id !== servers.activeServer?.id ? (
+                <button
+                  type="button"
+                  className="mini-action"
+                  onClick={() => servers.setActiveServerId(selectedServer.id)}
+                >
+                  Use This Server
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="mini-action"
+                onClick={() => servers.updateServer(selectedServer.id, { enabled: !selectedServer.enabled })}
+              >
+                {selectedServer.enabled ? 'Disable Sync' : 'Enable Sync'}
+              </button>
+              {selectedServer.auth ? (
+                <button
+                  type="button"
+                  className="mini-action"
+                  onClick={() => servers.logoutServer(selectedServer.id)}
+                >
+                  Sign Out
+                </button>
+              ) : null}
+              {servers.servers.length > 1 ? (
+                <button
+                  type="button"
+                  className="mini-action"
+                  onClick={() => servers.removeServer(selectedServer.id)}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <div style={{ padding: '0 20px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
+              {selectedServer.auth?.user.role === 'admin'
+                ? 'This account can access server administration features for the selected server.'
+                : 'Federation and server administration stay scoped to the selected server and remain hidden unless this account is an admin.'}
+            </div>
+          </GroupCard>
+
+          {!selectedServer.auth ? (
+            <>
+              <SectionLabel description="Sign in to sync chats, devices, and presence for this server">Sign In To Selected Server</SectionLabel>
+              <GroupCard>
+                <form onSubmit={handleLoginSelectedServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={loginUsername}
+                    onChange={(event) => setLoginUsername(event.target.value)}
+                    style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
+                  />
+                  <button type="submit" className="primary-action" disabled={working === 'login'}>
+                    {working === 'login' ? 'Signing In…' : 'Sign In'}
+                  </button>
+                </form>
+              </GroupCard>
+            </>
+          ) : null}
+        </>
+      ) : null}
+
+      <SectionLabel description="Add another Vostok server and keep it isolated from your existing account state">Add Server</SectionLabel>
+      <GroupCard>
+        <form onSubmit={handleAddServer} style={{ display: 'grid', gap: 12, padding: 20 }}>
+          <input
+            type="url"
+            placeholder="https://chat.example.com"
+            value={draftUrl}
+            onChange={(event) => setDraftUrl(event.target.value)}
+            style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
+          />
+          <input
+            type="text"
+            placeholder="Server label (optional)"
+            value={draftLabel}
+            onChange={(event) => setDraftLabel(event.target.value)}
+            style={{ width: '100%', height: 42, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface-2)', color: 'var(--label)', padding: '0 14px' }}
+          />
+          <label style={{ display: 'grid', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+            Accent Color
+            <input
+              type="color"
+              value={draftColor}
+              onChange={(event) => setDraftColor(event.target.value)}
+              style={{ width: 56, height: 36, border: 'none', background: 'none', padding: 0 }}
+            />
+          </label>
+          <button type="submit" className="primary-action" disabled={working === 'add'}>
+            {working === 'add' ? 'Adding…' : 'Add Server'}
+          </button>
+        </form>
+      </GroupCard>
+
+      {message ? (
+        <div style={{ marginTop: 12, fontSize: 13, color: message.tone === 'error' ? 'var(--status-error)' : message.tone === 'success' ? 'var(--green, #34C759)' : 'var(--text-secondary)' }}>
+          {message.text}
         </div>
-        <ToggleRow label="Certificate Pinning" on={settings.server_certificate_pinning} onToggle={() => toggle('server_certificate_pinning')} last />
-      </GroupCard>
-      <SectionLabel>Federation</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Enable Federation" on={settings.server_federation} onToggle={() => toggle('server_federation')} last />
-      </GroupCard>
+      ) : null}
     </>
   )
 }
@@ -1187,15 +1463,62 @@ function ServerFederationSection({ s }: { s: SettingsHook }) {
 // ─── Encryption ─────────────────────────────────────────────────────────────────
 
 function EncryptionSection() {
+  const callCapability = getCallCapability()
+  const mediaE2eeEnabled = callCapability.state === 'supported'
+  const supportTone =
+    callCapability.state === 'supported'
+      ? 'var(--green, #34C759)'
+      : 'var(--status-warning, #f0a030)'
+  const userAgent =
+    typeof navigator === 'undefined'
+      ? 'Unknown'
+      : navigator.userAgent
+
   return (
     <>
-      <SectionLabel>Encryption Status</SectionLabel>
+      <SectionLabel description="End-to-end encryption protects your messages">Encryption Status</SectionLabel>
       <GroupCard>
         <div style={{ ...rowStyle }}>
           <span style={{ flex: 1 }}>End-to-End Encryption</span>
           <span style={{ fontSize: 13, color: 'var(--green, #34C759)', fontWeight: 600 }}>Enabled</span>
         </div>
         <InfoRow label="Algorithm" value="Double Ratchet (X3DH)" last />
+      </GroupCard>
+
+      <SectionLabel description="Direct, group, and room calls require browser support for encrypted media transforms">
+        Call Media Compatibility
+      </SectionLabel>
+      <GroupCard>
+        <div style={{ ...rowStyle }}>
+          <span style={{ flex: 1 }}>Encrypted Calling</span>
+          <span style={{ fontSize: 13, color: supportTone, fontWeight: 600 }}>
+            {mediaE2eeEnabled ? 'Supported' : 'Unavailable'}
+          </span>
+        </div>
+        <InfoRow label="Host" value={callCapability.hostKind === 'desktop' ? 'Desktop shell' : 'Browser'} />
+        <InfoRow label="Browser" value={callCapability.browserName} />
+        <InfoRow
+          label="Transport"
+          value={
+            callCapability.transport === 'standard'
+              ? 'Standard encoded transforms'
+              : callCapability.transport === 'legacy'
+                ? 'Legacy encoded streams'
+                : 'Unsupported'
+          }
+        />
+        <div style={{ ...rowStyle, height: 'auto', minHeight: 56, alignItems: 'flex-start', padding: '12px 20px' }}>
+          <span style={{ flex: 1 }}>Status</span>
+          <span style={{ fontSize: 13, color: mediaE2eeEnabled ? 'var(--text-secondary)' : 'var(--status-warning, #f0a030)', textAlign: 'right', maxWidth: 280 }}>
+            {callCapability.reason ?? 'This browser can place and join encrypted calls.'}
+          </span>
+        </div>
+        <div style={{ ...rowStyle, ...lastRowMod, height: 'auto', minHeight: 56, alignItems: 'flex-start', padding: '12px 20px' }}>
+          <span style={{ flex: 1 }}>User Agent</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right', maxWidth: 280, wordBreak: 'break-word' }}>
+            {userAgent}
+          </span>
+        </div>
       </GroupCard>
     </>
   )

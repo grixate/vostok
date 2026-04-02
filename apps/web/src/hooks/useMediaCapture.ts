@@ -5,6 +5,7 @@ import {
   appendMediaUploadPart,
   completeMediaUpload,
   confirmMediaDelivery,
+  createMessage,
   createMediaUpload,
   fetchMediaUpload,
   fetchMediaUploadState
@@ -67,7 +68,7 @@ export function useMediaCapture(
   replyTargetMessageId: string | null,
   setReplyTargetMessageId: React.Dispatch<React.SetStateAction<string | null>>
 ) {
-  const { sessionToken, storedDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   // Keep a ref to the latest token so async callbacks (recorder.onstop)
   // always use the current token, even if it refreshed during recording.
   const sessionTokenRef = useRef(sessionToken)
@@ -160,7 +161,26 @@ export function useMediaCapture(
       void voiceAudioContextRef.current.close().catch(() => undefined)
       voiceAudioContextRef.current = null
     }
+    if (voiceRecordingTimerRef.current) {
+      clearInterval(voiceRecordingTimerRef.current)
+      voiceRecordingTimerRef.current = null
+    }
+    setVoiceRecordingDuration(0)
     setVoiceNoteRecording(false)
+  }
+
+  async function discardVoiceNoteRecording() {
+    const recorder = voiceNoteRecorderRef.current
+
+    if (recorder) {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      if (recorder.state !== 'inactive') {
+        recorder.stop()
+      }
+    }
+
+    cleanupVoiceNoteCapture()
   }
 
   function cleanupRoundVideoCapture() {
@@ -423,7 +443,6 @@ export function useMediaCapture(
       console.log('[sendAttachmentFile] encrypted OK, sending to server...')
 
       try {
-        const { createMessage } = await import('../lib/api.ts')
         const response = await createMessage(sessionTokenRef.current!, activeChatId, payload)
         console.log('[sendAttachmentFile] server response:', response.message.id, 'client_id:', response.message.client_id)
 
@@ -581,8 +600,11 @@ export function useMediaCapture(
       try {
         const stream = roundVideoStreamRef.current
         const videoTrack = stream?.getVideoTracks()[0]
-        if (videoTrack && 'ImageCapture' in window) {
-          const capture = new (window as any).ImageCapture(videoTrack)
+        const imageCaptureCtor = (window as typeof window & {
+          ImageCapture?: new (track: MediaStreamTrack) => { grabFrame(): Promise<ImageBitmap> }
+        }).ImageCapture
+        if (videoTrack && imageCaptureCtor) {
+          const capture = new imageCaptureCtor(videoTrack) as unknown as { grabFrame(): Promise<ImageBitmap> }
           const bitmap = await capture.grabFrame()
           const canvas = document.createElement('canvas')
           const maxEdge = 280
@@ -793,6 +815,7 @@ export function useMediaCapture(
     attachmentPlaybackUrls,
     expiredMediaIds,
     cleanupVoiceNoteCapture,
+    discardVoiceNoteRecording,
     sendAttachmentFile,
     handleAttachmentPick,
     handleVoiceNoteToggle,

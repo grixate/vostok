@@ -114,11 +114,12 @@
   height: 16px;
   border-radius: 50%;
   background: white;
-  transition: transform 200ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: left 200ms ease;
 }
 
 .toggle--on .toggle__thumb {
-  transform: translateX(14px);
+  left: 17px;
 }
 
 /* ─── Status Banners ──────────────────────────────────────────────────────── */
@@ -548,4 +549,97 @@
   border-radius: 50%;
   border: 1px solid var(--border-subtle);
   flex-shrink: 0;
+}
+
+/* ─── Empty State ────────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  animation: empty-state-in 300ms ease;
+}
+
+.empty-state__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--bg-surface-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.empty-state__title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.empty-state__body {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 280px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.empty-state__action {
+  margin-top: 4px;
+}
+
+/* ─── Chat List Skeleton ────────────────────────────────────────────────── */
+
+.chat-list-skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-list-skeleton__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  height: 72px;
+}
+
+.chat-list-skeleton__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-surface-2);
+  flex-shrink: 0;
+}
+
+.chat-list-skeleton__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.chat-list-skeleton__line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+}
+
+.chat-list-skeleton__line--short {
+  width: 60%;
+}
+
+.chat-list-skeleton__line--long {
+  width: 85%;
+}
+
+.chat-list-skeleton__avatar,
+.chat-list-skeleton__line {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
 }

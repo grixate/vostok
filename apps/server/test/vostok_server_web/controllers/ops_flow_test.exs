@@ -1,6 +1,9 @@
 defmodule VostokServerWeb.OpsFlowTest do
   use VostokServerWeb.ConnCase, async: false
 
+  alias VostokServer.Identity.User
+  alias VostokServer.Repo
+
   setup do
     previous = Application.get_env(:vostok_server, :registration_mode)
     Application.put_env(:vostok_server, :registration_mode, "open")
@@ -11,7 +14,11 @@ defmodule VostokServerWeb.OpsFlowTest do
   test "admin overview, federation peer scaffolding, and turn credentials are available", %{
     conn: conn
   } do
-    %{device_id: current_device_id, token: token} = register_device(conn, "ops-user")
+    %{device_id: current_device_id, token: token, user_id: user_id} = register_device(conn, "ops-user")
+
+    Repo.get!(User, user_id)
+    |> User.admin_changeset(%{role: "admin", status: "active"})
+    |> Repo.update!()
 
     overview_conn =
       build_conn()
@@ -197,7 +204,7 @@ defmodule VostokServerWeb.OpsFlowTest do
                "chat_id" => ^chat_id,
                "id" => call_id,
                "mode" => "voice",
-               "status" => "active"
+               "status" => "ringing"
              }
            } = json_response(create_call_conn, 201)
 
@@ -209,9 +216,21 @@ defmodule VostokServerWeb.OpsFlowTest do
     assert %{
              "call" => %{
                "id" => ^call_id,
-               "status" => "active"
+               "status" => "ringing"
              }
            } = json_response(active_call_conn, 200)
+
+    accept_call_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> post("/api/v1/calls/#{call_id}/accept", %{})
+
+    assert %{
+             "call" => %{
+               "id" => ^call_id,
+               "status" => "active"
+             }
+           } = json_response(accept_call_conn, 200)
 
     join_call_conn =
       build_conn()
@@ -506,6 +525,18 @@ defmodule VostokServerWeb.OpsFlowTest do
                "id" => call_id
              }
            } = json_response(create_call_conn, 201)
+
+    accept_call_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/calls/#{call_id}/accept", %{})
+
+    assert %{
+             "call" => %{
+               "id" => ^call_id,
+               "status" => "active"
+             }
+           } = json_response(accept_call_conn, 200)
 
     alice_join_conn =
       build_conn()
@@ -810,9 +841,10 @@ defmodule VostokServerWeb.OpsFlowTest do
 
     assert %{
              "device" => %{"id" => device_id},
+             "user" => %{"id" => user_id},
              "session" => %{"token" => token}
            } = json_response(register_conn, 201)
 
-    %{device_id: device_id, token: token}
+    %{device_id: device_id, token: token, user_id: user_id}
   end
 end

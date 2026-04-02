@@ -125,9 +125,21 @@ defmodule VostokServerWeb.Router do
     post "/media/:id/confirm", MediaController, :confirm_delivery
     post "/media/link-metadata", MediaController, :link_metadata
 
+    # Key backup
+    put "/keys/backup", KeyBackupController, :upload
+    get "/keys/backup", KeyBackupController, :download
+    delete "/keys/backup", KeyBackupController, :delete
+
     # Calls
+    get "/calls/history", CallController, :call_history
+    get "/calls/active", CallController, :active_calls
     get "/chats/:chat_id/calls/active", CallController, :active_call
     post "/chats/:chat_id/calls", CallController, :create_call
+    post "/call-rooms", CallRoomController, :create
+    get "/call-rooms/:room_id", CallRoomController, :show
+    get "/call-rooms/:room_id/recipient-devices", CallRoomController, :recipient_devices
+    get "/call-rooms/:room_id/calls/active", CallRoomController, :active_call
+    post "/call-rooms/:room_id/calls", CallRoomController, :create_call
     post "/calls/turn-credentials", CallController, :turn_credentials
     get "/calls/:call_id", CallController, :call_state
     post "/calls/:call_id/join", CallController, :join_call
@@ -144,16 +156,6 @@ defmodule VostokServerWeb.Router do
     post "/calls/:call_id/leave", CallController, :leave_call
     post "/calls/:call_id/end", CallController, :end_call
 
-    # Admin (federation — existing)
-    get "/admin/overview", AdminController, :overview
-    get "/admin/federation/peers", AdminController, :federation_peers
-    post "/admin/federation/peers", AdminController, :create_federation_peer
-    get "/admin/federation/deliveries", AdminController, :federation_deliveries
-    post "/admin/federation/peers/:peer_id/deliveries", AdminController, :create_federation_delivery
-    post "/admin/federation/deliveries/:job_id/attempt", AdminController, :attempt_federation_delivery
-    post "/admin/federation/peers/:peer_id/status", AdminController, :update_federation_peer_status
-    post "/admin/federation/peers/:peer_id/heartbeat", AdminController, :federation_peer_heartbeat
-    post "/admin/federation/peers/:peer_id/invite", AdminController, :create_federation_peer_invite
   end
 
   # ── Admin-only endpoints ────────────────────────────────────────────────
@@ -187,6 +189,17 @@ defmodule VostokServerWeb.Router do
     # Server settings
     get "/settings", AdminController, :get_settings
     patch "/settings", AdminController, :update_settings
+
+    # Federation operations
+    get "/overview", AdminController, :overview
+    get "/federation/peers", AdminController, :federation_peers
+    post "/federation/peers", AdminController, :create_federation_peer
+    get "/federation/deliveries", AdminController, :federation_deliveries
+    post "/federation/peers/:peer_id/deliveries", AdminController, :create_federation_delivery
+    post "/federation/deliveries/:job_id/attempt", AdminController, :attempt_federation_delivery
+    post "/federation/peers/:peer_id/status", AdminController, :update_federation_peer_status
+    post "/federation/peers/:peer_id/heartbeat", AdminController, :federation_peer_heartbeat
+    post "/federation/peers/:peer_id/invite", AdminController, :create_federation_peer_invite
 
     # Storage management
     get "/storage/status", StorageAdminController, :status

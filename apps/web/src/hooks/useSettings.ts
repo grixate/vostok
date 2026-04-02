@@ -14,16 +14,9 @@ export type UserSettings = {
   general_compact: boolean
   general_show_avatars: boolean
   general_animations: boolean
-  general_analytics: boolean
-  general_hw_accel: boolean
-  general_auto_updates: boolean
-  general_debug_log: boolean
   general_send_key: 'enter' | 'ctrl-enter'
   // Appearance
-  appearance_compact: boolean
-  appearance_show_avatars: boolean
   appearance_timestamps: boolean
-  appearance_floating_reactions: boolean
   // Notifications
   notif_desktop: boolean
   notif_sound: boolean
@@ -54,17 +47,8 @@ export type UserSettings = {
   data_auto_videos: boolean
   data_auto_documents: boolean
   data_auto_voice: boolean
-  data_compression: boolean
-  // Language
-  language: string
-  lang_auto_translate: boolean
-  lang_only_unfamiliar: boolean
-  lang_show_original: boolean
   // Chat Folders
   folders_show_tabs: boolean
-  // Server
-  server_certificate_pinning: boolean
-  server_federation: boolean
   // Sessions
   sessions_confirm_new: boolean
   sessions_auto_terminate: boolean
@@ -82,16 +66,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   general_compact: false,
   general_show_avatars: false,
   general_animations: true,
-  general_analytics: false,
-  general_hw_accel: false,
-  general_auto_updates: true,
-  general_debug_log: false,
   general_send_key: 'enter',
   // Appearance
-  appearance_compact: false,
-  appearance_show_avatars: false,
   appearance_timestamps: true,
-  appearance_floating_reactions: false,
   // Notifications
   notif_desktop: true,
   notif_sound: true,
@@ -122,17 +99,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   data_auto_videos: false,
   data_auto_documents: false,
   data_auto_voice: false,
-  data_compression: false,
-  // Language
-  language: 'en',
-  lang_auto_translate: false,
-  lang_only_unfamiliar: false,
-  lang_show_original: false,
   // Chat Folders
   folders_show_tabs: true,
-  // Server
-  server_certificate_pinning: true,
-  server_federation: false,
   // Sessions
   sessions_confirm_new: false,
   sessions_auto_terminate: false,
@@ -159,10 +127,6 @@ export function useSettings(token: string | null) {
   })
   const [synced, setSynced] = useState(false)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const latestSettingsRef = useRef(settings)
-
-  // Keep ref in sync
-  latestSettingsRef.current = settings
 
   // Fetch from server on mount and merge
   useEffect(() => {

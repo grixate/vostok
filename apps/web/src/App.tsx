@@ -1,14 +1,22 @@
 import {
-  useCallback,
+  Suspense,
   useDeferredValue,
   useEffect,
+  lazy,
   useRef,
   useState
 } from 'react'
 
-import type { Banner, StoredDevice } from './types.ts'
-import { readStoredDevice, readAuthSession } from './utils/storage.ts'
+import type { AuthSession, Banner, ServerInfo, StoredDevice } from './types.ts'
 import { buildDesktopWindowTitle } from './utils/call-helpers.ts'
+import { setDefaultApiBaseUrl } from './lib/api.ts'
+import { setDefaultRealtimeBaseUrl } from './lib/realtime.ts'
+import { normalizeServerUrl } from './lib/multi-server.ts'
+import {
+  doesAuthSessionMatchServer,
+  findServerForAuthSession,
+  shouldShowOnboarding
+} from './lib/auth-routing.ts'
 
 import { AppContext, useAppContext } from './contexts/AppContext.tsx'
 import { ThemeContext } from './contexts/ThemeContext.tsx'
@@ -21,7 +29,6 @@ import { useGroupChat } from './hooks/useGroupChat.ts'
 import { useChatSessions } from './hooks/useChatSessions.ts'
 import { useMessages } from './hooks/useMessages.ts'
 import { useMediaCapture } from './hooks/useMediaCapture.ts'
-import { useFederation } from './hooks/useFederation.ts'
 import { useCall } from './hooks/useCall.ts'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
 import { useTheme } from './hooks/useTheme.ts'
@@ -32,20 +39,78 @@ import { usePresence } from './hooks/usePresence.ts'
 import { useNotifications } from './hooks/useNotifications.ts'
 import { useDeepLinks } from './hooks/useDeepLinks.ts'
 import { useSettings } from './hooks/useSettings.ts'
+import { useServers } from './hooks/useServers.ts'
 
-import { LoginFlow } from './features/auth/LoginFlow.tsx'
 import { Sidebar } from './features/sidebar/Sidebar.tsx'
 import { ConversationPane } from './features/conversation/ConversationPane.tsx'
-import { ContextMenuOverlay } from './features/overlays/ContextMenuOverlay.tsx'
-import { ProfileOverlay } from './features/overlays/ProfileOverlay.tsx'
-import { SettingsPane } from './features/settings/SettingsPane.tsx'
 import { ToastStack } from './features/overlays/ToastStack.tsx'
 import { ConnectionStatusBar } from './features/overlays/ConnectionStatusBar.tsx'
-import { KeyboardShortcutsOverlay } from './features/overlays/KeyboardShortcutsOverlay.tsx'
+
+const LoginFlow = lazy(async () => {
+  const module = await import('./features/auth/LoginFlow.tsx')
+  return { default: module.LoginFlow }
+})
+
+const SettingsPane = lazy(async () => {
+  const module = await import('./features/settings/SettingsPane.tsx')
+  return { default: module.SettingsPane }
+})
+
+const ContextMenuOverlay = lazy(async () => {
+  const module = await import('./features/overlays/ContextMenuOverlay.tsx')
+  return { default: module.ContextMenuOverlay }
+})
+
+const ProfileOverlay = lazy(async () => {
+  const module = await import('./features/overlays/ProfileOverlay.tsx')
+  return { default: module.ProfileOverlay }
+})
+
+const KeyboardShortcutsOverlay = lazy(async () => {
+  const module = await import('./features/overlays/KeyboardShortcutsOverlay.tsx')
+  return { default: module.KeyboardShortcutsOverlay }
+})
+
+function storedDevicesEqual(left: StoredDevice | null, right: StoredDevice | null): boolean {
+  if (left === right) {
+    return true
+  }
+
+  if (!left || !right) {
+    return false
+  }
+
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function authSessionsEqual(left: AuthSession | null, right: AuthSession | null): boolean {
+  if (left === right) {
+    return true
+  }
+
+  if (!left || !right) {
+    return false
+  }
+
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function serverInfosEqual(left: ServerInfo | null, right: ServerInfo | null): boolean {
+  if (left === right) {
+    return true
+  }
+
+  if (!left || !right) {
+    return false
+  }
+
+  return JSON.stringify(left) === JSON.stringify(right)
+}
 
 function App() {
-  const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(() => readStoredDevice())
-  const [sessionToken, setSessionToken] = useState<string | null>(() => readAuthSession()?.accessToken ?? null)
+  const servers = useServers()
+  const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(null)
+  const [sessionToken, setSessionToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [banner, setBanner] = useState<Banner | null>(null)
   const [contextMenuMessage, setContextMenuMessage] = useState<ContextMenuState | null>(null)
@@ -96,39 +161,154 @@ function App() {
     <AppContext.Provider value={appContextValue}>
       <ThemeContext.Provider value={themeContextValue}>
         <UIContext.Provider value={uiContextValue}>
-          <AppInner />
+          <AppInner servers={servers} />
         </UIContext.Provider>
       </ThemeContext.Provider>
     </AppContext.Provider>
   )
 }
 
-function AppInner() {
-  const { settingsOverlayOpen, setSettingsOverlayOpen, setSidebarTab } = useUIContext()
-  const { setSessionToken } = useAppContext()
+function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
+  const {
+    contextMenuMessage,
+    profileOverlayOpen,
+    settingsOverlayOpen,
+    shortcutsOpen,
+    setSettingsOverlayOpen,
+    setSidebarTab
+  } = useUIContext()
+  const { storedDevice, sessionToken, setStoredDevice, setSessionToken } = useAppContext()
   const [selectMessageId, setSelectMessageId] = useState<string | null>(null)
   const [mobilePanel, setMobilePanel] = useState<'sidebar' | 'conversation'>('sidebar')
-  const auth = useAuth()
+  const {
+    servers: serverRecords,
+    activeServer,
+    activeServerScope,
+    addServer,
+    attachAuthSession,
+    updateServer,
+    logoutServer,
+    hasAuthenticatedServer
+  } = servers
+  const auth = useAuth(activeServer?.url ?? window.location.origin)
   const layout = useViewportLayout()
   const desktop = useDesktop()
+  const authMatchesActiveServer = doesAuthSessionMatchServer(
+    auth.authSessionServerUrl,
+    activeServer?.url ?? null
+  )
+  const onboarding = shouldShowOnboarding(
+    hasAuthenticatedServer,
+    !!auth.authSession,
+    authMatchesActiveServer
+  )
+  const appView = onboarding ? auth.view : 'chat'
+  const fallbackAuthToken = authMatchesActiveServer ? auth.authSession?.accessToken ?? null : null
+  const currentProfileUsername =
+    activeServer?.auth?.user.username ??
+    (authMatchesActiveServer ? auth.profileUsername : null)
 
-  const appSettings = useSettings(auth.authSession?.accessToken ?? null)
+  const appSettings = useSettings(fallbackAuthToken)
 
-  // Sync JWT access token into AppContext so all hooks can use it
   useEffect(() => {
-    setSessionToken(auth.authSession?.accessToken ?? null)
-  }, [auth.authSession?.accessToken, setSessionToken])
+    const authServerUrl = auth.authSessionServerUrl ? normalizeServerUrl(auth.authSessionServerUrl) : null
+    const matchingServer = findServerForAuthSession(serverRecords, auth.authSessionServerUrl)
+
+    if (!auth.authSession || !authServerUrl) {
+      return
+    }
+
+    if (matchingServer) {
+      if (
+        authSessionsEqual(matchingServer.auth, auth.authSession) &&
+        serverInfosEqual(matchingServer.serverInfo, auth.serverInfo)
+      ) {
+        return
+      }
+
+      attachAuthSession(matchingServer.id, auth.authSession, auth.serverInfo)
+      return
+    }
+
+    const created = addServer(
+      authServerUrl,
+      auth.serverInfo?.name ?? 'My Server',
+      'var(--accent)'
+    )
+    attachAuthSession(created.id, auth.authSession, auth.serverInfo)
+  }, [
+    auth.authSession,
+    auth.authSessionServerUrl,
+    auth.serverInfo,
+    serverRecords,
+    addServer,
+    attachAuthSession
+  ])
+
+  // Sync the active server scope into AppContext and the legacy default
+  // API/realtime clients so existing hooks target the selected server.
+  useEffect(() => {
+    const fallbackBaseUrl = activeServer?.url ?? window.location.origin
+
+    if (!activeServerScope) {
+      setDefaultApiBaseUrl(fallbackBaseUrl)
+      setDefaultRealtimeBaseUrl(fallbackBaseUrl)
+
+      if (sessionToken !== fallbackAuthToken) {
+        setSessionToken(fallbackAuthToken)
+      }
+
+      if (storedDevice !== null) {
+        setStoredDevice(null)
+      }
+
+      return
+    }
+
+    setDefaultApiBaseUrl(activeServerScope.server.url)
+    setDefaultRealtimeBaseUrl(activeServerScope.server.url)
+
+    if (sessionToken !== activeServerScope.token) {
+      setSessionToken(activeServerScope.token)
+    }
+
+    const nextStoredDevice = activeServerScope.device ?? null
+    if (!storedDevicesEqual(storedDevice, nextStoredDevice)) {
+      setStoredDevice(nextStoredDevice)
+    }
+  }, [
+    activeServer?.url,
+    activeServerScope,
+    fallbackAuthToken,
+    sessionToken,
+    storedDevice,
+    setSessionToken,
+    setStoredDevice
+  ])
+
+  useEffect(() => {
+    if (!activeServer || !activeServerScope) {
+      return
+    }
+
+    if (storedDevice == null) {
+      return
+    }
+
+    if (storedDevicesEqual(activeServer.device ?? null, storedDevice)) {
+      return
+    }
+
+    // Keep the persisted server record in sync with runtime device changes,
+    // especially after prekey consumption or device bootstrap updates.
+    updateServer(activeServer.id, { device: storedDevice })
+  }, [activeServer, activeServerScope, storedDevice, updateServer])
 
   // Ref-based callback so useChatList (called first) can notify useMessages
   // (called later) about chat:activity events on non-active, existing chats.
   const existingChatActivityRef = useRef<(chatId: string) => void>(() => {})
-  const handleExistingChatActivity = useCallback((chatId: string) => {
-    existingChatActivityRef.current(chatId)
-  }, [])
 
-  const chatList = useChatList(auth.view, {
-    onExistingChatActivity: handleExistingChatActivity
-  })
+  const chatList = useChatList(appView, servers)
   const deferredActiveChatId = useDeferredValue(chatList.activeChatId)
   const activeChatIdRef = useRef<string | null>(deferredActiveChatId)
 
@@ -136,43 +316,62 @@ function AppInner() {
     activeChatIdRef.current = deferredActiveChatId
   }, [deferredActiveChatId])
 
-  // In mobile mode, switch to conversation panel when user selects a chat
-  // (skip the initial mount — only react to changes after first render)
-  const initialMobileChatRef = useRef(true)
-  useEffect(() => {
-    if (initialMobileChatRef.current) {
-      initialMobileChatRef.current = false
-      return
-    }
-    if (layout.isMobile && chatList.activeChatId) {
-      setMobilePanel('conversation')
-    }
-  }, [chatList.activeChatId, layout.isMobile])
+  function setActiveChatId(valueOrUpdater: string | null | ((current: string | null) => string | null)) {
+    chatList.setActiveChatId((current) => {
+      const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(current) : valueOrUpdater
+      if (layout.isMobile && next) {
+        setMobilePanel('conversation')
+      }
+      return next
+    })
+  }
+
+  const setNewChatUsername = chatList.setNewChatUsername
+  const chatListView = {
+    ...chatList,
+    setActiveChatId,
+    setNewChatUsername
+  }
 
   const activeChat =
     chatList.chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatList.chatItems[0] ?? null
 
-  const groupChat = useGroupChat(auth.view, activeChat, auth.profileUsername, chatList.setChatItems)
+  const groupChat = useGroupChat(
+    appView,
+    activeChat,
+    auth.profileUsername,
+    chatList.setChatItems,
+    activeServer
+      ? {
+          id: activeServer.id,
+          label: activeServer.label,
+          color: activeServer.color,
+          url: activeServer.url
+        }
+      : null
+  )
   const chatSessions = useChatSessions(
-    auth.view,
+    appView,
     deferredActiveChatId,
     activeChatIdRef,
     chatList.chatItems
   )
   const messages = useMessages(
-    auth.view,
+    appView,
     deferredActiveChatId,
     activeChatIdRef,
     chatList.chatItems,
     chatList.setChatItems,
     chatSessions.syncChatSessionsFromServer,
     chatSessions.chatSessions,
-    auth.profileUsername
+    currentProfileUsername
   )
   // Wire the ref so chat:activity events on non-active chats trigger a
   // background preview decrypt (shows real text in sidebar instead of
   // "Encrypted message").
-  existingChatActivityRef.current = messages.updateNonActiveChatPreview
+  useEffect(() => {
+    existingChatActivityRef.current = messages.updateNonActiveChatPreview
+  }, [messages.updateNonActiveChatPreview])
 
   const media = useMediaCapture(
     chatList.activeChatId,
@@ -184,57 +383,94 @@ function AppInner() {
     messages.replyTargetMessageId,
     messages.setReplyTargetMessageId
   )
-  const federation = useFederation(auth.view)
-  const call = useCall(auth.view, deferredActiveChatId, chatList.activeChatId)
+  const call = useCall(appView, deferredActiveChatId, chatList.activeChatId, chatList.chatItems)
   const chatFolders = useChatFolders()
   const drafts = useDrafts(deferredActiveChatId, messages.draft, messages.setDraft, messages.replyTargetMessageId)
-  const typingIndicator = useTypingIndicator(activeChat, auth.authSession?.accessToken)
-  const presence = usePresence(auth.authSession?.accessToken ?? null)
+  const typingIndicator = useTypingIndicator(activeChat, activeServerScope?.token ?? fallbackAuthToken)
+  const presence = usePresence(activeServerScope?.token ?? fallbackAuthToken)
 
   // Platform integration: notifications and deep links
-  const _notifications = useNotifications(
-    auth.view === 'chat',
+  useNotifications(
+    appView === 'chat',
     messages.messageItems,
     chatList.chatItems,
-    deferredActiveChatId
+    deferredActiveChatId,
+    appSettings.settings
   )
-  useDeepLinks(auth.view === 'chat', {
-    setActiveChatId: chatList.setActiveChatId,
-    setSettingsOverlayOpen
+  useDeepLinks(appView === 'chat', {
+    setActiveChatId,
+    setSettingsOverlayOpen,
+    normalizeChatId(chatId) {
+      if (chatId.includes('::')) {
+        return chatId
+      }
+
+      const matches = chatList.chatItems.filter((chat) => chat.rawId === chatId)
+      if (matches.length === 1) {
+        return matches[0].id
+      }
+
+      if (matches.length === 0 && serverRecords.length === 1 && serverRecords[0]) {
+        return `${serverRecords[0].id}::${chatId}`
+      }
+
+      return matches[0]?.id ?? chatId
+    }
   })
 
   // Sync profile username into new chat username default
   useEffect(() => {
-    const nextDefault = auth.profileUsername ?? ''
-    chatList.setNewChatUsername((current) => (current === '' ? nextDefault : current))
-  }, [auth.profileUsername])
+    const nextDefault = currentProfileUsername ?? ''
+    setNewChatUsername((current) => (current === '' ? nextDefault : current))
+  }, [currentProfileUsername, setNewChatUsername])
 
   // Reset call state on forget device
-  const originalForgetDevice = auth.handleForgetDevice
-  auth.handleForgetDevice = async () => {
+  async function handleForgetDevice() {
     chatSessions.setChatSessions([])
     chatSessions.setRemotePrekeyBundles([])
     chatSessions.setSafetyNumbers([])
-    federation.setAdminOverview(null)
-    federation.setFederationPeers([])
-    federation.setTurnCredentials(null)
     call.resetCallState()
-    originalForgetDevice()
+    const currentOrigin = normalizeServerUrl(window.location.origin)
+    const isCurrentOriginServer =
+      activeServer && normalizeServerUrl(activeServer.url) === currentOrigin
+
+    if (activeServer) {
+      logoutServer(activeServer.id)
+    }
+
+    setStoredDevice(null)
+
+    if (isCurrentOriginServer) {
+      await auth.handleForgetDevice()
+      return
+    }
+
+    setSessionToken(null)
+  }
+  const authView = {
+    ...auth,
+    view: appView,
+    authSession: activeServer?.auth ?? (authMatchesActiveServer ? auth.authSession : null),
+    serverInfo: activeServer?.serverInfo ?? auth.serverInfo,
+    profileUsername: currentProfileUsername,
+    username: currentProfileUsername ?? '',
+    handleForgetDevice
   }
 
   // Desktop window title sync
   const desktopWindowTitle = buildDesktopWindowTitle(activeChat?.title ?? null, call.activeCall?.mode ?? null)
+  const syncDesktopWindowTitle = desktop.syncDesktopWindowTitle
 
   useEffect(() => {
-    desktop.syncDesktopWindowTitle(desktopWindowTitle)
-  }, [desktop.desktopShell, desktopWindowTitle])
+    syncDesktopWindowTitle(desktopWindowTitle)
+  }, [desktopWindowTitle, syncDesktopWindowTitle])
 
   const appShellClassName = 'app-shell'
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
-    auth,
-    chatList,
+    auth: authView,
+    chatList: chatListView,
     activeChat,
     layout,
     desktop,
@@ -243,34 +479,55 @@ function AppInner() {
     desktopWindowTitle
   })
 
-  const onboarding = auth.view !== 'chat'
-
   if (onboarding) {
-    return <LoginFlow auth={auth} />
+    return (
+      <Suspense
+        fallback={
+          <div className="auth-shell">
+            <span className="auth-spinner" />
+          </div>
+        }
+      >
+          <LoginFlow auth={authView} servers={servers} />
+      </Suspense>
+    )
   }
 
   return (
     <div className={appShellClassName}>
       {settingsOverlayOpen ? (
-        <SettingsPane
-          auth={auth}
-          chatSessions={chatSessions}
-          chatList={chatList}
-          onClose={() => { setSettingsOverlayOpen(false); setSidebarTab('chats') }}
-        />
+        <Suspense
+          fallback={
+            <div className={appShellClassName}>
+              <main className="conversation-pane">
+                <div className="empty-state" style={{ flex: 1 }}>
+                  <p className="empty-state__title">Loading settings…</p>
+                </div>
+              </main>
+            </div>
+          }
+        >
+          <SettingsPane
+            auth={authView}
+            chatSessions={chatSessions}
+            chatList={chatListView}
+            servers={servers}
+            settingsHook={appSettings}
+            onClose={() => { setSettingsOverlayOpen(false); setSidebarTab('chats') }}
+          />
+        </Suspense>
       ) : layout.isMobile ? (
         /* Mobile: single-panel — show sidebar OR conversation */
         mobilePanel === 'sidebar' ? (
-          <Sidebar desktop={desktop} chatList={chatList} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} presence={presence} />
+          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} call={call} />
         ) : (
           <ConversationPane
             activeChat={activeChat}
             groupChat={groupChat}
             call={call}
-            layout={layout}
             messages={messages}
             media={media}
-            chatList={chatList}
+            chatList={chatListView}
             drafts={drafts}
             typingIndicator={typingIndicator}
             presence={presence}
@@ -282,15 +539,14 @@ function AppInner() {
       ) : (
         /* Desktop: side-by-side */
         <>
-          <Sidebar desktop={desktop} chatList={chatList} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} presence={presence} />
+          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} chatFolders={chatFolders} draftChatIds={drafts.draftChatIds} call={call} />
           <ConversationPane
             activeChat={activeChat}
             groupChat={groupChat}
             call={call}
-            layout={layout}
             messages={messages}
             media={media}
-            chatList={chatList}
+            chatList={chatListView}
             drafts={drafts}
             typingIndicator={typingIndicator}
             presence={presence}
@@ -299,9 +555,20 @@ function AppInner() {
           />
         </>
       )}
-      <ContextMenuOverlay messages={messages} chatList={chatList} onSelectMessage={(id) => { setSelectMessageId(id); requestAnimationFrame(() => setSelectMessageId(null)) }} />
-      <ProfileOverlay auth={auth} />
-      <KeyboardShortcutsOverlay />
+      <Suspense fallback={null}>
+        {contextMenuMessage ? (
+          <ContextMenuOverlay
+            messages={messages}
+            chatList={chatListView}
+            onSelectMessage={(id) => {
+              setSelectMessageId(id)
+              requestAnimationFrame(() => setSelectMessageId(null))
+            }}
+          />
+        ) : null}
+        {profileOverlayOpen ? <ProfileOverlay auth={authView} /> : null}
+        {shortcutsOpen ? <KeyboardShortcutsOverlay /> : null}
+      </Suspense>
       <ConnectionStatusBar />
       <ToastStack />
     </div>

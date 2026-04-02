@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { subscribeToPresence } from '../lib/realtime.ts'
 
+const EMPTY_ONLINE_USER_IDS = new Set<string>()
+
 /**
  * Subscribes to the presence channel and tracks which user IDs are currently
  * online.  Returns a stable `isUserOnline(userId)` function that components
@@ -8,14 +10,15 @@ import { subscribeToPresence } from '../lib/realtime.ts'
  */
 export function usePresence(sessionToken: string | null) {
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
+  const visibleOnlineUserIds = sessionToken ? onlineUserIds : EMPTY_ONLINE_USER_IDS
   const onlineRef = useRef(onlineUserIds)
-  onlineRef.current = onlineUserIds
 
   useEffect(() => {
-    if (!sessionToken) {
-      setOnlineUserIds(new Set())
-      return
-    }
+    onlineRef.current = visibleOnlineUserIds
+  }, [visibleOnlineUserIds])
+
+  useEffect(() => {
+    if (!sessionToken) return
 
     return subscribeToPresence(sessionToken, {
       onSync(userIds) {
@@ -29,5 +32,5 @@ export function usePresence(sessionToken: string | null) {
     []
   )
 
-  return { onlineUserIds, isUserOnline }
+  return { onlineUserIds: visibleOnlineUserIds, isUserOnline }
 }

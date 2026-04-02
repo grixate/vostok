@@ -20,6 +20,7 @@ defmodule VostokServer.Messaging.Message do
     field :pinned_at, :utc_datetime_usec
     field :edited_at, :utc_datetime_usec
     field :deleted_at, :utc_datetime_usec
+    field :expires_at, :utc_datetime_usec
 
     belongs_to :chat, VostokServer.Messaging.Chat
     belongs_to :sender_device, VostokServer.Identity.Device
@@ -43,7 +44,8 @@ defmodule VostokServer.Messaging.Message do
       :pinned_at,
       :reply_to_message_id,
       :edited_at,
-      :deleted_at
+      :deleted_at,
+      :expires_at
     ])
     |> validate_required([:client_id, :ciphertext, :message_kind])
     |> validate_inclusion(:message_kind, ["text", "system", "media", "attachment"])

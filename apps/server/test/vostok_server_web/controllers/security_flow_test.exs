@@ -171,6 +171,53 @@ defmodule VostokServerWeb.SecurityFlowTest do
     refute alice_device_id == bob_device_id
   end
 
+  test "key backup upload rejects mismatched hashes and persists verified backups", %{conn: conn} do
+    %{token: token} = register_device(conn, "backup-alice")
+    encrypted_blob = "encrypted-key-backup"
+
+    mismatch_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> put("/api/v1/keys/backup", %{
+        encrypted_blob: Base.encode64(encrypted_blob),
+        blob_hash: sha256_hex("different-ciphertext"),
+        version: 2
+      })
+
+    assert %{
+             "error" => "blob_hash_mismatch"
+           } = json_response(mismatch_conn, 422)
+
+    upload_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> put("/api/v1/keys/backup", %{
+        encrypted_blob: Base.encode64(encrypted_blob),
+        blob_hash: sha256_hex(encrypted_blob),
+        version: 2
+      })
+
+    assert %{
+             "blob_hash" => blob_hash,
+             "version" => 2
+           } = json_response(upload_conn, 200)
+
+    assert blob_hash == sha256_hex(encrypted_blob)
+
+    download_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/keys/backup")
+
+    assert %{
+             "encrypted_blob" => encrypted_blob_b64,
+             "blob_hash" => ^blob_hash,
+             "version" => 2
+           } = json_response(download_conn, 200)
+
+    assert encrypted_blob_b64 == Base.encode64(encrypted_blob)
+  end
+
   defp register_device(conn, username) do
     material = build_device_material()
 
@@ -208,5 +255,10 @@ defmodule VostokServerWeb.SecurityFlowTest do
       signed_prekey_signature: Base.encode64(signed_prekey_signature_raw),
       one_time_prekey: Base.encode64(:crypto.strong_rand_bytes(65))
     }
+  end
+
+  defp sha256_hex(payload) when is_binary(payload) do
+    :crypto.hash(:sha256, payload)
+    |> Base.encode16(case: :lower)
   end
 end

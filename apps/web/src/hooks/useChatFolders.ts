@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import type { ChatSummary } from '../lib/api.ts'
 
 export type ChatFolder = {
@@ -36,16 +36,8 @@ export function useChatFolders() {
     }
   }, [])
 
-  // Sync from localStorage on mount
-  useEffect(() => {
-    const stored = readStoredActiveFolderId()
-    if (stored !== activeFolderId) {
-      setActiveFolderIdRaw(stored)
-    }
-  }, [])
-
   const filterChatsByFolder = useCallback(
-    (chatItems: ChatSummary[]): ChatSummary[] => {
+    <T extends ChatSummary>(chatItems: T[]): T[] => {
       if (activeFolderId === 'all') {
         return chatItems
       }
@@ -72,8 +64,8 @@ export function useChatFolders() {
   )
 
   const getUnreadCountForFolder = useCallback(
-    (folderId: string, chatItems: ChatSummary[]): number => {
-      let filtered: ChatSummary[]
+    <T extends ChatSummary>(folderId: string, chatItems: T[]): number => {
+      let filtered: T[]
 
       if (folderId === 'all') {
         filtered = chatItems

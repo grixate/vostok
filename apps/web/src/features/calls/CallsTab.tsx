@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
-import { PhoneIcon, VideoIcon, PhoneCallIcon } from '../../icons/index.tsx'
+import { fetchCallHistory, listUsers } from '../../lib/api.ts'
+import type { CallHistoryEntry as ApiCallHistoryEntry } from '../../lib/api.ts'
+import { PhoneIcon, PhoneCallIcon } from '../../icons/index.tsx'
+import { ParticipantPicker } from './ParticipantPicker.tsx'
+import type { useCall } from '../../hooks/useCall.ts'
 
 type CallHistoryEntry = {
   id: string
@@ -15,6 +19,7 @@ type CallHistoryEntry = {
 
 type CallsTabProps = {
   onStartCall?: (mode: 'voice' | 'video') => void
+  call?: ReturnType<typeof useCall>
 }
 
 function formatCallTime(isoString: string): string {
@@ -40,15 +45,83 @@ function formatCallDate(isoString: string): string {
   }
 }
 
-export function CallsTab({ onStartCall }: CallsTabProps) {
-  const { sessionToken } = useAppContext()
-  const [entries] = useState<CallHistoryEntry[]>([])
+function formatDuration(startedAt: string | null, endedAt: string | null): string | null {
+  if (!startedAt || !endedAt) return null
+  const seconds = Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+  if (seconds < 0) return null
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
-  // TODO: fetch call history from server when endpoint is available
+function mapApiCall(call: ApiCallHistoryEntry, localDeviceId: string | null): CallHistoryEntry {
+  const isOutgoing = localDeviceId ? call.started_by_device_id === localDeviceId : true
+  const wasMissed = call.ended_at != null && call.started_at != null &&
+    (new Date(call.ended_at).getTime() - new Date(call.started_at).getTime()) < 3000 &&
+    !isOutgoing
+
+  return {
+    id: call.id,
+    type: (call.mode === 'group'
+      ? 'group'
+      : call.media_mode === 'video' || call.mode === 'video'
+        ? 'video'
+        : 'voice') as 'voice' | 'video' | 'group',
+    contactName: call.display_title,
+    contactInitial: call.display_title.slice(0, 1),
+    direction: isOutgoing ? 'outgoing' : 'incoming',
+    missed: wasMissed,
+    duration: formatDuration(call.started_at, call.ended_at),
+    timestamp: call.started_at ?? call.ended_at ?? '',
+  }
+}
+
+export function CallsTab({ onStartCall, call }: CallsTabProps) {
+  const { sessionToken, storedDevice } = useAppContext()
+  const [entries, setEntries] = useState<CallHistoryEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [directoryUsers, setDirectoryUsers] = useState<Array<{ id: string; username: string }>>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const callingUnavailable = (call?.callCapabilityState !== 'supported') || !(call?.isCallSessionReady ?? Boolean(sessionToken && storedDevice))
+  const callingUnavailableReason = !call?.isCallSessionReady && sessionToken
+    ? 'Calls are still loading for this account.'
+    : (call?.callCapabilityReason ?? 'Calls are unavailable on this browser.')
+
   useEffect(() => {
     if (!sessionToken) return
-    // Future: fetchCallHistory(sessionToken).then(setEntries)
-  }, [sessionToken])
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+    }, 0)
+
+    fetchCallHistory(sessionToken)
+      .then((response) => {
+        if (cancelled) return
+        const localDeviceId = storedDevice?.deviceId ?? null
+        setEntries(response.calls.map((c) => mapApiCall(c, localDeviceId)))
+      })
+      .catch(() => {
+        // Silently fail — show empty state
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [sessionToken, storedDevice?.deviceId])
+
+  useEffect(() => {
+    if (!sessionToken || !pickerOpen) return
+
+    listUsers(sessionToken)
+      .then((response) => setDirectoryUsers(response.users))
+      .catch(() => setDirectoryUsers([]))
+  }, [pickerOpen, sessionToken])
 
   // Group entries by date
   const grouped = new Map<string, CallHistoryEntry[]>()
@@ -65,25 +138,73 @@ export function CallsTab({ onStartCall }: CallsTabProps) {
       <div className="sidebar__header">
         <div className="sidebar__title-row">
           <span className="sidebar__title">Calls</span>
-          {onStartCall && (
-            <button
-              type="button"
-              onClick={() => onStartCall('voice')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4 }}
-              aria-label="New call"
-            >
-              <PhoneCallIcon width={20} height={20} />
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {call ? (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: callingUnavailable ? 'not-allowed' : 'pointer',
+                  color: callingUnavailable ? 'var(--text-secondary)' : 'var(--accent)',
+                  display: 'flex',
+                  padding: 4
+                }}
+                aria-label="New group call"
+                title={callingUnavailable ? callingUnavailableReason : 'New group call'}
+                disabled={callingUnavailable}
+              >
+                <PhoneCallIcon width={20} height={20} />
+              </button>
+            ) : null}
+            {onStartCall && (
+              <button
+                type="button"
+                onClick={() => onStartCall('voice')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: callingUnavailable ? 'not-allowed' : 'pointer',
+                  color: callingUnavailable ? 'var(--text-secondary)' : 'var(--accent)',
+                  display: 'flex',
+                  padding: 4
+                }}
+                aria-label="New call"
+                title={callingUnavailable ? callingUnavailableReason : 'New call'}
+                disabled={callingUnavailable}
+              >
+                <PhoneIcon width={20} height={20} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Call list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {entries.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12, color: 'var(--text-secondary)' }}>
-            <PhoneIcon width={40} height={40} />
-            <span style={{ fontSize: 14 }}>No call history yet</span>
+        {loading ? (
+          <div className="empty-state" style={{ flex: 1 }}>
+            <span className="message-thread__loading-spinner" />
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="empty-state" style={{ flex: 1 }}>
+            <div className="empty-state__icon">
+              <PhoneIcon width={28} height={28} />
+            </div>
+            <p className="empty-state__title">No calls yet</p>
+            <p className="empty-state__body">Your call history will appear here.</p>
+            {onStartCall && (
+              <button
+                className="primary-action empty-state__action"
+                type="button"
+                onClick={() => onStartCall('voice')}
+                disabled={callingUnavailable}
+                title={callingUnavailable ? callingUnavailableReason : 'Start a Call'}
+              >
+                Start a Call
+              </button>
+            )}
           </div>
         ) : (
           Array.from(grouped.entries()).map(([date, calls]) => (
@@ -138,6 +259,19 @@ export function CallsTab({ onStartCall }: CallsTabProps) {
           ))
         )}
       </div>
+      {pickerOpen && call ? (
+        <ParticipantPicker
+          members={directoryUsers.map((user) => ({
+            userId: user.id,
+            username: user.username
+          }))}
+          onClose={() => setPickerOpen(false)}
+          onStartCall={(participantIds, mode) => {
+            void call.handleStartAdHocCall(participantIds, mode)
+            setPickerOpen(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

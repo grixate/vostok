@@ -1,25 +1,34 @@
+import { Suspense, lazy } from 'react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { SidebarHeader } from './SidebarHeader.tsx'
 import { SidebarChatList } from './SidebarChatList.tsx'
 import { BottomTabBar } from './BottomTabBar.tsx'
-import { MembersPane } from './MembersPane.tsx'
-import { CallsTab } from '../calls/CallsTab.tsx'
 import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useChatFolders } from '../../hooks/useChatFolders.ts'
-import type { usePresence } from '../../hooks/usePresence.ts'
-import type { ChatSummary } from '../../lib/api.ts'
+import type { useCall } from '../../hooks/useCall.ts'
+import type { MergedChatSummary } from '../../lib/multi-server.ts'
+
+const MembersPane = lazy(async () => {
+  const module = await import('./MembersPane.tsx')
+  return { default: module.MembersPane }
+})
+
+const CallsTab = lazy(async () => {
+  const module = await import('../calls/CallsTab.tsx')
+  return { default: module.CallsTab }
+})
 
 type SidebarProps = {
   desktop: ReturnType<typeof useDesktop>
   chatList: ReturnType<typeof useChatList>
-  activeChat: ChatSummary | null
+  activeChat: MergedChatSummary | null
   chatFolders: ReturnType<typeof useChatFolders>
   draftChatIds: Map<string, string>
-  presence: ReturnType<typeof usePresence>
+  call: ReturnType<typeof useCall>
 }
 
-export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatIds, presence }: SidebarProps) {
+export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatIds, call }: SidebarProps) {
   const { sidebarTab, setSidebarTab, setSettingsOverlayOpen } = useUIContext()
 
   function handleTabChange(tab: typeof sidebarTab) {
@@ -32,11 +41,19 @@ export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatI
       {sidebarTab === 'chats' && (
         <>
           <SidebarHeader desktop={desktop} chatList={chatList} />
-          <SidebarChatList chatList={chatList} activeChat={activeChat} draftChatIds={draftChatIds} chatFolders={chatFolders} presence={presence} />
+          <SidebarChatList chatList={chatList} activeChat={activeChat} draftChatIds={draftChatIds} chatFolders={chatFolders} />
         </>
       )}
       {sidebarTab === 'calls' && (
-        <CallsTab />
+        <Suspense
+          fallback={
+            <div className="empty-state" style={{ flex: 1 }}>
+              <span className="message-thread__loading-spinner" />
+            </div>
+          }
+        >
+          <CallsTab call={call} />
+        </Suspense>
       )}
       {sidebarTab === 'members' && (
         <>
@@ -45,7 +62,15 @@ export function Sidebar({ desktop, chatList, activeChat, chatFolders, draftChatI
               <span className="sidebar__title">Members</span>
             </div>
           </div>
-          <MembersPane chatList={chatList} />
+          <Suspense
+            fallback={
+              <div className="empty-state" style={{ flex: 1 }}>
+                <span className="message-thread__loading-spinner" />
+              </div>
+            }
+          >
+            <MembersPane chatList={chatList} />
+          </Suspense>
         </>
       )}
       {sidebarTab === 'settings' && (

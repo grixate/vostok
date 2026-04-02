@@ -1,20 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import { subscribeToReconnect } from '../lib/realtime.ts'
-import type { ChatSummary } from '../lib/api.ts'
-import {
-  listChats,
-  createDirectChat,
-  createSelfChat,
-  listDevices,
-  linkDevice,
-  fetchMe
-} from '../lib/api.ts'
-import { mergeChat } from '../utils/chat-helpers.ts'
-import { subscribeToUserStream } from '../lib/realtime.ts'
-import { generateDeviceIdentity, generateDevicePrekeys } from '../lib/device-auth.ts'
-import { persistStoredDevice, readStoredDevice } from '../utils/storage.ts'
-import type { AuthView, StoredDevice } from '../types.ts'
+import { createDirectChat } from '../lib/api.ts'
+import { getServerIdFromQualifiedChatId, qualifyChatId, type MergedChatSummary } from '../lib/multi-server.ts'
+import type { useServers } from './useServers.ts'
+import type { AuthView } from '../types.ts'
 
 const ACTIVE_CHAT_STORAGE_KEY = 'vostok.layout.active_chat_id'
 
@@ -46,13 +35,37 @@ function persistActiveChatId(chatId: string | null) {
   }
 }
 
-type ChatListOptions = {
-  onExistingChatActivity?: (chatId: string) => void
+function toRawChat(chat: MergedChatSummary) {
+  return {
+    id: chat.rawId,
+    type: chat.type,
+    title: chat.title,
+    participant_usernames: chat.participant_usernames,
+    participant_user_ids: chat.participant_user_ids,
+    is_self_chat: chat.is_self_chat,
+    latest_message_at: chat.latest_message_at,
+    message_count: chat.message_count
+  }
 }
 
-export function useChatList(view: AuthView, options?: ChatListOptions) {
-  const { sessionToken, storedDevice, setStoredDevice, setLoading, setBanner, loading } = useAppContext()
-  const [chatItems, setChatItems] = useState<ChatSummary[]>([])
+function isDirectChatOnline(
+  chat: MergedChatSummary,
+  currentUserId: string | null,
+  isUserOnline: (serverId: string, userId: string) => boolean
+) {
+  if (chat.is_self_chat || chat.type === 'group') {
+    return false
+  }
+
+  const otherUserId = chat.participant_user_ids?.find((id) => id !== currentUserId) ?? null
+  return otherUserId ? isUserOnline(chat.serverId, otherUserId) : false
+}
+
+export function useChatList(
+  view: AuthView,
+  servers: ReturnType<typeof useServers>
+) {
+  const { sessionToken, setLoading, setBanner } = useAppContext()
   const [chatFilter, setChatFilter] = useState('')
   const [activeChatId, _setActiveChatId] = useState<string | null>(() => readPersistedActiveChatId())
   const [newChatUsername, setNewChatUsername] = useState('')
@@ -60,221 +73,74 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
   const [newGroupMembers, setNewGroupMembers] = useState('')
   const [newMessageMode, setNewMessageMode] = useState(false)
 
-  // Wrap setActiveChatId to persist the selection to localStorage
+  const chatItems = servers.mergedChats
+
+  const setChatItems = useCallback(
+    (valueOrUpdater: React.SetStateAction<MergedChatSummary[]>) => {
+      const next = typeof valueOrUpdater === 'function'
+        ? valueOrUpdater(servers.mergedChats)
+        : valueOrUpdater
+
+      const grouped = new Map<string, MergedChatSummary[]>()
+      for (const chat of next) {
+        const group = grouped.get(chat.serverId) ?? []
+        group.push(chat)
+        grouped.set(chat.serverId, group)
+      }
+
+      for (const server of servers.servers) {
+        const chats = grouped.get(server.id) ?? []
+        servers.updateChatsForServer(server.id, chats.map(toRawChat))
+      }
+    },
+    [servers]
+  )
+
   const setActiveChatId = useCallback(
     (valueOrUpdater: string | null | ((current: string | null) => string | null)) => {
       _setActiveChatId((current) => {
         const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(current) : valueOrUpdater
         persistActiveChatId(next)
+        const nextServerId = getServerIdFromQualifiedChatId(next)
+        if (nextServerId) {
+          servers.setActiveServerId(nextServerId)
+        }
         return next
       })
     },
-    []
+    [servers]
   )
 
-  // Track the user ID obtained from fetchMe so the user-channel subscription
-  // effect can reference it without re-running the bootstrap.
-  const userIdRef = useRef<string | null>(null)
-
   useEffect(() => {
-    if (view !== 'chat' || !sessionToken) {
+    if (view !== 'chat') {
       return
     }
 
-    const token = sessionToken
-    let cancelled = false
-
-    async function bootstrapChatShell() {
-      setLoading(true)
-
-      try {
-        const [me, chatResponse] = await Promise.all([
-          fetchMe(token),
-          listChats(token)
-        ])
-
-        // Device listing is optional — may fail if no device registered yet
-        let deviceResponse: { devices: any[] } = { devices: [] }
-        try {
-          deviceResponse = await listDevices(token)
-        } catch {
-          // No device registered — that's fine
-        }
-
-        // Auto-setup E2E device keys if no stored device exists locally.
-        // This generates key material, links a device to the server, and
-        // persists it so all messages can be end-to-end encrypted.
-        if (!storedDevice && !readStoredDevice()) {
-          try {
-            const identity = await generateDeviceIdentity()
-            const prekeys = await generateDevicePrekeys(identity.signingPrivateKeyPkcs8Base64)
-            const linked = await linkDevice(token, {
-              device_name: 'Web',
-              device_identity_public_key: identity.signingPublicKeyBase64,
-              device_encryption_public_key: identity.encryptionPublicKeyBase64,
-              signed_prekey: prekeys.signedPrekey.publicKeyBase64,
-              signed_prekey_signature: prekeys.signedPrekey.signatureBase64,
-              one_time_prekeys: prekeys.oneTimePrekeys.map((k) => k.publicKeyBase64)
-            })
-
-            const newDevice: StoredDevice = {
-              deviceId: linked.device.id,
-              deviceName: 'Web',
-              privateKeyPkcs8Base64: identity.signingPrivateKeyPkcs8Base64,
-              publicKeyBase64: identity.signingPublicKeyBase64,
-              encryptionPrivateKeyPkcs8Base64: identity.encryptionPrivateKeyPkcs8Base64,
-              encryptionPublicKeyBase64: identity.encryptionPublicKeyBase64,
-              signedPrekeyPublicKeyBase64: prekeys.signedPrekey.publicKeyBase64,
-              signedPrekeyPrivateKeyPkcs8Base64: prekeys.signedPrekey.privateKeyPkcs8Base64,
-              signedPrekeys: [prekeys.signedPrekey],
-              oneTimePrekeys: prekeys.oneTimePrekeys,
-              sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-              sessionToken: token,
-              username: me.user.username
-            }
-
-            persistStoredDevice(newDevice)
-            setStoredDevice(newDevice)
-          } catch (deviceError) {
-            console.warn('Auto device setup failed:', deviceError)
-          }
-        }
-
-        let nextChats = chatResponse.chats
-
-        if (!nextChats.some((c) => c.is_self_chat)) {
-          const created = await createSelfChat(token)
-          nextChats = [created.chat, ...nextChats]
-        }
-
-        // Always sort: self-chat first, then everything else by latest_message_at descending
-        nextChats = [
-          ...nextChats.filter((c) => c.is_self_chat),
-          ...nextChats.filter((c) => !c.is_self_chat)
-        ]
-
-        if (cancelled) {
-          return
-        }
-
-        userIdRef.current = me.user.id
-        setChatItems(nextChats)
-        setActiveChatId((current) => {
-          if (current && nextChats.some((c) => c.id === current)) {
-            return current
-          }
-          return nextChats[0]?.id ?? null
-        })
-        setNewChatUsername((current) => (current === '' ? me.user.username : current))
-
-        if (me.device?.prekeys?.replenish_recommended) {
-          setBanner({
-            tone: 'info',
-            message: `One-time prekeys are low (${me.device.prekeys.available_one_time_prekeys}/${me.device.prekeys.target_count}). Rotate prekeys soon.`
-          })
-        }
-      } catch (error) {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Failed to load chats.'
-          setBanner({ tone: 'error', message })
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+    setActiveChatId((current) => {
+      if (current && chatItems.some((chat) => chat.id === current)) {
+        return current
       }
-    }
-
-    void bootstrapChatShell()
-
-    return () => {
-      cancelled = true
-    }
-  }, [sessionToken, view, setLoading, setBanner])
-
-  // Refresh chat list after connection recovery
-  useEffect(() => {
-    if (view !== 'chat' || !sessionToken) return
-
-    const token = sessionToken
-    return subscribeToReconnect(() => {
-      console.log('[reconnect] refreshing chat list')
-      listChats(token)
-        .then((response) => {
-          setChatItems((prev) => {
-            // Merge new chats, preserve existing order
-            const existingIds = new Set(prev.map((c) => c.id))
-            const newChats = response.chats.filter((c) => !existingIds.has(c.id))
-            return newChats.length > 0 ? [...prev, ...newChats] : prev
-          })
-        })
-        .catch(() => {})
+      return chatItems[0]?.id ?? null
     })
-  }, [sessionToken, view])
-
-  // Subscribe to the user channel for real-time chat activity notifications.
-  // When another user sends the first message in a new chat, the server
-  // broadcasts `chat:activity` to every member's `user:#{user_id}` channel.
-  // If the chat isn't in our list yet, we refresh the full chat list.
-  useEffect(() => {
-    if (view !== 'chat' || !sessionToken || !userIdRef.current) {
-      return
-    }
-
-    const userId = userIdRef.current
-
-    const onExistingChatActivity = options?.onExistingChatActivity
-
-    const unsubscribe = subscribeToUserStream(sessionToken, userId, {
-      onChatActivity(chatId) {
-        setChatItems((currentChats) => {
-          // If the chat is already in the list, notify the parent so it can
-          // update the sidebar preview (e.g. decrypt the latest message for
-          // non-active chats).  The existing `chat:${chatId}` subscription
-          // handles message updates for the active chat.
-          if (currentChats.some((c) => c.id === chatId)) {
-            onExistingChatActivity?.(chatId)
-            return currentChats
-          }
-
-          // New chat we haven't seen — fetch the full list so we pick up
-          // the chat summary (title, type, members, etc.).
-          listChats(sessionToken)
-            .then((response) => {
-              setChatItems((prev) => {
-                const existingIds = new Set(prev.map((c) => c.id))
-                const newChats = response.chats.filter((c) => !existingIds.has(c.id))
-
-                if (newChats.length === 0) {
-                  return prev
-                }
-
-                return [
-                  ...prev.filter((c) => c.is_self_chat),
-                  ...newChats,
-                  ...prev.filter((c) => !c.is_self_chat)
-                ]
-              })
-            })
-            .catch(() => {
-              // Silently ignore — the user can always manually refresh.
-            })
-
-          return currentChats
-        })
-      }
-    })
-
-    return unsubscribe
-  }, [sessionToken, view, chatItems.length])
+  }, [chatItems, setActiveChatId, view])
 
   async function startDirectChatWith(username: string) {
-    if (!sessionToken) return
+    if (!sessionToken) {
+      return
+    }
+
     setLoading(true)
+
     try {
       const response = await createDirectChat(sessionToken, username)
-      setChatItems((current) => mergeChat(current, response.chat))
-      setActiveChatId(response.chat.id)
+      const activeServer = servers.activeServer
+
+      if (!activeServer) {
+        throw new Error('No active server is available for new chats.')
+      }
+
+      servers.updateChatForServer(activeServer.id, response.chat)
+      setActiveChatId(qualifyChatId(activeServer.id, response.chat.id))
       setNewChatUsername('')
       setNewMessageMode(false)
       setBanner({ tone: 'success', message: `Direct chat ready: ${response.chat.title}` })
@@ -295,25 +161,41 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
   const visibleChatItems =
     normalizedChatFilter === ''
       ? chatItems
-      : chatItems.filter((chat) => chat.title.toLowerCase().includes(normalizedChatFilter))
+      : chatItems.filter((chat) => {
+          const haystacks = [
+            chat.title,
+            chat.serverLabel,
+            ...chat.participant_usernames
+          ]
+          return haystacks.some((value) => value.toLowerCase().includes(normalizedChatFilter))
+        })
 
-  // Contacts derived from existing direct chats (excludes self-chat).
-  // Used by NewMessagePanel to show a searchable list of recent contacts.
   const recentContacts = useMemo(
     () =>
       chatItems
-        .filter((c) => c.type === 'direct' && !c.is_self_chat)
-        .map((c) => ({ username: c.title, chatId: c.id, latestMessageAt: c.latest_message_at }))
-        .sort((a, b) => {
-          if (a.latestMessageAt && b.latestMessageAt) {
-            return b.latestMessageAt.localeCompare(a.latestMessageAt)
+        .filter((chat) => chat.type === 'direct' && !chat.is_self_chat)
+        .map((chat) => ({
+          username: chat.title,
+          chatId: chat.id,
+          latestMessageAt: chat.latest_message_at,
+          serverLabel: chat.serverLabel
+        }))
+        .sort((left, right) => {
+          if (left.latestMessageAt && right.latestMessageAt) {
+            return right.latestMessageAt.localeCompare(left.latestMessageAt)
           }
-          if (a.latestMessageAt) return -1
-          if (b.latestMessageAt) return 1
-          return a.username.localeCompare(b.username)
+          if (left.latestMessageAt) return -1
+          if (right.latestMessageAt) return 1
+          return left.username.localeCompare(right.username)
         }),
     [chatItems]
   )
+
+  const isChatOnline = useCallback((chat: MergedChatSummary) => {
+    const currentUserId =
+      servers.servers.find((server) => server.id === chat.serverId)?.auth?.user.id ?? null
+    return isDirectChatOnline(chat, currentUserId, servers.isUserOnline)
+  }, [servers])
 
   return {
     chatItems,
@@ -332,6 +214,11 @@ export function useChatList(view: AuthView, options?: ChatListOptions) {
     setNewMessageMode,
     visibleChatItems,
     recentContacts,
+    hasMultipleServers: servers.servers.length > 1,
+    activeServerId: servers.activeServerId,
+    activeServerUrl: servers.activeServer?.url ?? null,
+    resolveServerScope: servers.resolveServerForChat,
+    isChatOnline,
     startDirectChatWith,
     handleCreateDirectChat
   }

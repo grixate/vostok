@@ -149,6 +149,8 @@
   --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.6);
   --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.4);
   --shadow-bubble: none;
+  --shadow-card: none;
+  --shadow-elevated: none;
 
   /* ── Scrollbar ─────────────────────────────────────────────────────────── */
   --scrollbar-track: transparent;
@@ -257,12 +259,12 @@ button {
   --color-warning: #E6A817;
   --color-info: var(--accent);
 
-  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.12);
   --fill: rgba(0, 0, 0, 0.04);
   --sep: var(--border-subtle);
   --sep2: rgba(0, 0, 0, 0.04);
   --border-primary: var(--border-subtle);
-  --border-input: rgba(0, 0, 0, 0.10);
+  --border-input: rgba(0, 0, 0, 0.15);
 
   --shadow-separator: 1px 0 0 0 var(--border-subtle);
   --shadow-panel: 0 4px 24px rgba(0,0,0,0.08);
@@ -271,9 +273,11 @@ button {
   --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.18);
   --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.12);
   --shadow-bubble: none;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08);
 
-  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.30);
 
   color-scheme: light;
 }
@@ -337,12 +341,12 @@ button {
     --color-warning: #E6A817;
     --color-info: var(--accent);
 
-    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-subtle: rgba(0, 0, 0, 0.12);
     --fill: rgba(0, 0, 0, 0.04);
     --sep: var(--border-subtle);
     --sep2: rgba(0, 0, 0, 0.04);
     --border-primary: var(--border-subtle);
-    --border-input: rgba(0, 0, 0, 0.10);
+    --border-input: rgba(0, 0, 0, 0.15);
 
     --shadow-separator: 1px 0 0 0 var(--border-subtle);
     --shadow-panel: 0 4px 24px rgba(0,0,0,0.08);
@@ -351,9 +355,11 @@ button {
     --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.18);
     --shadow-tooltip: 0 1px 4px rgba(0, 0, 0, 0.12);
     --shadow-bubble: none;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+    --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08);
 
-    --scrollbar-thumb: rgba(0, 0, 0, 0.12);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.30);
 
     color-scheme: light;
   }

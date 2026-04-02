@@ -33,8 +33,17 @@ try {
 // use the cached plaintext instead of re-decrypting through the ratchet.
 const decryptedPlaintextByMessageId = new Map<string, { text: string; attachment?: CachedMessage['attachment'] }>()
 
-function cacheDecryptedPlaintext(messageId: string, text: string, attachment?: CachedMessage['attachment']) {
-  decryptedPlaintextByMessageId.set(messageId, { text, attachment })
+function getScopedMessageCacheKey(chatScopeId: string, messageId: string): string {
+  return `${chatScopeId}::${messageId}`
+}
+
+function cacheDecryptedPlaintext(
+  chatScopeId: string,
+  messageId: string,
+  text: string,
+  attachment?: CachedMessage['attachment']
+) {
+  decryptedPlaintextByMessageId.set(getScopedMessageCacheKey(chatScopeId, messageId), { text, attachment })
 }
 
 /**
@@ -44,7 +53,7 @@ function cacheDecryptedPlaintext(messageId: string, text: string, attachment?: C
  * without re-running the Double Ratchet (which would fail because the chain
  * counter already advanced in the previous session).
  */
-export function seedDecryptedCacheFromPersisted(messages: CachedMessage[]) {
+export function seedDecryptedCacheFromPersisted(chatScopeId: string, messages: CachedMessage[]) {
   const encryptedPlaceholder = '[Encrypted envelope available but not decryptable on this device]'
   for (const msg of messages) {
     // Skip system messages, optimistic placeholders, and the error placeholder.
@@ -54,14 +63,17 @@ export function seedDecryptedCacheFromPersisted(messages: CachedMessage[]) {
     if (msg.text === encryptedPlaceholder) {
       continue
     }
-    if (!decryptedPlaintextByMessageId.has(msg.id)) {
-      decryptedPlaintextByMessageId.set(msg.id, { text: msg.text, attachment: msg.attachment })
+    const cacheKey = getScopedMessageCacheKey(chatScopeId, msg.id)
+    if (!decryptedPlaintextByMessageId.has(cacheKey)) {
+      decryptedPlaintextByMessageId.set(cacheKey, { text: msg.text, attachment: msg.attachment })
     }
   }
 }
 
-function lookupDecryptedPlaintext(messageId: string | undefined) {
-  return messageId ? decryptedPlaintextByMessageId.get(messageId) ?? null : null
+function lookupDecryptedPlaintext(chatScopeId: string, messageId: string | undefined) {
+  return messageId
+    ? decryptedPlaintextByMessageId.get(getScopedMessageCacheKey(chatScopeId, messageId)) ?? null
+    : null
 }
 
 export function cacheSentPlaintext(clientId: string, text: string, attachment?: CachedMessage['attachment']) {
@@ -171,6 +183,7 @@ export function decodeSystemMessageText(payloadBase64: string): string {
 
 export async function projectMessage(
   message: ChatMessage,
+  chatScopeId: string,
   currentDeviceId: string,
   encryptionPrivateKeyPkcs8Base64?: string,
   currentUsername?: string
@@ -226,7 +239,7 @@ export async function projectMessage(
   // — each message key can only be derived once (the chain counter advances).
   // When syncMessagesFromServerNow re-fetches all messages, previously-decrypted
   // messages must use the cache rather than re-running the ratchet.
-  const previouslyDecrypted = lookupDecryptedPlaintext(message.id)
+  const previouslyDecrypted = lookupDecryptedPlaintext(chatScopeId, message.id)
 
   if (previouslyDecrypted) {
     return {
@@ -261,7 +274,7 @@ export async function projectMessage(
 
     // Cache the successful decryption so subsequent syncs don't re-run the
     // ratchet (which would fail because the chain counter already advanced).
-    cacheDecryptedPlaintext(message.id, parsedPayload.text, parsedPayload.attachment)
+    cacheDecryptedPlaintext(chatScopeId, message.id, parsedPayload.text, parsedPayload.attachment)
 
     return {
       id: message.id,
@@ -300,7 +313,7 @@ export async function projectMessage(
     // in the decrypted-plaintext cache so subsequent re-projections (and the
     // IndexedDB write) use the correct text instead of the error placeholder.
     if (cached) {
-      cacheDecryptedPlaintext(message.id, cached.text, cached.attachment)
+      cacheDecryptedPlaintext(chatScopeId, message.id, cached.text, cached.attachment)
     }
 
     return {

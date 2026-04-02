@@ -1,5 +1,9 @@
 import { Socket, Presence, type Channel } from 'phoenix'
-import type { CallParticipant, CallRoomState, CallSession, CallSignal } from './api'
+import type { CallParticipant, CallRoomState, CallScope, CallSession, CallSignal } from './api'
+
+type RealtimeTestWindow = Window & {
+  __VOSTOK_TEST_DISABLE_REALTIME__?: boolean
+}
 
 type ChatMessageHandler = {
   onMessage: (messageId: string) => void
@@ -15,10 +19,20 @@ type CallStateHandler = {
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
+let defaultRealtimeBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+
 let connectionStatus: ConnectionStatus = 'disconnected'
 let hasEverConnected = false
 const statusListeners = new Set<(s: ConnectionStatus) => void>()
 const reconnectListeners = new Set<() => void>()
+
+function isRealtimeDisabledForTests(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return Boolean((window as RealtimeTestWindow).__VOSTOK_TEST_DISABLE_REALTIME__)
+}
 
 function notifyStatusListeners() {
   for (const cb of statusListeners) {
@@ -39,14 +53,43 @@ function notifyStatusListeners() {
 
 export function subscribeToConnectionStatus(cb: (s: ConnectionStatus) => void): () => void {
   statusListeners.add(cb)
-  cb(connectionStatus)
+  cb(isRealtimeDisabledForTests() ? 'connected' : connectionStatus)
   return () => statusListeners.delete(cb)
 }
 
 /** Subscribe to reconnection events — fires when socket recovers after a drop. */
 export function subscribeToReconnect(cb: () => void): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   reconnectListeners.add(cb)
   return () => reconnectListeners.delete(cb)
+}
+
+export function setDefaultRealtimeBaseUrl(baseUrl: string | null) {
+  const nextBaseUrl = baseUrl && baseUrl.trim() !== ''
+    ? baseUrl.trim().replace(/\/+$/, '')
+    : (typeof window !== 'undefined' ? window.location.origin : defaultRealtimeBaseUrl)
+
+  if (nextBaseUrl === defaultRealtimeBaseUrl) {
+    return
+  }
+
+  defaultRealtimeBaseUrl = nextBaseUrl
+
+  if (deviceSocket) {
+    deviceSocket.disconnect()
+    deviceSocket = null
+    deviceSocketToken = null
+    chatChannels.clear()
+    connectionStatus = 'disconnected'
+    notifyStatusListeners()
+  }
+}
+
+export function getDefaultRealtimeBaseUrl(): string {
+  return defaultRealtimeBaseUrl
 }
 
 let deviceSocket: Socket | null = null
@@ -61,6 +104,10 @@ export function subscribeToUserStream(
   userId: string,
   handlers: UserActivityHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   const socket = ensureDeviceSocket(token)
   const channel = socket.channel(`user:${userId}`)
 
@@ -89,6 +136,10 @@ export function subscribeToChatStream(
   chatId: string,
   handlers: ChatMessageHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   const channel = ensureChatChannel(token, chatId)
 
   channel.on('message:new', (payload: unknown) => {
@@ -106,11 +157,16 @@ export function subscribeToChatStream(
 
 export function subscribeToCallStream(
   token: string,
-  chatId: string,
+  scope: CallScope,
   handlers: CallStateHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   const socket = ensureDeviceSocket(token)
-  const channel = socket.channel(`call:${chatId}`)
+  const topic = scope.type === 'chat' ? `call:${scope.chatId}` : `call-room:${scope.roomId}`
+  const channel = socket.channel(topic)
 
   channel.on('call:state', (payload: unknown) => {
     handlers.onState(readCallState(payload))
@@ -155,7 +211,7 @@ function ensureChatChannel(token: string, chatId: string): Channel {
   const existing = chatChannels.get(key)
 
   // Only reuse a channel if it belongs to the current socket
-  if (existing && deviceSocket && (existing as any).socket === deviceSocket) {
+  if (existing && deviceSocket && existing.socket === deviceSocket) {
     return existing
   }
 
@@ -180,6 +236,10 @@ export function subscribeToTyping(
   chatId: string,
   handlers: TypingHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   const channel = ensureChatChannel(token, chatId)
 
   channel.on('typing:start', (payload: unknown) => {
@@ -207,11 +267,19 @@ export function subscribeToTyping(
 }
 
 export function pushTypingStart(token: string, chatId: string): void {
+  if (isRealtimeDisabledForTests()) {
+    return
+  }
+
   const channel = ensureChatChannel(token, chatId)
   channel.push('typing:start', {})
 }
 
 export function pushTypingStop(token: string, chatId: string): void {
+  if (isRealtimeDisabledForTests()) {
+    return
+  }
+
   const channel = ensureChatChannel(token, chatId)
   channel.push('typing:stop', {})
 }
@@ -227,6 +295,10 @@ export function subscribeToReadReceipts(
   chatId: string,
   handlers: ReadReceiptHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    return () => {}
+  }
+
   const channel = ensureChatChannel(token, chatId)
 
   channel.on('read:update', (payload: unknown) => {
@@ -253,6 +325,11 @@ export function subscribeToPresence(
   token: string,
   handlers: PresenceHandler
 ): () => void {
+  if (isRealtimeDisabledForTests()) {
+    handlers.onSync(new Set())
+    return () => {}
+  }
+
   const socket = ensureDeviceSocket(token)
   const channel = socket.channel('presence:lobby')
 
@@ -279,6 +356,11 @@ export function subscribeToPresence(
 }
 
 function ensureDeviceSocket(token: string): Socket {
+  if (isRealtimeDisabledForTests()) {
+    connectionStatus = 'connected'
+    return deviceSocket as Socket
+  }
+
   if (deviceSocket && deviceSocketToken === token) {
     return deviceSocket
   }
@@ -290,7 +372,7 @@ function ensureDeviceSocket(token: string): Socket {
   // Clear cached channels — they belong to the old socket
   chatChannels.clear()
 
-  const socket = new Socket('/socket/device', {
+  const socket = new Socket(toSocketUrl(defaultRealtimeBaseUrl), {
     params: { token },
     // Desktop app: aggressive reconnection — never give up
     reconnectAfterMs: (tries: number) => Math.min(1000 * Math.pow(2, tries), 30000),
@@ -312,6 +394,15 @@ function ensureDeviceSocket(token: string): Socket {
   socket.connect()
 
   return socket
+}
+
+function toSocketUrl(baseUrl: string): string {
+  const normalized = new URL(baseUrl)
+  normalized.protocol = normalized.protocol === 'https:' ? 'wss:' : 'ws:'
+  normalized.pathname = '/socket/device'
+  normalized.search = ''
+  normalized.hash = ''
+  return normalized.toString()
 }
 
 function teardownChannel(channel: Channel, events: string[]) {
@@ -347,9 +438,11 @@ function readCallState(payload: unknown): CallSession | null {
 
   if (
     typeof call.id !== 'string' ||
-    typeof call.chat_id !== 'string' ||
     typeof call.started_by_device_id !== 'string' ||
     typeof call.mode !== 'string' ||
+    typeof call.media_mode !== 'string' ||
+    typeof call.scope_type !== 'string' ||
+    typeof call.scope_id !== 'string' ||
     typeof call.status !== 'string' ||
     typeof call.started_at !== 'string'
   ) {
@@ -358,12 +451,18 @@ function readCallState(payload: unknown): CallSession | null {
 
   return {
     id: call.id,
-    chat_id: call.chat_id,
+    chat_id: typeof call.chat_id === 'string' ? call.chat_id : null,
+    call_room_id: typeof call.call_room_id === 'string' ? call.call_room_id : null,
+    scope_type: call.scope_type as CallSession['scope_type'],
+    scope_id: call.scope_id,
     started_by_device_id: call.started_by_device_id,
     mode: call.mode as CallSession['mode'],
+    media_mode: call.media_mode as CallSession['media_mode'],
     status: call.status as CallSession['status'],
     started_at: call.started_at,
-    ended_at: typeof call.ended_at === 'string' ? call.ended_at : null
+    ended_at: typeof call.ended_at === 'string' ? call.ended_at : null,
+    end_reason: typeof call.end_reason === 'string' ? call.end_reason : null,
+    display_title: typeof call.display_title === 'string' ? call.display_title : null
   }
 }
 
@@ -418,6 +517,8 @@ function readParticipant(payload: unknown): CallParticipant | null {
     id: participant.id,
     call_id: participant.call_id,
     user_id: participant.user_id,
+    username: typeof participant.username === 'string' ? participant.username : null,
+    display_name: typeof participant.display_name === 'string' ? participant.display_name : null,
     device_id: participant.device_id,
     status: participant.status as CallParticipant['status'],
     track_kind: participant.track_kind as CallParticipant['track_kind'],

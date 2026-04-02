@@ -13,7 +13,7 @@ export type AuthView =
 export type ServerInfo = {
   name: string
   version: string
-  auth_mode: 'invite_only' | 'closed' | 'dev'
+  auth_mode: 'open' | 'invite_only' | 'closed' | 'dev'
   access_requests_enabled: boolean
   bootstrap: boolean
 }

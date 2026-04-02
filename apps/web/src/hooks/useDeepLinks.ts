@@ -4,6 +4,7 @@ import { parseDeepLink, setupDeepLinkListener } from '../lib/deep-links.ts'
 type DeepLinkActions = {
   setActiveChatId: (chatId: string) => void
   setSettingsOverlayOpen: (open: boolean) => void
+  normalizeChatId?: (chatId: string) => string | null
 }
 
 /**
@@ -22,6 +23,8 @@ export function useDeepLinks(
   authenticated: boolean,
   actions: DeepLinkActions
 ) {
+  const { normalizeChatId, setActiveChatId, setSettingsOverlayOpen } = actions
+
   // Parse initial URL on mount (after auth)
   useEffect(() => {
     if (!authenticated) {
@@ -31,7 +34,7 @@ export function useDeepLinks(
     const initialLink = parseDeepLink(window.location.href)
 
     if (initialLink) {
-      handleDeepLinkAction(initialLink, actions)
+      handleDeepLinkAction(initialLink, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen })
 
       // Clean up the URL query params after handling (don't leave ?chat=xxx in the address bar)
       if (window.location.search) {
@@ -39,7 +42,7 @@ export function useDeepLinks(
         window.history.replaceState(null, '', cleanUrl)
       }
     }
-  }, [authenticated])
+  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen])
 
   // Listen for deep link events (notification clicks, Tauri deep links, popstate)
   useEffect(() => {
@@ -49,10 +52,10 @@ export function useDeepLinks(
 
     return setupDeepLinkListener((link) => {
       if (link) {
-        handleDeepLinkAction(link, actions)
+        handleDeepLinkAction(link, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen })
       }
     })
-  }, [authenticated])
+  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen])
 }
 
 function handleDeepLinkAction(
@@ -61,7 +64,7 @@ function handleDeepLinkAction(
 ) {
   switch (link.type) {
     case 'chat':
-      actions.setActiveChatId(link.chatId)
+      actions.setActiveChatId(actions.normalizeChatId?.(link.chatId) ?? link.chatId)
       break
     case 'settings':
       actions.setSettingsOverlayOpen(true)

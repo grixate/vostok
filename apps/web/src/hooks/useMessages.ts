@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useEffectEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import { readStoredDevice } from '../utils/storage.ts'
 import { SETTINGS_STORAGE_KEY } from '../constants.ts'
-import type { ChatSummary, ChatDeviceSession, ChatMessage, LinkMetadata, RecipientDevice } from '../lib/api.ts'
+import type { ChatDeviceSession, ChatMessage, LinkMetadata, RecipientDevice } from '../lib/api.ts'
 import {
   createMessage,
   deleteMessage,
@@ -26,19 +25,20 @@ import { encryptMessageWithSessions } from '../lib/chat-session-vault.ts'
 import { encryptMessageWithGroupSenderKey, getActiveGroupSenderKey } from '../lib/message-vault.ts'
 import { outboxRetryDelayMs } from '@vostok/crypto-core'
 import { subscribeToChatStream, subscribeToReconnect } from '../lib/realtime.ts'
+import { getRawChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import { projectMessage, cacheSentPlaintext, seedDecryptedCacheFromPersisted } from '../utils/message-helpers.ts'
 import { mergeMessageThread } from '../utils/message-helpers.ts'
 import { syncChatSummary, compareMessageOrder } from '../utils/chat-helpers.ts'
 import { extractFirstHttpUrl } from '../utils/format.ts'
 import { canUseChatSessions, shouldQueueOutboxSendFailure, isOutboxDuplicateClientIdError } from '../utils/crypto-helpers.ts'
-import type { AuthView, AttachmentDescriptor } from '../types.ts'
+import type { AuthView } from '../types.ts'
 
 export function useMessages(
   view: AuthView,
   deferredActiveChatId: string | null,
   activeChatIdRef: React.RefObject<string | null>,
-  chatItems: ChatSummary[],
-  setChatItems: React.Dispatch<React.SetStateAction<ChatSummary[]>>,
+  chatItems: MergedChatSummary[],
+  setChatItems: React.Dispatch<React.SetStateAction<MergedChatSummary[]>>,
   syncChatSessionsFromServer: (
     chatId: string,
     knownRecipientDevices?: RecipientDevice[]
@@ -46,7 +46,7 @@ export function useMessages(
   chatSessions: ChatDeviceSession[],
   currentUsername?: string | null
 ) {
-  const { sessionToken, storedDevice, setStoredDevice, loading, setLoading, setBanner } = useAppContext()
+  const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   // Use the device ID as a stable dependency for the message-loading effect.
   // The full storedDevice object changes when prekeys are consumed during
   // session sync, which would cause unnecessary effect re-runs that clear
@@ -56,7 +56,7 @@ export function useMessages(
   const [draft, setDraft] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [replyTargetMessageId, setReplyTargetMessageId] = useState<string | null>(null)
-  const [_outboxPendingCount, setOutboxPendingCount] = useState(0)
+  const [, setOutboxPendingCount] = useState(0)
   const [linkMetadataByUrl, setLinkMetadataByUrl] = useState<Record<string, LinkMetadata>>({})
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -99,6 +99,7 @@ export function useMessages(
 
     const projected = await projectMessage(
       message,
+      chatId,
       storedDevice?.deviceId ?? '',
       storedDevice?.encryptionPrivateKeyPkcs8Base64,
       currentUsername ?? undefined
@@ -112,6 +113,12 @@ export function useMessages(
   }
 
   async function syncMessagesFromServerNow(chatId: string) {
+    const rawChatId = getRawChatId(chatId)
+
+    if (!rawChatId) {
+      return
+    }
+
     // Serialise sync calls — the decrypt path reads and writes shared ratchet
     // state in localStorage, so concurrent syncs corrupt session counters.
     if (syncInFlightRef.current) {
@@ -133,7 +140,7 @@ export function useMessages(
         }
       }
 
-      const response = await listMessages(sessionToken, chatId)
+      const response = await listMessages(sessionToken, rawChatId)
       // Messages MUST be projected sequentially — each decryption reads and
       // writes the shared ratchet state (receive counter, skipped message keys,
       // etc.) in localStorage.  Parallel decryption via Promise.all causes race
@@ -147,6 +154,7 @@ export function useMessages(
         projected.push(
           await projectMessage(
             message,
+            chatId,
             deviceId,
             encryptionKey,
             currentUsername ?? undefined
@@ -188,7 +196,7 @@ export function useMessages(
       const settingsRaw = localStorage.getItem(SETTINGS_STORAGE_KEY)
       const readReceiptsEnabled = settingsRaw ? (JSON.parse(settingsRaw) as { privacy_read_receipts?: boolean }).privacy_read_receipts !== false : true
       if (readReceiptsEnabled) {
-        void markChatRead(sessionToken, chatId, validLastId).catch(() => {})
+        void markChatRead(sessionToken, rawChatId, validLastId).catch(() => {})
       }
     }
 
@@ -310,13 +318,13 @@ export function useMessages(
             // that projectMessage() can find previously-decrypted text without
             // re-running the Double Ratchet (which would fail after page reload
             // because chain counters already advanced in the previous session).
-            seedDecryptedCacheFromPersisted(cached)
+            seedDecryptedCacheFromPersisted(chatId, cached)
             messageItemsRef.current = cached
             setMessageItems(cached)
           }
         } else {
           // Messages already visible — just seed the decryption cache.
-          seedDecryptedCacheFromPersisted(messageItemsRef.current)
+          seedDecryptedCacheFromPersisted(chatId, messageItemsRef.current)
         }
 
         await syncMessagesFromServer(chatId)
@@ -333,7 +341,7 @@ export function useMessages(
     return () => {
       cancelled = true
     }
-  }, [deferredActiveChatId, sessionToken, view])
+  }, [deferredActiveChatId, sessionToken, setBanner, view])
 
   // Clear link metadata on chat change
   useEffect(() => {
@@ -386,8 +394,13 @@ export function useMessages(
     }
 
     const chatId = deferredActiveChatId
+    const rawChatId = getRawChatId(chatId)
 
-    return subscribeToChatStream(sessionToken, chatId, {
+    if (!rawChatId) {
+      return
+    }
+
+    return subscribeToChatStream(sessionToken, rawChatId, {
       onMessage(messageId) {
         handleRealtimeMessage(messageId, chatId)
       },
@@ -415,25 +428,20 @@ export function useMessages(
     messageKind: 'text' | 'attachment',
     replyToMessageId?: string | null
   ) {
-    // If no device is in React state yet, check localStorage — the device
-    // bootstrap in useChatList may have persisted it between retries.
-    let device = storedDevice
+    const device = storedDevice
     if (!device) {
-      const persisted = readStoredDevice()
-      if (persisted) {
-        device = persisted
-        setStoredDevice(persisted)
-      } else {
-        throw new Error(
-          'Encryption keys are not yet available. Setting up your device\u2026'
-        )
-      }
+      throw new Error(
+        'Encryption keys are not yet available. Setting up your device\u2026'
+      )
     }
 
     const targetChat = chatItems.find((chat) => chat.id === chatId) ?? null
+    const rawChatId = getRawChatId(chatId)
 
     if (targetChat?.type === 'group') {
-      const activeSenderKey = getActiveGroupSenderKey(chatId)
+      const activeSenderKey =
+        getActiveGroupSenderKey(chatId) ??
+        (rawChatId ? getActiveGroupSenderKey(rawChatId) : null)
 
       if (!activeSenderKey) {
         throw new Error(
@@ -448,7 +456,8 @@ export function useMessages(
           plainText,
           chatId,
           activeSenderKey.key_id,
-          activeSenderKey.epoch
+          activeSenderKey.epoch,
+          rawChatId ?? chatId
         ))
       }
 
@@ -462,7 +471,11 @@ export function useMessages(
       throw new Error('No session token is available.')
     }
 
-    const recipientDeviceResponse = await listRecipientDevices(sessionToken, chatId)
+    if (!rawChatId) {
+      throw new Error('The selected chat is unavailable.')
+    }
+
+    const recipientDeviceResponse = await listRecipientDevices(sessionToken, rawChatId)
     const recipientDevices = recipientDeviceResponse.recipient_devices
     const sessions = await syncChatSessionsFromServer(chatId, recipientDevices)
     const canUseSessionEncryption = canUseChatSessions(device, sessions, recipientDevices)
@@ -523,7 +536,14 @@ export function useMessages(
 
     for (const queued of dueMessages) {
       try {
-        const response = await createMessage(sessionToken, queued.chatId, queued.payload)
+        const rawChatId = getRawChatId(queued.chatId)
+
+        if (!rawChatId) {
+          await deleteOutboxMessage(queued.id)
+          continue
+        }
+
+        const response = await createMessage(sessionToken, rawChatId, queued.payload)
         await ingestMessageIntoActiveThread(response.message, queued.chatId)
         await deleteOutboxMessage(queued.id)
       } catch (error) {
@@ -585,7 +605,9 @@ export function useMessages(
       : null
 
   async function sendDraftMessage(activeChatId: string | null) {
-    if (!sessionToken || !activeChatId || draft.trim() === '') {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId || draft.trim() === '') {
       return
     }
 
@@ -611,7 +633,7 @@ export function useMessages(
 
         const response = await updateMessage(
           sessionToken,
-          activeChatId,
+          rawActiveChatId,
           activeEditingMessageId,
           payload
         )
@@ -691,7 +713,7 @@ export function useMessages(
       }
 
       try {
-        const response = await createMessage(sessionToken, activeChatId, payload)
+        const response = await createMessage(sessionToken, rawActiveChatId, payload)
 
         await ingestMessageIntoActiveThread(response.message, activeChatId)
         setBanner({
@@ -751,14 +773,16 @@ export function useMessages(
   }
 
   async function handleDeleteExistingMessage(message: CachedMessage, activeChatId: string | null) {
-    if (!sessionToken || !activeChatId || message.side !== 'outgoing' || message.deletedAt) {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId || message.side !== 'outgoing' || message.deletedAt) {
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await deleteMessage(sessionToken, activeChatId, message.id)
+      const response = await deleteMessage(sessionToken, rawActiveChatId, message.id)
       await ingestMessageIntoActiveThread(response.message, activeChatId)
 
       if (editingMessageId === message.id) {
@@ -779,38 +803,46 @@ export function useMessages(
     }
   }
 
-  async function handleToggleMessagePin(message: CachedMessage, activeChatId: string | null) {
+  async function handleToggleMessagePin(message: CachedMessage, activeChatId: string | null): Promise<{ pinned: boolean } | null> {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
     if (
       !sessionToken ||
       !activeChatId ||
+      !rawActiveChatId ||
       message.side === 'system' ||
       message.deletedAt ||
       message.id.startsWith('optimistic-')
     ) {
-      return
+      return null
     }
 
     setLoading(true)
 
     try {
-      const response = await toggleMessagePin(sessionToken, activeChatId, message.id)
+      const response = await toggleMessagePin(sessionToken, rawActiveChatId, message.id)
       await syncMessagesFromServerNow(activeChatId)
+      const pinned = !!response.message.pinned_at
       setBanner({
         tone: 'success',
-        message: response.message.pinned_at
+        message: pinned
           ? 'Pinned message updated for this chat.'
           : 'Pinned message cleared.'
       })
+      return { pinned }
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Failed to update the pinned message.'
       setBanner({ tone: 'error', message: messageText })
+      throw error
     } finally {
       setLoading(false)
     }
   }
 
   async function _handleQuickReaction(reactionKey: string, activeChatId: string | null) {
-    if (!sessionToken || !activeChatId) {
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId) {
       return
     }
 
@@ -828,7 +860,7 @@ export function useMessages(
     try {
       const response = await toggleMessageReaction(
         sessionToken,
-        activeChatId,
+        rawActiveChatId,
         targetMessage.id,
         reactionKey
       )
@@ -844,9 +876,11 @@ export function useMessages(
   }
 
   async function handleToggleReaction(messageId: string, activeChatId: string | null, reactionKey: string) {
-    if (!sessionToken || !activeChatId) return
+    const rawActiveChatId = getRawChatId(activeChatId)
+
+    if (!sessionToken || !activeChatId || !rawActiveChatId) return
     try {
-      const response = await toggleMessageReaction(sessionToken, activeChatId, messageId, reactionKey)
+      const response = await toggleMessageReaction(sessionToken, rawActiveChatId, messageId, reactionKey)
       await ingestMessageIntoActiveThread(response.message, activeChatId)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update reaction.'
@@ -867,7 +901,13 @@ export function useMessages(
    * displays the actual message text instead of "Encrypted message".
    */
   async function updateNonActiveChatPreview(chatId: string) {
+    const rawChatId = getRawChatId(chatId)
+
     if (!sessionToken || activeChatIdRef.current === chatId) {
+      return
+    }
+
+    if (!rawChatId) {
       return
     }
 
@@ -877,7 +917,7 @@ export function useMessages(
         await syncChatSessionsFromServer(chatId)
       }
 
-      const response = await listMessages(sessionToken, chatId)
+      const response = await listMessages(sessionToken, rawChatId)
 
       if (response.messages.length === 0) {
         return
@@ -887,6 +927,7 @@ export function useMessages(
       const lastServerMessage = response.messages[response.messages.length - 1]
       const projected = await projectMessage(
         lastServerMessage,
+        chatId,
         storedDevice?.deviceId ?? '',
         storedDevice?.encryptionPrivateKeyPkcs8Base64,
         currentUsername ?? undefined
@@ -896,7 +937,8 @@ export function useMessages(
         writeChatPreview(chatId, projected.text)
 
         // Bump chatItems so the sidebar re-renders with the new preview.
-        setChatItems((current) => syncChatSummary(current, chatId, [projected]))
+        // Pass false — this is a non-active chat, so preserve/increment unread count.
+        setChatItems((current) => syncChatSummary(current, chatId, [projected], false))
       }
     } catch {
       // Preview update is best-effort — silently ignore failures.
@@ -904,7 +946,9 @@ export function useMessages(
   }
 
   async function loadOlderMessages(chatId: string) {
-    if (!sessionToken || loadingOlder || !hasMoreMessages) {
+    const rawChatId = getRawChatId(chatId)
+
+    if (!sessionToken || !rawChatId || loadingOlder || !hasMoreMessages) {
       return
     }
 
@@ -918,7 +962,7 @@ export function useMessages(
     setLoadingOlder(true)
 
     try {
-      const response = await listMessages(sessionToken, chatId, {
+      const response = await listMessages(sessionToken, rawChatId, {
         before: oldestMessage.id
       })
 
@@ -932,7 +976,13 @@ export function useMessages(
       const projected: Awaited<ReturnType<typeof projectMessage>>[] = []
       for (const message of response.messages) {
         projected.push(
-          await projectMessage(message, deviceId, encryptionKey, currentUsername ?? undefined)
+          await projectMessage(
+            message,
+            chatId,
+            deviceId,
+            encryptionKey,
+            currentUsername ?? undefined
+          )
         )
       }
 

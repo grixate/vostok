@@ -1,4 +1,6 @@
 import { WebRTCEndpoint, type WebRTCEndpointEvents } from '@jellyfish-dev/membrane-webrtc-js'
+import type { TurnCredentials } from './api.ts'
+import { turnCredentialsToIceServers } from './call-runtime.ts'
 
 export type MembraneEndpointMetadata = {
   call_id: string
@@ -152,6 +154,23 @@ export function connectMembraneClient(
   client.connect(metadata)
 }
 
+export function configureMembraneTurnServers(
+  client: MembraneClient,
+  turnCredentials: TurnCredentials | null
+): void {
+  const internalClient = client as unknown as {
+    rtcConfig?: RTCConfiguration
+  }
+
+  if (!internalClient.rtcConfig) {
+    internalClient.rtcConfig = { iceServers: [] }
+  }
+
+  internalClient.rtcConfig.iceServers = turnCredentials
+    ? turnCredentialsToIceServers(turnCredentials)
+    : []
+}
+
 export function receiveMembraneMediaEvent(client: MembraneClient, mediaEvent: string): void {
   client.receiveMediaEvent(mediaEvent)
 }
@@ -193,6 +212,15 @@ export async function removeLocalTracksFromMembrane(
 
 export function cleanupMembraneClient(client: MembraneClient | null): void {
   client?.cleanUp()
+}
+
+export function getMembranePeerConnection(client: MembraneClient | null): RTCPeerConnection | null {
+  if (!client) {
+    return null
+  }
+
+  const internalClient = client as unknown as { connection?: RTCPeerConnection | null }
+  return internalClient.connection ?? null
 }
 
 function toTrackKind(value: string | undefined): 'audio' | 'video' | null {

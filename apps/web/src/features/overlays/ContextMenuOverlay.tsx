@@ -105,17 +105,24 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
         key: 'pin',
         label: msg.pinnedAt ? 'Unpin' : 'Pin',
         icon: <PinSmallIcon />,
-        action: () => { messages.handleToggleMessagePin(msg, chatList.activeChatId); close() }
+        action: () => {
+          close()
+          messages.handleToggleMessagePin(msg, chatList.activeChatId)
+            .then((result) => {
+              if (result) showToast(result.pinned ? 'Message pinned' : 'Message unpinned')
+            })
+            .catch(() => { showToast('Failed to update pin') })
+        }
       })
     }
 
-    // 6. Forward (enabled stub, with chevron-right trailing indicator)
+    // 6. Forward (stub — show toast until full flow is implemented)
     menuItems.push({
       key: 'forward',
       label: 'Forward',
       icon: <ForwardSmallIcon />,
       trailing: <ChevronRightSmallIcon />,
-      action: () => { close() }
+      action: () => { close(); showToast('Forward is not yet available') }
     })
 
     // 7. Select (enabled, wires into selection mode)

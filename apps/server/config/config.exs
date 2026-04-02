@@ -34,8 +34,13 @@ config :vostok_server,
 
 config :vostok_server, Oban,
   repo: VostokServer.Repo,
-  queues: [default: 10],
-  plugins: []
+  queues: [default: 10, maintenance: 2, push_notifications: 5],
+  plugins: [
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"*/15 * * * *", VostokServer.Workers.MessageExpiryWorker}
+     ]}
+  ]
 
 # Configures the endpoint
 config :vostok_server, VostokServerWeb.Endpoint,

@@ -1,12 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import { ChatListItem } from '@vostok/ui-chat'
-import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { formatRelativeTime } from '../../utils/format.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import { readChatPreview } from '../../lib/message-cache.ts'
-import { markChatRead } from '../../lib/api.ts'
 import {
   UserSmallIcon,
   UsersSmallIcon,
@@ -19,56 +17,36 @@ import {
 } from '../../icons/index.tsx'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { useChatFolders } from '../../hooks/useChatFolders.ts'
-import type { usePresence } from '../../hooks/usePresence.ts'
-import type { ChatSummary } from '../../lib/api.ts'
+import type { MergedChatSummary } from '../../lib/multi-server.ts'
 
 type ChatContextMenu = { chatId: string; x: number; y: number } | null
 
 type SidebarChatListProps = {
   chatList: ReturnType<typeof useChatList>
-  activeChat: ChatSummary | null
+  activeChat: MergedChatSummary | null
   draftChatIds: Map<string, string>
   chatFolders: ReturnType<typeof useChatFolders>
-  presence: ReturnType<typeof usePresence>
 }
 
-function isChatOnline(chat: ChatSummary, onlineUserIds: Set<string>, currentUserId: string | null): boolean {
-  if (chat.is_self_chat || chat.type === 'group') return false
-  const otherUserId = chat.participant_user_ids?.find((id) => id !== currentUserId)
-  return otherUserId ? onlineUserIds.has(otherUserId) : false
-}
-
-function readCurrentUserId(): string | null {
-  try {
-    const raw = window.localStorage.getItem('vostok.auth')
-    if (raw) {
-      const session = JSON.parse(raw) as { user?: { id?: string } }
-      return session.user?.id ?? null
-    }
-  } catch { /* ignore */ }
-  return null
-}
-
-export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolders, presence }: SidebarChatListProps) {
-  const { sessionToken } = useAppContext()
+export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolders }: SidebarChatListProps) {
   const { chatButtonRefs, showToast } = useUIContext()
   const [chatContextMenu, setChatContextMenu] = useState<ChatContextMenu>(null)
-  // Re-read user ID only when session token changes (login/logout)
-  const currentUserId = useMemo(() => readCurrentUserId(), [sessionToken])
 
   // Collect all participant user IDs for photo resolution
   const allParticipantIds = useMemo(() => {
     const ids: string[] = []
     for (const chat of chatList.visibleChatItems) {
-      if (!chat.is_self_chat && chat.participant_user_ids) {
+      if (!chat.is_self_chat && chat.participant_user_ids && chat.serverId === chatList.activeServerId) {
+        const currentUserId =
+          chatList.resolveServerScope(chat.id)?.server.auth?.user.id ?? null
         for (const id of chat.participant_user_ids) {
           if (id !== currentUserId && !ids.includes(id)) ids.push(id)
         }
       }
     }
     return ids
-  }, [chatList.visibleChatItems, currentUserId])
-  const profilePhotos = useProfilePhotos(allParticipantIds)
+  }, [chatList])
+  const profilePhotos = useProfilePhotos(allParticipantIds, chatList.activeServerUrl)
 
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chatId: string) => {
     e.preventDefault()
@@ -80,26 +58,27 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
   }, [])
 
   const handleMarkAsRead = useCallback(() => {
-    if (!chatContextMenu || !sessionToken) return
-    void markChatRead(sessionToken, chatContextMenu.chatId).catch(() => {})
+    if (!chatContextMenu) return
+    const scope = chatList.resolveServerScope(chatContextMenu.chatId)
+    if (!scope?.token || !scope.rawChatId) return
+    void scope.api.markChatRead(scope.token, scope.rawChatId).catch(() => {})
     // Zero out unread count locally
     chatList.setChatItems((prev) =>
       prev.map((c) => c.id === chatContextMenu.chatId ? { ...c, message_count: 0 } : c)
     )
     showToast('Marked as read')
     closeChatContextMenu()
-  }, [chatContextMenu, sessionToken, chatList, showToast, closeChatContextMenu])
+  }, [chatContextMenu, chatList, showToast, closeChatContextMenu])
 
-  const folderFilteredItems: ChatSummary[] = useMemo(
-    () => chatFolders.filterChatsByFolder(chatList.visibleChatItems).filter((chat) => {
+  const folderFilteredItems: MergedChatSummary[] = chatFolders
+    .filterChatsByFolder(chatList.visibleChatItems)
+    .filter((chat) => {
       // Hide empty chats with no messages and no draft (unless it's the active chat)
       if (!chat.is_self_chat && !chat.latest_message_at && chat.message_count === 0 && !draftChatIds.has(chat.id)) {
         return chat.id === activeChat?.id
       }
       return true
-    }),
-    [chatFolders.filterChatsByFolder, chatList.visibleChatItems, draftChatIds, activeChat?.id]
-  )
+    })
 
   if (chatList.newMessageMode) {
     return (
@@ -162,11 +141,15 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
             <ChatListItem
               title={chat.title}
               preview={
-                chat.is_self_chat
-                  ? (readChatPreview(chat.id) ? `You: ${readChatPreview(chat.id)?.slice(0, 40) ?? ''}` : 'Your Cloud Storage')
-                  : draftChatIds.has(chat.id)
-                    ? `Draft: ${draftChatIds.get(chat.id)!.slice(0, 40)}`
-                    : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'Encrypted message' : 'No messages yet')
+                (() => {
+                  const rawPreview = chat.is_self_chat
+                    ? (readChatPreview(chat.id) ? `You: ${readChatPreview(chat.id)?.slice(0, 40) ?? ''}` : 'Your Cloud Storage')
+                    : draftChatIds.has(chat.id)
+                      ? `Draft: ${draftChatIds.get(chat.id)!.slice(0, 40)}`
+                      : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'Encrypted message' : 'No messages yet')
+
+                  return chatList.hasMultipleServers ? `${chat.serverLabel} · ${rawPreview}` : rawPreview
+                })()
               }
               previewClassName={draftChatIds.has(chat.id) && !chat.is_self_chat ? 'chat-list-item__draft' : undefined}
               timestamp={chat.is_self_chat ? '' : formatRelativeTime(chat.latest_message_at)}
@@ -175,21 +158,29 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds, chatFolder
               pinned={false}
               avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
               avatarInitial={chat.is_self_chat ? '\uD83D\uDD16' : chat.title.slice(0, 1)}
-              avatarUrl={!chat.is_self_chat ? (profilePhotos.get(chat.participant_user_ids?.find((id) => id !== currentUserId) ?? '') ?? null) : null}
+              avatarUrl={!chat.is_self_chat && chat.serverId === chatList.activeServerId
+                ? (profilePhotos.get(
+                    chat.participant_user_ids?.find(
+                      (id) => id !== (chatList.resolveServerScope(chat.id)?.server.auth?.user.id ?? null)
+                    ) ?? ''
+                  ) ?? null)
+                : null}
               isFirst={index === 0}
-              online={isChatOnline(chat, presence.onlineUserIds, currentUserId)}
+              online={chatList.isChatOnline(chat)}
             />
           </button>
         ))
       ) : (
-        <div className="sidebar-empty-state">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>
-          </svg>
-          <span className="sidebar-empty-state__title">Welcome to Vostok</span>
-          <span className="sidebar-empty-state__subtitle">Start a conversation or join a group</span>
+        <div className="empty-state">
+          <div className="empty-state__icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>
+            </svg>
+          </div>
+          <p className="empty-state__title">Welcome to Vostok</p>
+          <p className="empty-state__body">Start a conversation or join a group to get started.</p>
           <button
-            className="sidebar-empty-state__btn"
+            className="primary-action empty-state__action"
             type="button"
             onClick={() => chatList.setNewMessageMode(true)}
           >

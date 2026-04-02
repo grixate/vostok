@@ -12,7 +12,6 @@ type CallPiPBarProps = {
   duration: string
   muted: boolean
   cameraOn?: boolean
-  emojiFingerprint?: string
   onToggleMute: () => void
   onToggleCamera?: () => void
   onHangup: () => void
@@ -24,14 +23,11 @@ export function CallPiPBar({
   duration,
   muted,
   cameraOn = false,
-  emojiFingerprint,
   onToggleMute,
   onToggleCamera,
   onHangup,
   onExpand,
 }: CallPiPBarProps) {
-  const emoji = emojiFingerprint || '🐻🦊🐱🐶'
-
   return (
     <div className="active-call-bar">
       <div className="active-call-bar__left" onClick={onExpand} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand() } }}>
@@ -39,7 +35,6 @@ export function CallPiPBar({
         <span className="active-call-bar__text">
           {contactName} · {duration}
         </span>
-        <span className="active-call-bar__emoji">{emoji}</span>
       </div>
 
       <div className="active-call-bar__right" onClick={(e) => e.stopPropagation()}>

@@ -3,6 +3,7 @@ import { useProfilePhoto } from '../hooks/useProfilePhotos.ts'
 type UserAvatarProps = {
   userId?: string | null
   name: string
+  serverUrl?: string | null
   size?: number
   color?: string
   className?: string
@@ -17,13 +18,14 @@ type UserAvatarProps = {
 export function UserAvatar({
   userId,
   name,
+  serverUrl,
   size = 40,
   color,
   className,
   style,
   online,
 }: UserAvatarProps) {
-  const photoUrl = useProfilePhoto(userId)
+  const photoUrl = useProfilePhoto(userId, serverUrl)
   const initial = name.slice(0, 1).toUpperCase() || '?'
   const radius = size / 2
 
