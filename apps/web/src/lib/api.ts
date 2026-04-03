@@ -73,6 +73,7 @@ export type GroupMember = {
   username: string
   role: 'admin' | 'member'
   joined_at: string | null
+  last_seen_at: string | null
 }
 
 export type GroupSenderKey = {
@@ -522,8 +523,8 @@ export async function listDevices(token: string): Promise<{ devices: DeviceInfo[
   })
 }
 
-export async function listUsers(token: string): Promise<{ users: { id: string; username: string }[] }> {
-  return apiRequest<{ users: { id: string; username: string }[] }>('/users', {
+export async function listUsers(token: string): Promise<{ users: { id: string; username: string; has_photo?: boolean }[] }> {
+  return apiRequest<{ users: { id: string; username: string; has_photo?: boolean }[] }>('/users', {
     method: 'GET',
     headers: authHeader(token)
   })

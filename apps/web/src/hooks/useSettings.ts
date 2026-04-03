@@ -5,16 +5,8 @@ import type { AutoDownloadSettings } from '../types.ts'
 
 export type UserSettings = {
   // General
-  general_autocorrect: boolean
-  general_capitalize: boolean
-  general_spelling: boolean
   general_replace_emoji: boolean
-  general_suggest_emoji: boolean
   general_large_emoji: boolean
-  general_unread_counter: boolean
-  general_compact: boolean
-  general_show_avatars: boolean
-  general_animations: boolean
   general_send_key: 'enter' | 'ctrl-enter'
   // Appearance
   appearance_timestamps: boolean
@@ -23,26 +15,10 @@ export type UserSettings = {
   notif_sound: boolean
   notif_badge: boolean
   notif_preview: boolean
-  notif_in_app: boolean
-  notif_flash_window: boolean
-  notif_private_msg: boolean
-  notif_private_mention: boolean
-  notif_private_preview: boolean
-  notif_group_msg: boolean
-  notif_group_mention: boolean
-  notif_group_preview: boolean
-  notif_chan_msg: boolean
-  notif_chan_mention: boolean
-  notif_chan_preview: boolean
   // Privacy
   privacy_last_seen: boolean
-  privacy_profile_photo: boolean
-  privacy_online_status: boolean
   privacy_read_receipts: boolean
   privacy_typing_indicators: boolean
-  privacy_two_factor: boolean
-  privacy_login_alerts: boolean
-  privacy_session_log: boolean
   // Data & Storage
   data_auto_photos: boolean
   data_auto_videos: boolean
@@ -62,16 +38,8 @@ export type UserSettings = {
 
 export const DEFAULT_SETTINGS: UserSettings = {
   // General
-  general_autocorrect: true,
-  general_capitalize: false,
-  general_spelling: false,
   general_replace_emoji: true,
-  general_suggest_emoji: false,
   general_large_emoji: true,
-  general_unread_counter: true,
-  general_compact: false,
-  general_show_avatars: false,
-  general_animations: true,
   general_send_key: 'enter',
   // Appearance
   appearance_timestamps: true,
@@ -80,26 +48,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
   notif_sound: true,
   notif_badge: true,
   notif_preview: true,
-  notif_in_app: true,
-  notif_flash_window: false,
-  notif_private_msg: true,
-  notif_private_mention: false,
-  notif_private_preview: false,
-  notif_group_msg: true,
-  notif_group_mention: false,
-  notif_group_preview: false,
-  notif_chan_msg: true,
-  notif_chan_mention: false,
-  notif_chan_preview: false,
   // Privacy
   privacy_last_seen: true,
-  privacy_profile_photo: true,
-  privacy_online_status: true,
   privacy_read_receipts: true,
   privacy_typing_indicators: true,
-  privacy_two_factor: false,
-  privacy_login_alerts: true,
-  privacy_session_log: true,
   // Data & Storage
   data_auto_photos: true,
   data_auto_videos: false,

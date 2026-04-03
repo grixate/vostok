@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useThemeContext, type ThemePreference } from '../../contexts/ThemeContext.tsx'
 
 const ACCENT_PRESETS = [
@@ -42,28 +41,7 @@ export function ThemePicker() {
     setChatBackground,
   } = useThemeContext()
 
-  const [customAccent, setCustomAccent] = useState('')
-  const [customBg, setCustomBg] = useState('')
-
   const bgPresets = resolvedTheme === 'dark' ? BG_PRESETS_DARK : BG_PRESETS_LIGHT
-
-  function handleCustomAccentSubmit() {
-    const trimmed = customAccent.trim()
-    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-      setAccentColor(trimmed)
-      setCustomAccent('')
-    }
-  }
-
-  function handleCustomBgSubmit() {
-    const trimmed = customBg.trim()
-    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-      setChatBackground(trimmed)
-      setCustomBg('')
-    }
-  }
-
-  const isAccentPreset = ACCENT_PRESETS.some((p) => p.value.toLowerCase() === accentColor.toLowerCase())
 
   return (
     <div className="theme-picker">
@@ -106,20 +84,6 @@ export function ThemePicker() {
             </button>
           ))}
         </div>
-        <div className="theme-picker__custom-row">
-          <input
-            className="theme-picker__custom-input"
-            type="text"
-            placeholder="#hex"
-            value={customAccent}
-            onChange={(e) => setCustomAccent(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCustomAccentSubmit() }}
-            maxLength={7}
-          />
-          {!isAccentPreset ? (
-            <span className="theme-picker__custom-preview" style={{ background: accentColor }} />
-          ) : null}
-        </div>
       </div>
 
       {/* Chat Background */}
@@ -156,20 +120,6 @@ export function ThemePicker() {
               ) : null}
             </button>
           ))}
-        </div>
-        <div className="theme-picker__custom-row">
-          <input
-            className="theme-picker__custom-input"
-            type="text"
-            placeholder="#hex"
-            value={customBg}
-            onChange={(e) => setCustomBg(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCustomBgSubmit() }}
-            maxLength={7}
-          />
-          {chatBackground && !bgPresets.some((p) => p.value === chatBackground) ? (
-            <span className="theme-picker__custom-preview" style={{ background: chatBackground }} />
-          ) : null}
         </div>
       </div>
     </div>

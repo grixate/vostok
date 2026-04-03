@@ -1,9 +1,36 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getDefaultApiBaseUrl } from '../lib/api.ts'
 
-// Module-level cache so all components share the same photo URLs
+// Module-level cache so all components share the same photo URLs.
+// On init, restore "no photo" entries from sessionStorage so 404s
+// are not re-fetched on page reload.
+const NO_PHOTO_STORAGE_KEY = 'vostok:no_photo'
 const photoCache = new Map<string, string | null>()
 const fetchInFlight = new Map<string, Promise<string | null>>()
+
+try {
+  const stored = sessionStorage.getItem(NO_PHOTO_STORAGE_KEY)
+  if (stored) {
+    for (const key of JSON.parse(stored) as string[]) {
+      photoCache.set(key, null)
+    }
+  }
+} catch { /* ignore */ }
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function persistNoPhotoCache() {
+  if (persistTimer) return
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    try {
+      const keys = [...photoCache.entries()]
+        .filter(([, v]) => v === null)
+        .map(([k]) => k)
+      sessionStorage.setItem(NO_PHOTO_STORAGE_KEY, JSON.stringify(keys))
+    } catch { /* ignore */ }
+  }, 500)
+}
 
 function normalizeBaseUrl(baseUrl?: string | null): string {
   const candidate = baseUrl ?? getDefaultApiBaseUrl() ?? window.location.origin
@@ -60,10 +87,12 @@ async function resolvePhoto(userId: string, baseUrl?: string | null): Promise<st
         return url
       }
       photoCache.set(cacheKey, null)
+      persistNoPhotoCache()
       return null
     })
     .catch(() => {
       photoCache.set(cacheKey, null)
+      persistNoPhotoCache()
       return null
     })
     .finally(() => {
@@ -79,6 +108,7 @@ export function invalidateProfilePhoto(userId: string, baseUrl?: string | null) 
   const cacheKey = photoCacheKey(userId, baseUrl)
   photoCache.delete(cacheKey)
   fetchInFlight.delete(cacheKey)
+  persistNoPhotoCache()
 }
 
 /** Get a cached profile photo URL synchronously (null if not loaded or no photo). */

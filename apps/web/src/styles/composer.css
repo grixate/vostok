@@ -424,8 +424,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 44px;
-  padding: 0 14px;
+  padding: 12px 14px;
   background: var(--bg-surface-2);
   border-radius: 8px 8px 0 0;
 }
@@ -482,8 +481,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 14px;
+  padding: 12px 14px;
   background: var(--bg-surface-2);
   border-radius: 8px 8px 0 0;
   color: var(--accent);

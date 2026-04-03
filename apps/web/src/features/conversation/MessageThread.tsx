@@ -27,6 +27,14 @@ import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
 import type { useDownloadManager } from '../../hooks/useDownloadManager.ts'
 import type { ChatSummary } from '../../lib/api.ts'
 
+// Matches 1-3 emoji (including multi-codepoint sequences like flags and ZWJ families)
+// with optional surrounding whitespace, for rendering emoji-only messages larger.
+const EMOJI_RE = /^\s*(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(\u200D(\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*(\s(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(\u200D(\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*){0,2}\s*$/u
+
+function isEmojiOnly(text: string): boolean {
+  return text.length > 0 && text.length <= 25 && EMOJI_RE.test(text)
+}
+
 type MessageThreadProps = {
   messages: ReturnType<typeof useMessages>
   media: ReturnType<typeof useMediaCapture>
@@ -417,11 +425,17 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
     return classes.join(' ')
   }
 
+  // Filter out deleted messages — they disappear completely (Telegram-style)
+  const visibleMessages = useMemo(
+    () => messages.messageItems.filter((m) => !m.deletedAt),
+    [messages.messageItems]
+  )
+
   // Compute message groups for flat layout (sender + within 5-minute window).
   // Prefer senderUsername for grouping (stable across device changes);
   // fall back to senderId (device ID), then side.
-  const groupInfo = useMemo(() => messages.messageItems.map((message, index) => {
-    const prev = index > 0 ? messages.messageItems[index - 1] : null
+  const groupInfo = useMemo(() => visibleMessages.map((message, index) => {
+    const prev = index > 0 ? visibleMessages[index - 1] : null
     if (!prev) return { isFirstInGroup: true }
     if (message.side === 'system' || prev.side === 'system') return { isFirstInGroup: true }
     const prevSentAt = prev.sentAt ? new Date(prev.sentAt).getTime() : 0
@@ -436,7 +450,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
           : sameSide
     const sameGroup = sameSender && sameSide && withinTimeWindow
     return { isFirstInGroup: !sameGroup }
-  }), [messages.messageItems])
+  }), [visibleMessages])
 
   // Derive avatar color from sender using Telegram 8-color peer ring
   const avatarColorForSender = (username: string) => {
@@ -497,7 +511,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
               <span className="message-thread__loading-spinner" />
             </div>
           ) : null}
-          {messages.messageItems.map((message, index) => {
+          {visibleMessages.map((message, index) => {
             const linkUrl = extractFirstHttpUrl(message.text)
             const linkPreview = resolveLinkPreview(
               message.text,
@@ -536,7 +550,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
               onClick={() => handleMessageClick(message.id)}
               onDoubleClick={() => handleDoubleClick(message)}
               onContextMenu={(e) => {
-                if (message.side !== 'system' && !message.deletedAt) {
+                if (message.side !== 'system') {
                   e.preventDefault()
                   setContextMenuMessage({ message, x: e.clientX, y: e.clientY })
                 }
@@ -628,7 +642,9 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
               ) : null}
               {/* Hide raw "Attachment: ..." text for voice/image messages — the bubble shows the media instead */}
               {isVoice || isImageAttachment ? null : (
-                <span>{searchQuery ? highlightText(message.text, searchQuery) : message.text}</span>
+                <span className={!searchQuery && isEmojiOnly(message.text) ? 'message-bubble__emoji-only' : undefined}>
+                  {searchQuery ? highlightText(message.text, searchQuery) : message.text}
+                </span>
               )}
               {linkPreview ? (
                 <a

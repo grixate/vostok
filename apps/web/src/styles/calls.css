@@ -898,3 +898,48 @@
 .call-quality--fair { background: var(--color-warning, #FFC107); }
 .call-quality--poor { background: var(--danger, #E53935); }
 .call-quality--reconnecting { background: var(--danger, #E53935); animation: call-pulse 1s ease-in-out infinite; }
+
+/* ─── Device Menu ─────────────────────────────────────────────────────── */
+
+.device-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 220px;
+  max-width: 300px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  padding: 6px 0;
+  z-index: 100;
+}
+
+.device-menu__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--label2);
+  padding: 6px 14px 4px;
+}
+
+.device-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-menu__item:hover {
+  background: var(--bg-overlay);
+}

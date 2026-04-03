@@ -82,7 +82,7 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
       title={activeChat.title}
       subtitle={combinedSubtitle}
       avatarColor={chatAvatarColor(activeChat.title, activeChat.is_self_chat)}
-      avatarInitial={activeChat.is_self_chat ? '\uD83D\uDD16' : activeChat.title.slice(0, 1)}
+      avatarInitial={activeChat.is_self_chat ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : activeChat.title.slice(0, 1)}
       avatarUrl={otherPhotoUrl}
       online={isOnline}
       onBack={onBack}

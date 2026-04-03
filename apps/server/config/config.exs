@@ -38,7 +38,8 @@ config :vostok_server, Oban,
   plugins: [
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/15 * * * *", VostokServer.Workers.MessageExpiryWorker}
+       {"*/15 * * * *", VostokServer.Workers.MessageExpiryWorker},
+       {"0 * * * *", VostokServer.Workers.StaleCallCleanupWorker}
      ]}
   ]
 

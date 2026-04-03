@@ -23,7 +23,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
   const avatarColor = chatAvatarColor(activeChat.title, activeChat.is_self_chat)
 
   const avatarInitial = activeChat.is_self_chat
-    ? '\uD83D\uDD16'
+    ? <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
     : activeChat.title.slice(0, 1)
 
   const subtitle = activeChat.is_self_chat

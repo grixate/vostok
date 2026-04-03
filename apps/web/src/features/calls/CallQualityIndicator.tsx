@@ -1,5 +1,7 @@
+export type CallQuality = 'good' | 'fair' | 'poor' | 'reconnecting'
+
 type CallQualityIndicatorProps = {
-  quality: 'good' | 'fair' | 'poor' | 'reconnecting'
+  quality: CallQuality
 }
 
 const TOOLTIPS: Record<string, string> = {

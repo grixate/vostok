@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { LayoutGroup, motion } from 'motion/react'
 import { ChatListItem } from '@vostok/ui-chat'
 import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
@@ -95,7 +96,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
                 preview={chat.is_self_chat ? 'Saved Messages' : chat.type === 'group' ? 'Group' : 'Direct message'}
                 timestamp=""
                 avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
-                avatarInitial={chat.is_self_chat ? '\uD83D\uDD16' : chat.title.slice(0, 1)}
+                avatarInitial={chat.is_self_chat ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : chat.title.slice(0, 1)}
               />
             </button>
           ))}
@@ -125,9 +126,12 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
   return (
     <div className="sidebar__list">
       {folderFilteredItems.length > 0 ? (
-        folderFilteredItems.map((chat, index) => (
-          <button
+        <LayoutGroup>
+        {folderFilteredItems.map((chat, index) => (
+          <motion.button
             key={chat.id}
+            layout
+            transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
             className="chat-list-button"
             onClick={() => chatList.setActiveChatId(chat.id)}
             onContextMenu={(e) => handleChatContextMenu(e, chat.id)}
@@ -151,11 +155,11 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               }
               previewClassName={draftChatIds.has(chat.id) && !chat.is_self_chat ? 'chat-list-item__draft' : undefined}
               timestamp={chat.is_self_chat ? '' : formatRelativeTime(chat.latest_message_at)}
-              unreadCount={chat.is_self_chat ? undefined : chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
+              unreadCount={chat.is_self_chat || chat.id === activeChat?.id ? undefined : chat.message_count > 0 ? Math.min(chat.message_count, 9) : undefined}
               active={chat.id === activeChat?.id}
               pinned={false}
               avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
-              avatarInitial={chat.is_self_chat ? '\uD83D\uDD16' : chat.title.slice(0, 1)}
+              avatarInitial={chat.is_self_chat ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : chat.title.slice(0, 1)}
               avatarUrl={!chat.is_self_chat && chat.serverId === chatList.activeServerId
                 ? (profilePhotos.get(
                     chat.participant_user_ids?.find(
@@ -166,8 +170,9 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               isFirst={index === 0}
               online={chatList.isChatOnline(chat)}
             />
-          </button>
-        ))
+          </motion.button>
+        ))}
+        </LayoutGroup>
       ) : (
         <div className="empty-state">
           <div className="empty-state__icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>

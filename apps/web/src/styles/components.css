@@ -301,7 +301,6 @@
 .tooltip {
   position: fixed;
   z-index: 400;
-  transform: translate(-50%, -100%);
   padding: 4px 8px;
   border-radius: 6px;
   background: var(--bg-surface-2);
@@ -384,7 +383,6 @@
   font-weight: var(--emphasis-weight);
   color: var(--text-primary);
   box-shadow: var(--shadow-popup);
-  animation: toast-in 0.3s ease;
   white-space: nowrap;
 }
 

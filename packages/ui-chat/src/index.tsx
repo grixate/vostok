@@ -12,7 +12,7 @@ export type ChatListItemProps = {
   muted?: boolean
   active?: boolean
   avatarColor?: string
-  avatarInitial?: string
+  avatarInitial?: ReactNode
   avatarUrl?: string | null
   online?: boolean
   isFirst?: boolean
@@ -95,7 +95,7 @@ type ConversationHeaderProps = {
   subtitle: string
   variant?: 'direct' | 'group' | 'channel'
   avatarColor?: string
-  avatarInitial?: string
+  avatarInitial?: ReactNode
   avatarUrl?: string | null
   online?: boolean
   onBack?: () => void

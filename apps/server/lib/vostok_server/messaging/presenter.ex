@@ -134,7 +134,8 @@ defmodule VostokServer.Messaging.Presenter do
       user_id: chat_member.user_id,
       username: chat_member_username(chat_member),
       role: chat_member.role,
-      joined_at: iso_or_nil(chat_member.joined_at)
+      joined_at: iso_or_nil(chat_member.joined_at),
+      last_seen_at: iso_or_nil(chat_member.user && chat_member.user.last_seen_at)
     }
   end
 

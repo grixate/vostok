@@ -2,10 +2,14 @@
 
 .app-shell {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
   background: var(--bg-app);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
@@ -16,7 +20,7 @@
   }
 }
 
-/* Mobile single-panel layout — JS controls which panel renders */
+/* Mobile single-panel layout */
 @media (max-width: 600px) {
   .app-shell {
     flex-direction: column;
@@ -55,5 +59,17 @@
 
   .auth-card {
     max-width: 100%;
+  }
+}
+
+/* ─── iOS zoom prevention — inputs below 16px trigger auto-zoom ──────────── */
+
+@media (max-width: 600px) {
+  .live-composer__input,
+  .search-bar__input,
+  .auth-input,
+  .emoji-search-input,
+  .settings-search-input {
+    font-size: 16px;
   }
 }

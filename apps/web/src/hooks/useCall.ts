@@ -187,6 +187,7 @@ export function useCall(
   const membraneClientRef = useRef<MembraneClient | null>(null)
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
+  const screenShareTrackIdsRef = useRef<string[]>([])
   const localMediaStreamRef = useRef<MediaStream | null>(null)
   const transportBootstrapRef = useRef<Promise<void> | null>(null)
   const membraneConnectRequestedCallIdRef = useRef<string | null>(null)
@@ -949,6 +950,48 @@ export function useCall(
     }
   }, [activeCall, callWebRtcEndpoint?.exists, sessionToken, view])
 
+  // ICE reconnection — monitor ICE connection state and re-bootstrap on transient failures
+  useEffect(() => {
+    if (!activeCall || activeCall.status !== 'active' || !membraneClientConnected) return
+
+    const pc = getMembranePeerConnection(membraneClientRef.current)
+    if (!pc) return
+
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    function handleIceStateChange() {
+      const state = pc!.iceConnectionState
+
+      if (state === 'disconnected') {
+        // Brief disconnect — wait 3s then try reconnect
+        reconnectTimer = setTimeout(() => {
+          if (pc!.iceConnectionState === 'disconnected' || pc!.iceConnectionState === 'failed') {
+            // Clear the connect request ref so bootstrapActiveCallTransport allows a reconnect
+            membraneConnectRequestedCallIdRef.current = null
+            setMembraneClientConnected(false)
+          }
+        }, 3000)
+      } else if (state === 'failed') {
+        // Immediate reconnect attempt
+        membraneConnectRequestedCallIdRef.current = null
+        setMembraneClientConnected(false)
+      } else if (state === 'connected') {
+        // Recovered — clear any pending reconnect timer
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
+      }
+    }
+
+    pc.addEventListener('iceconnectionstatechange', handleIceStateChange)
+
+    return () => {
+      pc.removeEventListener('iceconnectionstatechange', handleIceStateChange)
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+    }
+  }, [activeCall, membraneClientConnected])
+
   // Attach local tracks to Membrane
   useEffect(() => {
     if (!shouldAttachLocalTracks({
@@ -1648,6 +1691,68 @@ export function useCall(
     })
   }
 
+  async function _handleAttachScreenShare(stream: MediaStream): Promise<string[]> {
+    const client = membraneClientRef.current
+    if (!client || !membraneClientConnected) return []
+
+    const trackIds: string[] = []
+    for (const track of stream.getTracks()) {
+      const trackId = await client.addTrack(track, stream, {
+        kind: track.kind as 'audio' | 'video',
+        source: 'screenshare'
+      })
+      trackIds.push(trackId)
+    }
+    screenShareTrackIdsRef.current = trackIds
+    return trackIds
+  }
+
+  async function _handleDetachScreenShare() {
+    await removeLocalTracksFromMembrane(membraneClientRef.current, screenShareTrackIdsRef.current)
+    screenShareTrackIdsRef.current = []
+  }
+
+  async function _handleSwitchDevice(deviceId: string, kind: 'audio' | 'video') {
+    if (!activeCall) return
+
+    const currentMode = localVideoTrackCount > 0 ? 'audio_video' : 'audio'
+
+    try {
+      const audioConstraint = kind === 'audio'
+        ? { deviceId: { exact: deviceId } }
+        : true
+      const videoConstraint = kind === 'video'
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : currentMode === 'audio_video'
+          ? { width: { ideal: 1280 }, height: { ideal: 720 } }
+          : false
+
+      const result = await replaceLocalMediaStream({
+        mode: videoConstraint ? 'audio_video' : 'audio',
+        currentStream: localMediaStreamRef.current,
+        membraneClient: membraneClientRef.current,
+        membraneClientConnected,
+        membraneLocalTrackIds: membraneLocalTrackIdsRef.current,
+        removeLocalTracksFromMembrane,
+        getUserMedia: () => window.navigator.mediaDevices.getUserMedia({
+          audio: audioConstraint,
+          video: videoConstraint
+        }),
+        attachLocalTracks: (client, stream) =>
+          attachCallLocalTracks(client, stream, attachLocalTracksToMembrane)
+      })
+
+      localMediaStreamRef.current = result.stream
+      membraneLocalTrackIdsRef.current = result.trackIds
+      setLocalMediaMode(result.localMediaMode)
+      setLocalAudioTrackCount(result.localAudioTrackCount)
+      setLocalVideoTrackCount(result.localVideoTrackCount)
+    } catch (error) {
+      const message = describeMediaDeviceError(error)
+      setBanner({ tone: 'error', message })
+    }
+  }
+
   // ── Page unload: end call and release media ─────────────────────────
   useEffect(() => {
     function handleUnload() {
@@ -1777,7 +1882,11 @@ export function useCall(
     _handleInitializeWebRtc,
     _handleAttachLocalMedia,
     _handleReleaseLocalMedia,
+    _handleAttachScreenShare,
+    _handleDetachScreenShare,
+    _handleSwitchDevice,
     localMediaStreamRef,
+    membraneClientRef,
     resetCallState,
     resetWebRtcLab,
     setCallParticipants,

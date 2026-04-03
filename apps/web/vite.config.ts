@@ -34,6 +34,10 @@ export default defineConfig({
             return 'vendor-icons'
           }
 
+          if (id.includes('/motion/') || id.includes('/framer-motion/')) {
+            return 'vendor-motion'
+          }
+
           return 'vendor'
         }
       }

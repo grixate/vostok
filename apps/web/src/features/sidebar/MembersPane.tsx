@@ -13,7 +13,7 @@ type MembersPaneProps = {
 export function MembersPane({ chatList }: MembersPaneProps) {
   const { sessionToken } = useAppContext()
   const { setSidebarTab } = useUIContext()
-  const [users, setUsers] = useState<{ id: string; username: string }[]>([])
+  const [users, setUsers] = useState<{ id: string; username: string; has_photo?: boolean }[]>([])
   const [filter, setFilter] = useState('')
 
   useEffect(() => {
@@ -25,8 +25,8 @@ export function MembersPane({ chatList }: MembersPaneProps) {
     ? users.filter((u) => u.username.toLowerCase().includes(filter.toLowerCase()))
     : users
 
-  const memberIds = useMemo(() => users.map((u) => u.id), [users])
-  const memberPhotos = useProfilePhotos(memberIds, chatList.activeServerUrl)
+  const memberIdsWithPhotos = useMemo(() => users.filter((u) => u.has_photo).map((u) => u.id), [users])
+  const memberPhotos = useProfilePhotos(memberIdsWithPhotos, chatList.activeServerUrl)
 
   function handleSelectUser(username: string) {
     chatList.startDirectChatWith(username)

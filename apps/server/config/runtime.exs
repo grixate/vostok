@@ -104,6 +104,16 @@ if config_env() == :prod do
       ]
     ]
 
+  turn_uris =
+    case System.get_env("VOSTOK_TURN_URIS") do
+      nil -> ["turn:localhost:3478?transport=udp", "turn:localhost:3478?transport=tcp"]
+      val -> val |> String.split(",") |> Enum.map(&String.trim/1)
+    end
+
+  config :vostok_server,
+    turn_shared_secret: System.get_env("VOSTOK_TURN_SHARED_SECRET", "vostok-dev-turn-secret"),
+    public_turn_uris: turn_uris
+
   config :vostok_server, VostokServerWeb.Endpoint,
     url: [host: host, port: 443, scheme: System.get_env("PHX_SCHEME", "https")],
     http: [
@@ -211,4 +221,14 @@ if config_env() in [:dev, :test] do
         server_name_indication: System.get_env("VOSTOK_FEDERATION_MTLS_SNI")
       ]
     ]
+
+  dev_turn_uris =
+    case System.get_env("VOSTOK_TURN_URIS") do
+      nil -> ["turn:localhost:3478?transport=udp", "turn:localhost:3478?transport=tcp"]
+      val -> val |> String.split(",") |> Enum.map(&String.trim/1)
+    end
+
+  config :vostok_server,
+    turn_shared_secret: System.get_env("VOSTOK_TURN_SHARED_SECRET", "vostok-dev-turn-secret"),
+    public_turn_uris: dev_turn_uris
 end

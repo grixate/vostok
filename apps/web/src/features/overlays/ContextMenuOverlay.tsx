@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
@@ -45,7 +46,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
 
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<{ top: number; left: number; transformOrigin: string } | null>(null)
 
   const close = useCallback(() => {
     setContextMenuMessage(null)
@@ -157,7 +158,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     const frame = requestAnimationFrame(() => {
       const menu = menuRef.current
       if (!menu) {
-        setPosition({ top: contextMenuMessage.y, left: contextMenuMessage.x })
+        setPosition({ top: contextMenuMessage.y, left: contextMenuMessage.x, transformOrigin: 'top left' })
         return
       }
 
@@ -167,16 +168,20 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
 
       let top = contextMenuMessage.y
       let left = contextMenuMessage.x
+      let originY = 'top'
+      let originX = 'left'
 
       if (top + rect.height > viewportHeight) {
         top = Math.max(4, contextMenuMessage.y - rect.height)
+        originY = 'bottom'
       }
 
       if (left + rect.width > viewportWidth) {
         left = Math.max(4, contextMenuMessage.x - rect.width)
+        originX = 'right'
       }
 
-      setPosition({ top, left })
+      setPosition({ top, left, transformOrigin: `${originY} ${originX}` })
     })
 
     return () => cancelAnimationFrame(frame)
@@ -231,7 +236,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     return null
   }
 
-  const displayPosition = position ?? { top: contextMenuMessage.y, left: contextMenuMessage.x }
+  const displayPosition = position ?? { top: contextMenuMessage.y, left: contextMenuMessage.x, transformOrigin: 'top left' }
   const msg = contextMenuMessage.message
 
   return (
@@ -242,12 +247,16 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
         onClick={close}
         onContextMenu={(e) => { e.preventDefault(); close() }}
       />
-      <div
+      <motion.div
         className="msg-context-menu-wrapper"
         ref={menuRef}
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
         style={{
           top: displayPosition.top,
           left: displayPosition.left,
+          transformOrigin: displayPosition.transformOrigin,
           visibility: position ? 'visible' : 'hidden'
         }}
       >
@@ -305,7 +314,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
             </span>
           ))}
         </div>
-      </div>
+      </motion.div>
     </>
   )
 }

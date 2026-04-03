@@ -102,21 +102,10 @@ export function useNotifications(
       return
     }
 
-    // Check per-chat-type notification settings
-    if (settings) {
-      const chatType = activeChat?.type
-      if (chatType === 'direct' && !settings.notif_private_msg) {
-        previousMessageIdsRef.current = currentIds
-        return
-      }
-      if (chatType === 'group' && !settings.notif_group_msg) {
-        previousMessageIdsRef.current = currentIds
-        return
-      }
-      if (chatType === 'channel' && !settings.notif_chan_msg) {
-        previousMessageIdsRef.current = currentIds
-        return
-      }
+    // Check master notification toggle
+    if (settings && !settings.notif_desktop) {
+      previousMessageIdsRef.current = currentIds
+      return
     }
 
     // Find new incoming messages that weren't in the previous set
@@ -135,16 +124,7 @@ export function useNotifications(
           ? `${activeChat.serverLabel} · ${chatTitle}`
           : chatTitle
 
-      // Determine notification body based on preview settings
-      let showPreview = true
-      if (settings) {
-        if (!settings.notif_preview) showPreview = false
-        const chatType = activeChat?.type
-        if (chatType === 'direct' && !settings.notif_private_preview) showPreview = false
-        if (chatType === 'group' && !settings.notif_group_preview) showPreview = false
-        if (chatType === 'channel' && !settings.notif_chan_preview) showPreview = false
-      }
-
+      const showPreview = !settings || settings.notif_preview
       const body = showPreview && message.decryptable ? message.text : 'New message'
 
       void sendNotification({ title: notificationTitle, body, chatId: activeChatId })

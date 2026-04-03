@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
+import { useAppContext } from '../../contexts/AppContext.tsx'
 import { SearchIcon } from '../../icons/index.tsx'
 import { peerColor } from '../../utils/avatar-colors.ts'
+import { listUsers } from '../../lib/api.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 
 type NewMessagePanelProps = {
@@ -9,10 +11,12 @@ type NewMessagePanelProps = {
 
 function ContactRow({
   username,
+  subtitle,
   highlighted,
   onClick,
 }: {
   username: string
+  subtitle?: string
   highlighted: boolean
   onClick: () => void
 }) {
@@ -41,48 +45,82 @@ function ContactRow({
         {username[0]?.toUpperCase() ?? '?'}
       </span>
       <span className="new-message-contact__username">{username}</span>
-      <span className="new-message-contact__handle">@{username}</span>
+      {subtitle ? <span className="new-message-contact__handle">{subtitle}</span> : (
+        <span className="new-message-contact__handle">@{username}</span>
+      )}
     </button>
   )
 }
 
 export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
+  const { sessionToken } = useAppContext()
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [allUsers, setAllUsers] = useState<{ id: string; username: string }[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Autofocus when panel mounts
     inputRef.current?.focus()
     setQuery('')
     setHighlightedIndex(0)
   }, [])
 
+  // Fetch all server members once
+  useEffect(() => {
+    if (!sessionToken) return
+    listUsers(sessionToken).then((res) => setAllUsers(res.users)).catch(() => {})
+  }, [sessionToken])
+
   const normalizedQuery = query.trim().toLowerCase()
 
-  const filteredContacts = normalizedQuery
-    ? chatList.recentContacts.filter((c) => c.username.toLowerCase().includes(normalizedQuery))
-    : chatList.recentContacts
+  // Merge recent contacts + all server users, deduplicated, with recent contacts first
+  const suggestions = (() => {
+    const recentUsernames = new Set(chatList.recentContacts.map((c) => c.username.toLowerCase()))
 
-  // Append a "new contact" row when query doesn't match an existing contact exactly
-  const exactMatch = chatList.recentContacts.some(
-    (c) => c.username.toLowerCase() === normalizedQuery
+    // If no query, show recent contacts only
+    if (!normalizedQuery) {
+      return chatList.recentContacts.map((c) => ({
+        username: c.username,
+        isRecent: true,
+      }))
+    }
+
+    // Filter recent contacts matching query
+    const recentMatches = chatList.recentContacts
+      .filter((c) => c.username.toLowerCase().includes(normalizedQuery))
+      .map((c) => ({ username: c.username, isRecent: true }))
+
+    // Filter all users matching query, excluding those already in recent matches
+    const userMatches = allUsers
+      .filter(
+        (u) =>
+          u.username.toLowerCase().includes(normalizedQuery) &&
+          !recentUsernames.has(u.username.toLowerCase())
+      )
+      .map((u) => ({ username: u.username, isRecent: false }))
+
+    return [...recentMatches, ...userMatches]
+  })()
+
+  // Show "new contact" row when query doesn't match any user exactly
+  const exactMatch = suggestions.some(
+    (s) => s.username.toLowerCase() === normalizedQuery
   )
   const showNewContactRow = normalizedQuery.length > 0 && !exactMatch
 
-  const totalRows = filteredContacts.length + (showNewContactRow ? 1 : 0)
+  const totalRows = suggestions.length + (showNewContactRow ? 1 : 0)
 
   useEffect(() => {
     setHighlightedIndex(0)
   }, [query])
 
   const selectHighlighted = useCallback(() => {
-    if (highlightedIndex < filteredContacts.length) {
-      void chatList.startDirectChatWith(filteredContacts[highlightedIndex].username)
+    if (highlightedIndex < suggestions.length) {
+      void chatList.startDirectChatWith(suggestions[highlightedIndex].username)
     } else if (showNewContactRow && normalizedQuery) {
       void chatList.startDirectChatWith(normalizedQuery)
     }
-  }, [highlightedIndex, filteredContacts, showNewContactRow, normalizedQuery, chatList])
+  }, [highlightedIndex, suggestions, showNewContactRow, normalizedQuery, chatList])
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') {
@@ -110,20 +148,24 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           autoCapitalize="off"
           spellCheck={false}
           className="new-message-panel__input"
-          placeholder="Search"
+          placeholder="Search members"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          aria-label="Search contacts"
+          aria-label="Search members"
         />
       </div>
 
-      <div className="new-message-panel__list" role="listbox" aria-label="Contacts">
-        {filteredContacts.length === 0 && !showNewContactRow && (
-          <p className="new-message-panel__empty">No recent contacts</p>
+      <div className="new-message-panel__list" role="listbox" aria-label="Members">
+        {suggestions.length === 0 && !showNewContactRow && normalizedQuery && (
+          <p className="new-message-panel__empty">No members found</p>
         )}
 
-        {filteredContacts.map((contact, i) => (
+        {suggestions.length === 0 && !normalizedQuery && (
+          <p className="new-message-panel__empty">Type to search members</p>
+        )}
+
+        {suggestions.map((contact, i) => (
           <ContactRow
             key={contact.username}
             username={contact.username}
@@ -136,7 +178,7 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           <button
             type="button"
             className={`new-message-contact new-message-contact--new${
-              highlightedIndex === filteredContacts.length ? ' new-message-contact--highlighted' : ''
+              highlightedIndex === suggestions.length ? ' new-message-contact--highlighted' : ''
             }`}
             onClick={() => void chatList.startDirectChatWith(normalizedQuery)}
           >

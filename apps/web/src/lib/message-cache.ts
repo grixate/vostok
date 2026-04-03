@@ -80,7 +80,7 @@ export function writeChatPreview(chatId: string, text: string): void {
 /** Read the last decrypted message text for a chat (shown in the sidebar). */
 export function readChatPreview(chatId: string): string | null {
   try {
-    return window.localStorage.getItem(`${PREVIEW_PREFIX}${chatId}`) ?? null
+    return window.localStorage.getItem(`${PREVIEW_PREFIX}${chatId}`) || null
   } catch {
     return null
   }

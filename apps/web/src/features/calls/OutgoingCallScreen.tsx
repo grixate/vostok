@@ -32,6 +32,8 @@ export function OutgoingCallScreen({
           muted={muted}
           cameraOn={false}
           screenSharing={false}
+          showCamera={false}
+          showScreen={false}
           onToggleMute={onToggleMute}
           onHangup={onHangup}
         />

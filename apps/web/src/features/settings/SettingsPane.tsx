@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode, type CSSProperties } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { ProfilePhotoModal } from './ProfilePhotoModal.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
@@ -31,7 +32,6 @@ import {
 } from './SettingsPrimitives.tsx'
 import {
   BackIcon,
-  RefreshIcon,
   SearchIcon,
   ChevronRightIcon,
   SettingsIcon,
@@ -46,6 +46,12 @@ import {
   Cloud,
   Camera,
 } from 'lucide-react'
+
+const settingsSlideVariants = {
+  enter: (d: number) => ({ x: d < 0 ? '-100%' : '100%' }),
+  center: { x: 0 },
+  exit: (d: number) => ({ x: d > 0 ? '-100%' : '100%' }),
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -95,7 +101,7 @@ const NAV_ITEMS: NavEntry[] = [
   { id: 'notifications', label: 'Notifications and Sounds', icon: <Bell size={LI} strokeWidth={1.75} /> },
   { id: 'privacy', label: 'Privacy and Security', icon: <LockIcon /> },
   { id: 'data-storage', label: 'Data and Storage', icon: <Database size={LI} strokeWidth={1.75} /> },
-  { id: 'active-sessions', label: 'Active Sessions', icon: <MonitorIcon />, badge: '4' },
+  { id: 'active-sessions', label: 'Active Sessions', icon: <MonitorIcon /> },
   { id: 'appearance', label: 'Appearance', icon: <Paintbrush size={LI} strokeWidth={1.75} /> },
 ]
 
@@ -123,9 +129,22 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
     }
     return 'general'
   })
-  const [mobileShowDetail, setMobileShowDetail] = useState(false)
+  const [mobileShowDetail, setMobileShowDetailRaw] = useState(false)
+  const settingsDirRef = useRef<1 | -1>(1)
+  const setMobileShowDetail = (show: boolean) => {
+    settingsDirRef.current = show ? 1 : -1
+    setMobileShowDetailRaw(show)
+  }
   const [searchQuery, setSearchQuery] = useState('')
+  const [deviceCount, setDeviceCount] = useState<number | null>(null)
   const token = servers.activeServerScope?.token ?? auth.authSession?.accessToken ?? null
+
+  useEffect(() => {
+    if (!token) return
+    listDevices(token)
+      .then((resp) => setDeviceCount(resp.devices.filter((d) => !d.revoked_at).length))
+      .catch(() => {})
+  }, [token])
 
   // Clear the initial section after it's consumed
   useEffect(() => {
@@ -160,138 +179,173 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
   const settingsUserId = servers.activeServer?.auth?.user.id ?? auth.authSession?.user.id
   const settingsPhotoUrl = useProfilePhoto(settingsUserId, servers.activeServer?.url)
 
-  return (
-    <div className="settings-pane" style={{ display: 'flex', height: '100%', width: '100%' }}>
-      {/* ─── Sidebar (hidden in mobile when detail is shown) ──────────────── */}
-      <aside style={{
-        width: isMobile ? '100%' : 360,
-        flexShrink: 0,
-        display: isMobile && mobileShowDetail ? 'none' : 'flex',
-        flexDirection: 'column',
-        borderRight: isMobile ? 'none' : '1px solid var(--border-subtle)',
-        overflow: 'hidden'
-      }}>
-        {/* Header */}
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 12, flexShrink: 0 }}>
-          <span style={{ fontSize: 22, fontWeight: 700, flex: 1 }}>Settings</span>
-        </div>
+  const settingsNav = (
+    <aside style={{
+      width: isMobile ? '100%' : 360,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      borderRight: isMobile ? 'none' : '1px solid var(--border-subtle)',
+      overflow: 'hidden',
+      height: '100%',
+    }}>
+      <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 12, flexShrink: 0 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, flex: 1 }}>Settings</span>
+      </div>
 
-        {/* Search */}
-        <div style={{ padding: '0 16px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-surface-1)', borderRadius: 20, padding: '0 12px', height: 38 }}>
-            <SearchIcon />
-            <input
-              type="text"
-              placeholder="Search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ border: 'none', background: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--label)' }}
-            />
-          </div>
-        </div>
-
-        {/* Scrollable nav */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
-          {/* Profile card */}
-          <button
-            type="button"
-            onClick={() => handleSelectSection('my-profile')}
-            className={`settings-profile-card${activeSection === 'my-profile' ? ' settings-profile-card--active' : ''}`}
-          >
-            {settingsPhotoUrl ? (
-              <img src={settingsPhotoUrl} alt={profileName} className="settings-profile-card__avatar" />
-            ) : (
-              <div className="settings-profile-card__avatar settings-profile-card__avatar--fallback">
-                {profileInitial}
-              </div>
-            )}
-            <div className="settings-profile-card__info">
-              <div className="settings-profile-card__name">{profileName}</div>
-              <div className="settings-profile-card__handle">@{profileUsername ?? ''}</div>
-            </div>
-            <ChevronRightIcon />
-          </button>
-
-          {/* Nav items */}
-          {NAV_ITEMS.map((item) => (
-            <NavButton
-              key={item.id}
-              item={item}
-              active={activeSection === item.id}
-              onClick={() => handleSelectSection(item.id)}
-            />
-          ))}
-
-          {/* Divider */}
-          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 8px' }} />
-
-          {NAV_ITEMS_BOTTOM.map((item) => (
-            <NavButton
-              key={item.id}
-              item={item.id === 'servers'
-                ? {
-                    ...item,
-                    secondary:
-                      servers.servers.length > 1
-                        ? `${servers.servers.length} servers connected`
-                        : servers.activeServer?.label ?? 'No servers'
-                  }
-                : item}
-              active={activeSection === item.id}
-              onClick={() => handleSelectSection(item.id)}
-            />
-          ))}
-
-        </div>
-
-        {/* Bottom Nav — use the same BottomTabBar component for consistent layout */}
-        <BottomTabBar
-          activeTab="settings"
-          onTabChange={(tab) => {
-            if (tab === 'settings') return
-            setSettingsOverlayOpen(false)
-            setSidebarTab(tab)
-          }}
-        />
-      </aside>
-
-      {/* ─── Right Pane (full-width in mobile, hidden when list shown) ────── */}
-      <div style={{
-        flex: 1,
-        display: isMobile && !mobileShowDetail ? 'none' : 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
-        width: isMobile ? '100%' : undefined
-      }}>
-        {/* Header */}
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 16px', flexShrink: 0, borderBottom: '1px solid var(--border-subtle)', gap: 12 }}>
-          {isMobile && (
-            <button
-              type="button"
-              onClick={() => setMobileShowDetail(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4 }}
-              aria-label="Back to settings list"
-            >
-              <BackIcon width={20} height={20} />
-            </button>
-          )}
-          <span style={{ fontSize: 17, fontWeight: 600, flex: 1, textAlign: isMobile ? 'left' : 'center' }}>{SECTION_TITLES[activeSection]}</span>
-        </div>
-
-        {/* Scrollable body */}
-        <div key={activeSection} className="settings-pane__body--animate" style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 32px' }}>
-          <SectionContent
-            section={activeSection}
-            auth={auth}
-            chatSessions={chatSessions}
-            chatList={chatList}
-            servers={servers}
-            onClose={onClose}
-            settingsHook={settingsHook}
-            token={token}
+      <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-surface-1)', borderRadius: 20, padding: '0 12px', height: 38 }}>
+          <SearchIcon />
+          <input
+            type="text"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ border: 'none', background: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--label)' }}
           />
         </div>
       </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
+        <button
+          type="button"
+          onClick={() => handleSelectSection('my-profile')}
+          className={`settings-profile-card${activeSection === 'my-profile' ? ' settings-profile-card--active' : ''}`}
+        >
+          {settingsPhotoUrl ? (
+            <img src={settingsPhotoUrl} alt={profileName} className="settings-profile-card__avatar" />
+          ) : (
+            <div className="settings-profile-card__avatar settings-profile-card__avatar--fallback">
+              {profileInitial}
+            </div>
+          )}
+          <div className="settings-profile-card__info">
+            <div className="settings-profile-card__name">{profileName}</div>
+            <div className="settings-profile-card__handle">@{profileUsername ?? ''}</div>
+          </div>
+          <ChevronRightIcon />
+        </button>
+
+        {NAV_ITEMS.map((item) => (
+          <NavButton
+            key={item.id}
+            item={item.id === 'active-sessions' && deviceCount != null
+              ? { ...item, badge: String(deviceCount) }
+              : item}
+            active={activeSection === item.id}
+            onClick={() => handleSelectSection(item.id)}
+          />
+        ))}
+
+        <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 8px' }} />
+
+        {NAV_ITEMS_BOTTOM.map((item) => (
+          <NavButton
+            key={item.id}
+            item={item.id === 'servers'
+              ? {
+                  ...item,
+                  secondary:
+                    servers.servers.length > 1
+                      ? `${servers.servers.length} servers connected`
+                      : servers.activeServer?.label ?? 'No servers'
+                }
+              : item}
+            active={activeSection === item.id}
+            onClick={() => handleSelectSection(item.id)}
+          />
+        ))}
+      </div>
+
+      <BottomTabBar
+        activeTab="settings"
+        onTabChange={(tab) => {
+          if (tab === 'settings') return
+          setSettingsOverlayOpen(false)
+          setSidebarTab(tab)
+        }}
+      />
+    </aside>
+  )
+
+  const settingsDetail = (
+    <div style={{
+      flex: isMobile ? undefined : 1,
+      display: 'flex',
+      flexDirection: 'column',
+      minWidth: 0,
+      width: isMobile ? '100%' : undefined,
+      height: '100%',
+    }}>
+      <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 16px', flexShrink: 0, borderBottom: '1px solid var(--border-subtle)', gap: 12 }}>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={() => setMobileShowDetail(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4 }}
+            aria-label="Back to settings list"
+          >
+            <BackIcon width={20} height={20} />
+          </button>
+        )}
+        <span style={{ fontSize: 17, fontWeight: 600, flex: 1, textAlign: isMobile ? 'left' : 'center' }}>{SECTION_TITLES[activeSection]}</span>
+      </div>
+
+      <div key={activeSection} className="settings-pane__body--animate" style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 32px' }}>
+        <SectionContent
+          section={activeSection}
+          auth={auth}
+          chatSessions={chatSessions}
+          chatList={chatList}
+          servers={servers}
+          onClose={onClose}
+          settingsHook={settingsHook}
+          token={token}
+        />
+      </div>
+    </div>
+  )
+
+  if (isMobile) {
+    return (
+      <div className="settings-pane" style={{ display: 'flex', height: '100%', width: '100%', overflow: 'hidden' }}>
+        <AnimatePresence initial={false} mode="popLayout" custom={settingsDirRef.current}>
+          {!mobileShowDetail ? (
+            <motion.div
+              key="settings-nav"
+              custom={settingsDirRef.current}
+              variants={settingsSlideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              {settingsNav}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="settings-detail"
+              custom={settingsDirRef.current}
+              variants={settingsSlideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              {settingsDetail}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
+
+  return (
+    <div className="settings-pane" style={{ display: 'flex', height: '100%', width: '100%' }}>
+      {settingsNav}
+      {settingsDetail}
     </div>
   )
 }
@@ -334,7 +388,7 @@ function SectionContent({ section, auth, chatSessions, chatList, servers, onClos
       />
     )
     case 'notifications': return <NotificationsSection s={s} />
-    case 'privacy': return <PrivacySection s={s} auth={auth} chatSessions={chatSessions} chatList={chatList} onClose={onClose} />
+    case 'privacy': return <PrivacySection s={s} chatSessions={chatSessions} chatList={chatList} />
     case 'data-storage': return <DataStorageSection s={s} serverUrl={servers.activeServer?.url ?? null} />
     case 'active-sessions': return <ActiveSessionsSection token={token} />
     case 'appearance': return <AppearanceSection s={s} />
@@ -351,31 +405,19 @@ function GeneralSection({ s }: { s: SettingsHook }) {
 
   return (
     <>
-      <SectionLabel>Spelling and Grammar</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Autocorrect" on={settings.general_autocorrect} onToggle={() => toggle('general_autocorrect')} />
-        <ToggleRow label="Capitalize Words" on={settings.general_capitalize} onToggle={() => toggle('general_capitalize')} />
-        <ToggleRow label="Spelling Suggestions" on={settings.general_spelling} onToggle={() => toggle('general_spelling')} last />
-      </GroupCard>
       <SectionLabel>Emoji</SectionLabel>
       <GroupCard>
         <ToggleRow label="Replace Emoji Codes" on={settings.general_replace_emoji} onToggle={() => toggle('general_replace_emoji')} />
-        <ToggleRow label="Suggest Emoji" on={settings.general_suggest_emoji} onToggle={() => toggle('general_suggest_emoji')} />
         <ToggleRow label="Large Emoji" on={settings.general_large_emoji} onToggle={() => toggle('general_large_emoji')} last />
-      </GroupCard>
-      <SectionLabel>Interface</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Show Unread Counter" on={settings.general_unread_counter} onToggle={() => toggle('general_unread_counter')} />
-        <ToggleRow label="Animations" on={settings.general_animations} onToggle={() => toggle('general_animations')} last />
-      </GroupCard>
-      <SectionLabel>Shortcuts</SectionLabel>
-      <GroupCard>
-        <ButtonRow label="View Keyboard Shortcuts" color="accent" onClick={() => setShortcutsOpen(true)} last />
       </GroupCard>
       <SectionLabel>Send Key</SectionLabel>
       <GroupCard>
         <RadioRow label="Enter" active={settings.general_send_key === 'enter'} onSelect={() => updateSetting('general_send_key', 'enter')} />
         <RadioRow label="Ctrl + Enter" active={settings.general_send_key === 'ctrl-enter'} onSelect={() => updateSetting('general_send_key', 'ctrl-enter')} last />
+      </GroupCard>
+      <SectionLabel>Shortcuts</SectionLabel>
+      <GroupCard>
+        <ButtonRow label="View Keyboard Shortcuts" color="accent" onClick={() => setShortcutsOpen(true)} last />
       </GroupCard>
     </>
   )
@@ -528,40 +570,16 @@ function MyProfileSection({
 // ─── Notifications ──────────────────────────────────────────────────────────────
 
 function NotificationsSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle, resetGroup } = s
+  const { settings, toggle } = s
 
   return (
     <>
-      <SectionLabel>Desktop Notifications</SectionLabel>
+      <SectionLabel>Notifications</SectionLabel>
       <GroupCard>
-        <ToggleRow label="Desktop Notifications" on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
-        <ToggleRow label="Notification Sound" on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
+        <ToggleRow label="Notifications" on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
+        <ToggleRow label="Sound" on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
         <ToggleRow label="Badge Count" on={settings.notif_badge} onToggle={() => toggle('notif_badge')} />
-        <ToggleRow label="Message Preview" on={settings.notif_preview} onToggle={() => toggle('notif_preview')} />
-        <ToggleRow label="In-App Notifications" on={settings.notif_in_app} onToggle={() => toggle('notif_in_app')} />
-        <ToggleRow label="Flash Window" on={settings.notif_flash_window} onToggle={() => toggle('notif_flash_window')} last />
-      </GroupCard>
-      <SectionLabel>Private Chats</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Notifications" on={settings.notif_private_msg} onToggle={() => toggle('notif_private_msg')} />
-        <ToggleRow label="Mentions Only" on={settings.notif_private_mention} onToggle={() => toggle('notif_private_mention')} />
-        <ToggleRow label="Show Preview" on={settings.notif_private_preview} onToggle={() => toggle('notif_private_preview')} last />
-      </GroupCard>
-      <SectionLabel>Groups</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Notifications" on={settings.notif_group_msg} onToggle={() => toggle('notif_group_msg')} />
-        <ToggleRow label="Mentions Only" on={settings.notif_group_mention} onToggle={() => toggle('notif_group_mention')} />
-        <ToggleRow label="Show Preview" on={settings.notif_group_preview} onToggle={() => toggle('notif_group_preview')} last />
-      </GroupCard>
-      <SectionLabel>Channels</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Notifications" on={settings.notif_chan_msg} onToggle={() => toggle('notif_chan_msg')} />
-        <ToggleRow label="Mentions Only" on={settings.notif_chan_mention} onToggle={() => toggle('notif_chan_mention')} />
-        <ToggleRow label="Show Preview" on={settings.notif_chan_preview} onToggle={() => toggle('notif_chan_preview')} last />
-      </GroupCard>
-      <SectionLabel>Reset</SectionLabel>
-      <GroupCard>
-        <ButtonRow label="Reset All Notifications" color="danger" onClick={() => resetGroup('notif_')} last />
+        <ToggleRow label="Message Preview" on={settings.notif_preview} onToggle={() => toggle('notif_preview')} last />
       </GroupCard>
     </>
   )
@@ -570,8 +588,8 @@ function NotificationsSection({ s }: { s: SettingsHook }) {
 // ─── Privacy ────────────────────────────────────────────────────────────────────
 
 function PrivacySection(
-  { s, auth, chatSessions, chatList, onClose }:
-  { s: SettingsHook; auth: ReturnType<typeof useAuth>; chatSessions: ReturnType<typeof useChatSessions>; chatList: ReturnType<typeof useChatList>; onClose: () => void }
+  { s, chatSessions, chatList }:
+  { s: SettingsHook; chatSessions: ReturnType<typeof useChatSessions>; chatList: ReturnType<typeof useChatList> }
 ) {
   const { settings, toggle } = s
 
@@ -580,26 +598,8 @@ function PrivacySection(
       <SectionLabel>Privacy</SectionLabel>
       <GroupCard>
         <ToggleRow label="Last Seen" on={settings.privacy_last_seen} onToggle={() => toggle('privacy_last_seen')} />
-        <ToggleRow label="Profile Photo" on={settings.privacy_profile_photo} onToggle={() => toggle('privacy_profile_photo')} />
-        <ToggleRow label="Online Status" on={settings.privacy_online_status} onToggle={() => toggle('privacy_online_status')} />
         <ToggleRow label="Read Receipts" on={settings.privacy_read_receipts} onToggle={() => toggle('privacy_read_receipts')} />
         <ToggleRow label="Typing Indicators" on={settings.privacy_typing_indicators} onToggle={() => toggle('privacy_typing_indicators')} last />
-      </GroupCard>
-      <SectionLabel>Security</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Two-Factor Authentication" on={settings.privacy_two_factor} onToggle={() => toggle('privacy_two_factor')} />
-        <ToggleRow label="Login Alerts" on={settings.privacy_login_alerts} onToggle={() => toggle('privacy_login_alerts')} />
-        <ToggleRow label="Session Logging" on={settings.privacy_session_log} onToggle={() => toggle('privacy_session_log')} last />
-      </GroupCard>
-      <GroupCard>
-        <button
-          type="button"
-          onClick={() => { onClose(); auth.handleReauthenticate() }}
-          style={{ ...rowStyle, cursor: 'pointer', border: 'none', textAlign: 'left', color: 'var(--accent)', fontWeight: 600, borderBottom: 'none' }}
-        >
-          <RefreshIcon />
-          Refresh Session
-        </button>
       </GroupCard>
       {chatSessions.safetyNumbers.length > 0 && (
         <>

@@ -1,0 +1,63 @@
+import { useEffect } from 'react'
+import { useAppContext } from '../../contexts/AppContext.tsx'
+import { PhoneIcon, PhoneOffIcon, VideoIcon } from '../../icons/index.tsx'
+import { playRingtone, stopRingtone } from '../calls/callSounds.ts'
+import type { useCall } from '../../hooks/useCall.ts'
+
+type IncomingCallOverlayProps = {
+  call: ReturnType<typeof useCall>
+}
+
+export function IncomingCallOverlay({ call }: IncomingCallOverlayProps) {
+  const { storedDevice } = useAppContext()
+  const localDeviceId = storedDevice?.deviceId ?? null
+  const activeCall = call.activeCall
+
+  const isIncoming =
+    activeCall != null &&
+    activeCall.status === 'ringing' &&
+    activeCall.started_by_device_id !== localDeviceId
+
+  // Play ringtone while incoming
+  useEffect(() => {
+    if (!isIncoming) return
+    playRingtone()
+    return () => { stopRingtone() }
+  }, [isIncoming])
+
+  if (!isIncoming || !activeCall) return null
+
+  const callerName = call.activeCallDisplayTitle ?? 'Unknown caller'
+  const initial = callerName.slice(0, 1).toUpperCase()
+  const isVideo = activeCall.mode === 'video' || activeCall.media_mode === 'video'
+
+  return (
+    <div className="incoming-call-overlay">
+      <div className="incoming-call-overlay__card">
+        <div className="incoming-call-overlay__avatar">{initial}</div>
+        <span className="incoming-call-overlay__name">{callerName}</span>
+        <span className="incoming-call-overlay__subtitle">
+          Incoming {isVideo ? 'video' : 'voice'} call{isVideo ? <VideoIcon width={14} height={14} /> : null}
+        </span>
+        <div className="incoming-call-overlay__actions">
+          <button
+            type="button"
+            className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--decline"
+            onClick={call.handleDeclineCall}
+            aria-label="Decline call"
+          >
+            <PhoneOffIcon width={24} height={24} />
+          </button>
+          <button
+            type="button"
+            className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--accept"
+            onClick={call.handleAcceptCall}
+            aria-label="Accept call"
+          >
+            <PhoneIcon width={24} height={24} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

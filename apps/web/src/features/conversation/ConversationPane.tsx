@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/refs */
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
-import { PhoneIcon, PhoneOffIcon } from '../../icons/index.tsx'
+import { useUIContext } from '../../contexts/UIContext.tsx'
 import { MessageSquare } from 'lucide-react'
 import { ConversationHeader } from './ConversationHeader.tsx'
 import { ChatSearchBar } from './ChatSearchBar.tsx'
@@ -14,7 +15,6 @@ import { OutgoingCallScreen } from '../calls/OutgoingCallScreen.tsx'
 import { CallPiPBar } from '../calls/CallPiPBar.tsx'
 import { CallEndedScreen } from '../calls/CallEndedScreen.tsx'
 import {
-  playRingtone,
   stopRingtone,
   playRingback,
   stopRingback,
@@ -23,6 +23,8 @@ import {
   cleanupAudio
 } from '../calls/callSounds.ts'
 import { useCallTimer } from '../../hooks/useCallTimer.ts'
+import { useCallQuality } from '../../hooks/useCallQuality.ts'
+import { useMediaDevices } from '../../hooks/useMediaDevices.ts'
 import { buildDirectCallStatusLabel } from '../../lib/call-runtime.ts'
 import { getRawChatId } from '../../lib/multi-server.ts'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
@@ -69,6 +71,7 @@ export function ConversationPane({
   onBack
 }: ConversationPaneProps) {
   const { storedDevice } = useAppContext()
+  const { chatSearchOpen } = useUIContext()
   const selectedChat = chatList.activeChatId
     ? chatList.chatItems.find((chat) => chat.id === chatList.activeChatId) ?? activeChat
     : activeChat
@@ -76,11 +79,14 @@ export function ConversationPane({
   const [profileOpen, setProfileOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [callUiMode, setCallUiMode] = useState<'full' | 'pip' | 'hidden'>('hidden')
-  const [callMuted, setCallMuted] = useState(false)
+  const [callMuted, setCallMuted] = useState(true)
   const [callCameraOn, setCallCameraOn] = useState(false)
   const [callScreenSharing, setCallScreenSharing] = useState(false)
   const [callEnded, setCallEnded] = useState<{ reason: string; duration: string } | null>(null)
   const callDuration = useCallTimer(call.activeCall?.status === 'active')
+  const callQuality = useCallQuality(call.membraneClientRef, call.activeCall?.status === 'active')
+  const callActive = call.activeCall?.status === 'active'
+  const mediaDevices = useMediaDevices(!!callActive)
   const previousCallRef = useRef(call.activeCall)
   const startupSelectedChatIdRef = useRef<string | null>(chatList.activeChatId)
   const previousActiveChatIdRef = useRef<string | null>(chatList.activeChatId)
@@ -155,7 +161,7 @@ export function ConversationPane({
     if (hasNewCall) {
       if (curr.status === 'ringing' || curr.status === 'active') {
         setCallUiMode('full')
-        setCallMuted(false)
+        setCallMuted(true)
         setCallCameraOn(isVideoCall)
         setCallScreenSharing(false)
         setCallEnded(null)
@@ -179,7 +185,7 @@ export function ConversationPane({
     ) {
       // Recover a surviving call after chat/view restoration without re-triggering on every render.
       setCallUiMode('full')
-      setCallMuted(false)
+      setCallMuted(true)
       setCallCameraOn(isVideoCall)
       setCallScreenSharing(false)
       setCallEnded(null)
@@ -284,16 +290,13 @@ export function ConversationPane({
   }, [call.activeCall, call.activeCallChatId, chatList.activeChatId, clearInterruptedChat, localDeviceId])
 
   // ── Call sounds ──────────────────────────────────────────────────────
+  // Incoming ringtone is handled globally by IncomingCallOverlay.
   useEffect(() => {
     const status = call.activeCall?.status
 
     if (status === 'ringing' && isOutgoingCall) {
       playRingback()
       return () => { stopRingback() }
-    }
-    if (status === 'ringing' && isIncomingCall) {
-      playRingtone()
-      return () => { stopRingtone() }
     }
     if (status === 'active') {
       // Stop any ringing sounds and play connect chime
@@ -303,7 +306,7 @@ export function ConversationPane({
     }
 
     return undefined
-  }, [call.activeCall?.status, isOutgoingCall, isIncomingCall])
+  }, [call.activeCall?.status, isOutgoingCall])
 
   // Play disconnect sound when call ends
   useEffect(() => {
@@ -360,25 +363,27 @@ export function ConversationPane({
     })
   }, [call.localMediaStreamRef])
 
-  const handleToggleCamera = useCallback(() => {
-    setCallCameraOn(prev => {
-      const next = !prev
-      const stream = call.localMediaStreamRef.current
-      if (stream) {
-        for (const track of stream.getVideoTracks()) {
-          track.enabled = next
-        }
-      }
-      return next
-    })
-  }, [call.localMediaStreamRef])
+  const handleToggleCamera = useCallback(async () => {
+    const hasVideo = (call.localMediaStreamRef.current?.getVideoTracks().length ?? 0) > 0
+
+    if (hasVideo) {
+      // Downgrade to audio-only — replaces stream and removes video tracks from Membrane
+      await call._handleAttachLocalMedia('audio')
+      setCallCameraOn(false)
+    } else {
+      // Upgrade to audio+video — replaces stream and adds video tracks to Membrane
+      await call._handleAttachLocalMedia('audio_video')
+      setCallCameraOn(true)
+    }
+  }, [call])
 
   // Screen sharing toggle
   const screenShareStreamRef = useRef<MediaStream | null>(null)
 
   const handleToggleScreen = useCallback(async () => {
     if (callScreenSharing) {
-      // Stop screen sharing
+      // Stop screen sharing — remove tracks from Membrane and stop capture
+      await call._handleDetachScreenShare()
       if (screenShareStreamRef.current) {
         for (const track of screenShareStreamRef.current.getTracks()) {
           track.stop()
@@ -393,10 +398,20 @@ export function ConversationPane({
           video: true,
           audio: false
         })
+
+        // Add screen share tracks to Membrane so remote peers see them
+        const trackIds = await call._handleAttachScreenShare(displayStream)
+
+        // If tracks weren't added (no Membrane connection), still show locally
+        if (trackIds.length === 0) {
+          console.warn('[ScreenShare] Tracks not sent to Membrane — connection may not be ready')
+        }
+
         screenShareStreamRef.current = displayStream
 
         // Listen for user stopping share via browser UI
         displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+          void call._handleDetachScreenShare()
           screenShareStreamRef.current = null
           setCallScreenSharing(false)
         })
@@ -406,7 +421,11 @@ export function ConversationPane({
         // User cancelled the screen share picker — not an error
       }
     }
-  }, [callScreenSharing])
+  }, [callScreenSharing, call])
+
+  const handleSwitchDevice = useCallback((deviceId: string, kind: 'audio' | 'video') => {
+    void call._handleSwitchDevice(deviceId, kind)
+  }, [call])
 
   // Auto-dismiss call ended screen
   useEffect(() => {
@@ -640,45 +659,7 @@ export function ConversationPane({
   }
 
   // ─── Incoming call — receiver sees accept/decline ────────────────────
-  if (callUiMode === 'full' && isIncomingCall && call.activeCall && call.activeCall.mode !== 'group') {
-    return (
-      <main className="conversation-pane">
-        <div className="outgoing-call-screen">
-          <div className="outgoing-call-screen__body">
-            <div className="outgoing-call-screen__avatar">
-              {resolvedChat ? resolvedChat.title.slice(0, 1) : activeCallInitial}
-            </div>
-            <span className="outgoing-call-screen__name">{activeCallDisplayTitle}</span>
-            <span className="outgoing-call-screen__status">
-              {capabilityStatusLabel ?? directCallStatusLabel}
-            </span>
-          </div>
-          <div className="outgoing-call-screen__controls">
-            <div className="incoming-call-overlay__actions">
-              <button
-                type="button"
-                className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--decline"
-                onClick={call.handleDeclineCall}
-                aria-label="Decline call"
-              >
-                <PhoneOffIcon width={24} height={24} />
-              </button>
-              <button
-                type="button"
-                className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--accept"
-                onClick={call.handleAcceptCall}
-                aria-label="Accept call"
-                disabled={call.callCapabilityState !== 'supported'}
-                title={capabilityStatusLabel ?? 'Accept call'}
-              >
-                <PhoneIcon width={24} height={24} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </main>
-    )
-  }
+  // Incoming call UI is now handled by the global IncomingCallOverlay.
 
   // ─── Outgoing ringing screen — caller sees "Calling..." ─────────────
   if (callUiMode === 'full' && call.activeCall?.status === 'ringing' && call.activeCall.mode !== 'group') {
@@ -689,7 +670,7 @@ export function ConversationPane({
           contactInitial={activeCallInitial}
           status={directCallStatusLabel}
           muted={callMuted}
-          onToggleMute={() => setCallMuted((m) => !m)}
+          onToggleMute={handleToggleMute}
           onHangup={call.handleEndCall}
         />
       </main>
@@ -709,15 +690,21 @@ export function ConversationPane({
           muted={callMuted}
           cameraOn={callCameraOn}
           screenSharing={callScreenSharing}
+          screenShareStream={screenShareStreamRef.current}
           statusLabel={
             capabilityStatusLabel ??
             (call.activeCall.status === 'ringing' ? 'Group call ringing…' : mediaEncryptionLabel)
           }
+          showScreenControls={true}
+          callQuality={callQuality}
+          audioDevices={mediaDevices.audioInputs}
+          videoDevices={mediaDevices.videoInputs}
           participants={activeGroupParticipants}
           onBack={() => setCallUiMode('pip')}
           onToggleMute={handleToggleMute}
           onToggleCamera={handleToggleCamera}
           onToggleScreen={handleToggleScreen}
+          onSwitchDevice={handleSwitchDevice}
           onHangup={call.activeCall.status === 'ringing' && isIncomingCall ? call.handleDeclineCall : call.handleEndCall}
         />
       </main>
@@ -744,13 +731,18 @@ export function ConversationPane({
           muted={callMuted}
           cameraOn={callCameraOn}
           screenSharing={callScreenSharing}
+          screenShareStream={screenShareStreamRef.current}
           statusLabel={activeScreenStatusLabel}
-          showScreenControls={false}
+          showScreenControls={true}
+          callQuality={callQuality}
+          audioDevices={mediaDevices.audioInputs}
+          videoDevices={mediaDevices.videoInputs}
           participants={call.activeCall.mode === 'group' ? activeGroupParticipants : undefined}
           onBack={() => setCallUiMode('pip')}
           onToggleMute={handleToggleMute}
           onToggleCamera={handleToggleCamera}
           onToggleScreen={handleToggleScreen}
+          onSwitchDevice={handleSwitchDevice}
           onHangup={call.handleEndCall}
         />
       </main>
@@ -790,17 +782,31 @@ export function ConversationPane({
           }
           muted={callMuted}
           cameraOn={callCameraOn}
-          onToggleMute={() => setCallMuted((m) => !m)}
+          onToggleMute={handleToggleMute}
           onToggleCamera={call.activeCall.mode === 'video' || call.activeCall.media_mode === 'video' ? handleToggleCamera : undefined}
           onHangup={handlePiPHangup}
           onExpand={handleExpandCall}
         />
       )}
-      {resolvedChat ? <ChatSearchBar
-        messageItems={messages.messageItems}
-        onSearchHighlightChange={handleSearchHighlightChange}
-      /> : null}
+      <AnimatePresence>
+        {resolvedChat && chatSearchOpen ? (
+          <motion.div
+            key="chat-search"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <ChatSearchBar
+              messageItems={messages.messageItems}
+              onSearchHighlightChange={handleSearchHighlightChange}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       {resolvedChat ? <MessageThread
+        key={resolvedChat.id}
         messages={messages}
         media={media}
         downloadManager={downloadManager}
@@ -837,8 +843,6 @@ export function ConversationPane({
         activeChat={resolvedChat}
         chatList={chatList}
         sendKey={appSettings.settings.general_send_key}
-        spellCheck={appSettings.settings.general_spelling}
-        autoCapitalize={appSettings.settings.general_capitalize}
         onDraftChange={(text) => { drafts.handleDraftChange(text); if (text.length > 0 && appSettings.settings.privacy_typing_indicators) typingIndicator.sendTypingEvent() }}
         onMessageSent={drafts.handleMessageSent}
       /> : null}
@@ -855,13 +859,24 @@ export function ConversationPane({
           </div>
         </div>
       ) : null}
-      {mediaViewer ? (
-        <MediaViewer
-          items={mediaViewer.items}
-          initialIndex={mediaViewer.initialIndex}
-          onClose={() => setMediaViewer(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {mediaViewer ? (
+          <motion.div
+            key="media-viewer"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+            style={{ position: 'fixed', inset: 0, zIndex: 300 }}
+          >
+            <MediaViewer
+              items={mediaViewer.items}
+              initialIndex={mediaViewer.initialIndex}
+              onClose={() => setMediaViewer(null)}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </main>
   )
 }

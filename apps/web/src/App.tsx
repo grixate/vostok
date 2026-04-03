@@ -6,6 +6,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 
 import type { AuthSession, Banner, ServerInfo, StoredDevice } from './types.ts'
 import { buildDesktopWindowTitle } from './utils/call-helpers.ts'
@@ -45,7 +46,6 @@ import { useDownloadManager } from './hooks/useDownloadManager.ts'
 import { Sidebar } from './features/sidebar/Sidebar.tsx'
 import { ConversationPane } from './features/conversation/ConversationPane.tsx'
 import { ToastStack } from './features/overlays/ToastStack.tsx'
-import { ConnectionStatusBar } from './features/overlays/ConnectionStatusBar.tsx'
 import { BackupReminderBanner } from './components/BackupReminderBanner.tsx'
 
 const LoginFlow = lazy(async () => {
@@ -53,25 +53,17 @@ const LoginFlow = lazy(async () => {
   return { default: module.LoginFlow }
 })
 
-const SettingsPane = lazy(async () => {
-  const module = await import('./features/settings/SettingsPane.tsx')
-  return { default: module.SettingsPane }
-})
+import { SettingsPane } from './features/settings/SettingsPane.tsx'
+import { ContextMenuOverlay } from './features/overlays/ContextMenuOverlay.tsx'
+import { ProfileOverlay } from './features/overlays/ProfileOverlay.tsx'
+import { KeyboardShortcutsOverlay } from './features/overlays/KeyboardShortcutsOverlay.tsx'
+import { IncomingCallOverlay } from './features/overlays/IncomingCallOverlay.tsx'
 
-const ContextMenuOverlay = lazy(async () => {
-  const module = await import('./features/overlays/ContextMenuOverlay.tsx')
-  return { default: module.ContextMenuOverlay }
-})
-
-const ProfileOverlay = lazy(async () => {
-  const module = await import('./features/overlays/ProfileOverlay.tsx')
-  return { default: module.ProfileOverlay }
-})
-
-const KeyboardShortcutsOverlay = lazy(async () => {
-  const module = await import('./features/overlays/KeyboardShortcutsOverlay.tsx')
-  return { default: module.KeyboardShortcutsOverlay }
-})
+const mobilePanelVariants = {
+  enter: (d: number) => ({ x: d < 0 ? '-100%' : '100%' }),
+  center: { x: 0 },
+  exit: (d: number) => ({ x: d > 0 ? '-100%' : '100%' }),
+}
 
 function storedDevicesEqual(left: StoredDevice | null, right: StoredDevice | null): boolean {
   if (left === right) {
@@ -162,13 +154,15 @@ function App() {
   }
 
   return (
-    <AppContext.Provider value={appContextValue}>
-      <ThemeContext.Provider value={themeContextValue}>
-        <UIContext.Provider value={uiContextValue}>
-          <AppInner servers={servers} />
-        </UIContext.Provider>
-      </ThemeContext.Provider>
-    </AppContext.Provider>
+    <MotionConfig reducedMotion="user">
+      <AppContext.Provider value={appContextValue}>
+        <ThemeContext.Provider value={themeContextValue}>
+          <UIContext.Provider value={uiContextValue}>
+            <AppInner servers={servers} />
+          </UIContext.Provider>
+        </ThemeContext.Provider>
+      </AppContext.Provider>
+    </MotionConfig>
   )
 }
 
@@ -183,7 +177,16 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
   } = useUIContext()
   const { storedDevice, sessionToken, setStoredDevice, setSessionToken } = useAppContext()
   const [selectMessageId, setSelectMessageId] = useState<string | null>(null)
-  const [mobilePanel, setMobilePanel] = useState<'sidebar' | 'conversation'>('sidebar')
+  const [mobilePanel, setMobilePanelRaw] = useState<'sidebar' | 'conversation'>('sidebar')
+  const mobileDirRef = useRef<1 | -1>(1)
+  const mobileTransitingRef = useRef(false)
+  const setMobilePanel = (panel: 'sidebar' | 'conversation') => {
+    if (mobileTransitingRef.current) return
+    mobileDirRef.current = panel === 'conversation' ? 1 : -1
+    mobileTransitingRef.current = true
+    setMobilePanelRaw(panel)
+    setTimeout(() => { mobileTransitingRef.current = false }, 300)
+  }
   const {
     servers: serverRecords,
     activeServer,
@@ -499,47 +502,59 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
   return (
     <div className={appShellClassName}>
       {settingsOverlayOpen ? (
-        <Suspense
-          fallback={
-            <div className={appShellClassName}>
-              <main className="conversation-pane">
-                <div className="empty-state" style={{ flex: 1 }}>
-                  <p className="empty-state__title">Loading settings…</p>
-                </div>
-              </main>
-            </div>
-          }
-        >
-          <SettingsPane
-            auth={authView}
-            chatSessions={chatSessions}
-            chatList={chatListView}
-            servers={servers}
-            settingsHook={appSettings}
-            onClose={() => { setSettingsOverlayOpen(false); setSidebarTab('chats') }}
-          />
-        </Suspense>
+        <SettingsPane
+          auth={authView}
+          chatSessions={chatSessions}
+          chatList={chatListView}
+          servers={servers}
+          settingsHook={appSettings}
+          onClose={() => { setSettingsOverlayOpen(false); setSidebarTab('chats') }}
+        />
       ) : layout.isMobile ? (
-        /* Mobile: single-panel — show sidebar OR conversation */
-        mobilePanel === 'sidebar' ? (
-          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
-        ) : (
-          <ConversationPane
-            activeChat={activeChat}
-            groupChat={groupChat}
-            call={call}
-            messages={messages}
-            media={media}
-            downloadManager={downloadManager}
-            chatList={chatListView}
-            drafts={drafts}
-            typingIndicator={typingIndicator}
-            presence={presence}
-            appSettings={appSettings}
-            initialSelectedMessageId={selectMessageId}
-            onBack={() => setMobilePanel('sidebar')}
-          />
-        )
+        /* Mobile: animated panel slide */
+        <AnimatePresence initial={false} mode="popLayout" custom={mobileDirRef.current}>
+          {mobilePanel === 'sidebar' ? (
+            <motion.div
+              key="sidebar"
+              custom={mobileDirRef.current}
+              variants={mobilePanelVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="conversation"
+              custom={mobileDirRef.current}
+              variants={mobilePanelVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              <ConversationPane
+                activeChat={activeChat}
+                groupChat={groupChat}
+                call={call}
+                messages={messages}
+                media={media}
+                downloadManager={downloadManager}
+                chatList={chatListView}
+                drafts={drafts}
+                typingIndicator={typingIndicator}
+                presence={presence}
+                appSettings={appSettings}
+                initialSelectedMessageId={selectMessageId}
+                onBack={() => setMobilePanel('sidebar')}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       ) : (
         /* Desktop: side-by-side */
         <>
@@ -560,21 +575,20 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
           />
         </>
       )}
-      <Suspense fallback={null}>
-        {contextMenuMessage ? (
-          <ContextMenuOverlay
-            messages={messages}
-            chatList={chatListView}
-            onSelectMessage={(id) => {
-              setSelectMessageId(id)
-              requestAnimationFrame(() => setSelectMessageId(null))
-            }}
-          />
-        ) : null}
-        {profileOverlayOpen ? <ProfileOverlay auth={authView} /> : null}
-        {shortcutsOpen ? <KeyboardShortcutsOverlay /> : null}
-      </Suspense>
-      <ConnectionStatusBar />
+      {contextMenuMessage ? (
+        <ContextMenuOverlay
+          messages={messages}
+          chatList={chatListView}
+          onSelectMessage={(id) => {
+            setSelectMessageId(id)
+            requestAnimationFrame(() => setSelectMessageId(null))
+          }}
+        />
+      ) : null}
+      {profileOverlayOpen ? <ProfileOverlay auth={authView} /> : null}
+      {shortcutsOpen ? <KeyboardShortcutsOverlay /> : null}
+
+      <IncomingCallOverlay call={call} />
       <BackupReminderBanner />
       <ToastStack />
     </div>

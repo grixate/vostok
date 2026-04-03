@@ -22,7 +22,7 @@ type SidebarHeaderProps = {
 export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
   const { chatFilterInputRef } = useUIContext()
   const connectionStatus = useConnectionStatus()
-  const dotColor = { connected: 'var(--green)', connecting: 'var(--color-warning)', disconnected: 'var(--label3)', error: 'var(--danger)' }[connectionStatus]
+  const dotColor = connectionStatus === 'connected' ? 'var(--green)' : 'var(--danger)'
 
   return (
     <div className="sidebar__header">

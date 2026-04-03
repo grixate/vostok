@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
 import type { AuthView, AuthSession, ServerInfo } from '../types.ts'
 import type { InviteValidation, LoginResponse } from '../lib/api.ts'
@@ -155,6 +155,81 @@ export function useAuth(serverBaseUrl?: string | null) {
         setInitializing(false)
       })
   }, [currentOriginBaseUrl, serverClient, useLegacyStorage])
+
+  // Keep a ref to current auth session so timer/visibility callbacks
+  // always see the latest tokens without re-triggering the effect.
+  const authSessionRef = useRef(authSession)
+  useEffect(() => { authSessionRef.current = authSession }, [authSession])
+
+  // Proactive token refresh — keeps access tokens fresh via a periodic
+  // timer and a visibility-change listener for PWA background/foreground.
+  useEffect(() => {
+    if (!authSession?.refreshToken) return
+
+    const REFRESH_INTERVAL = 13 * 60 * 1000 // 13 min (tokens expire at 15)
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let refreshing = false
+    let cancelled = false
+
+    async function doRefresh() {
+      const current = authSessionRef.current
+      if (!current?.refreshToken || refreshing || cancelled) return
+      refreshing = true
+
+      try {
+        const result = await serverClient.refreshAccessToken(current.refreshToken)
+        if (cancelled) return
+
+        const updated: AuthSession = {
+          ...current,
+          accessToken: result.access_token,
+          user: {
+            id: result.user.id,
+            username: result.user.username,
+            display_name: result.user.display_name,
+            role: result.user.role,
+            temp_password: result.user.temp_password
+          }
+        }
+        if (useLegacyStorage) {
+          persistAuthSession(updated)
+        }
+        setAuthSession(updated)
+        scheduleRefresh()
+      } catch {
+        if (cancelled) return
+        // Refresh token expired or revoked — force re-login
+        if (useLegacyStorage) {
+          persistAuthSession(null)
+        }
+        setAuthSession(null)
+        setView('login')
+      } finally {
+        refreshing = false
+      }
+    }
+
+    function scheduleRefresh() {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(doRefresh, REFRESH_INTERVAL)
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        if (timer) clearTimeout(timer)
+        doRefresh()
+      }
+    }
+
+    scheduleRefresh()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [!!authSession?.refreshToken, serverClient, useLegacyStorage])
 
   function handleLoginResponse(response: LoginResponse) {
     const session: AuthSession = {

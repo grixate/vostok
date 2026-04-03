@@ -1,6 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import { CallControls } from './CallControls.tsx'
 import { SelfPreviewPiP } from './SelfPreviewPiP.tsx'
+import { ScreenShareView } from './ScreenShareView.tsx'
+import { CallQualityIndicator, type CallQuality } from './CallQualityIndicator.tsx'
+import type { MediaDeviceOption } from '../../hooks/useMediaDevices.ts'
 import { useCallTimer } from '../../hooks/useCallTimer.ts'
 import {
   BackIcon,
@@ -27,12 +30,17 @@ type ActiveCallScreenProps = {
   muted: boolean
   cameraOn: boolean
   screenSharing: boolean
+  screenShareStream?: MediaStream | null
   statusLabel?: string
   showScreenControls?: boolean
+  callQuality?: CallQuality
+  audioDevices?: MediaDeviceOption[]
+  videoDevices?: MediaDeviceOption[]
   participants?: Participant[]
   onToggleMute: () => void
   onToggleCamera: () => void
   onToggleScreen: () => void
+  onSwitchDevice?: (deviceId: string, kind: 'audio' | 'video') => void
   onHangup: () => void
   onBack?: () => void
 }
@@ -47,12 +55,17 @@ export function ActiveCallScreen({
   muted,
   cameraOn,
   screenSharing,
+  screenShareStream,
   statusLabel,
   showScreenControls = false,
+  callQuality,
+  audioDevices = [],
+  videoDevices = [],
   participants = [],
   onToggleMute,
   onToggleCamera,
   onToggleScreen,
+  onSwitchDevice,
   onHangup,
   onBack,
 }: ActiveCallScreenProps) {
@@ -102,7 +115,7 @@ export function ActiveCallScreen({
         )}
         <div className="ac__avatar ac__avatar--36">{contactInitial}</div>
         <span className="ac__header-name">{contactName}</span>
-        <span className="ac__status-dot" />
+        {callQuality ? <CallQualityIndicator quality={callQuality} /> : <span className="ac__status-dot" />}
         {statusLabel ? <span className="ac__timer">{statusLabel}</span> : null}
       </div>
       <div className="ac__header-right">
@@ -119,42 +132,37 @@ export function ActiveCallScreen({
       <div className="ac__floating-header-info">
         <div className="ac__floating-header-top">
           <span className="ac__header-name">{contactName}</span>
-          <span className="ac__status-dot" />
+          {callQuality ? <CallQualityIndicator quality={callQuality} /> : <span className="ac__status-dot" />}
         </div>
         <span className="ac__timer">{statusLabel ?? duration}</span>
       </div>
     </div>
   )
 
+  const controlProps = {
+    muted,
+    cameraOn,
+    screenSharing,
+    showCamera: showVideo,
+    showScreen: showScreenControls,
+    audioDevices,
+    videoDevices,
+    onToggleMute,
+    onToggleCamera,
+    onToggleScreen,
+    onSwitchDevice,
+    onHangup,
+  } as const
+
   const floatingControls = (
     <div className="ac__controls-floating">
-      <CallControls
-        muted={muted}
-        cameraOn={cameraOn}
-        screenSharing={screenSharing}
-        showCamera={showVideo}
-        showScreen={showScreenControls}
-        onToggleMute={onToggleMute}
-        onToggleCamera={onToggleCamera}
-        onToggleScreen={onToggleScreen}
-        onHangup={onHangup}
-      />
+      <CallControls {...controlProps} />
     </div>
   )
 
   const controlsArea = (
     <div className="ac__controls-area">
-      <CallControls
-        muted={muted}
-        cameraOn={cameraOn}
-        screenSharing={screenSharing}
-        showCamera={showVideo}
-        showScreen={showScreenControls}
-        onToggleMute={onToggleMute}
-        onToggleCamera={onToggleCamera}
-        onToggleScreen={onToggleScreen}
-        onHangup={onHangup}
-      />
+      <CallControls {...controlProps} />
     </div>
   )
 
@@ -175,6 +183,15 @@ export function ActiveCallScreen({
 
   const selfPiP = localStream && cameraOn ? (
     <SelfPreviewPiP stream={localStream} />
+  ) : null
+
+  const screenShareArea = screenSharing && screenShareStream ? (
+    <ScreenShareView
+      stream={screenShareStream}
+      presenterName="You"
+      isSelf={true}
+      onStopSharing={onToggleScreen}
+    />
   ) : null
 
   const groupTiles = (
@@ -240,7 +257,7 @@ export function ActiveCallScreen({
     return (
       <div ref={containerRef} className="ac ac--mobile">
         <div className="ac__video-area">
-          {remoteVideoOrPlaceholder}
+          {screenShareArea ?? remoteVideoOrPlaceholder}
           {floatingHeader}
           {selfPiP}
           {floatingControls}
@@ -268,7 +285,7 @@ export function ActiveCallScreen({
     return (
       <div ref={containerRef} className="ac ac--tablet">
         <div className="ac__video-area">
-          {remoteVideoOrPlaceholder}
+          {screenShareArea ?? remoteVideoOrPlaceholder}
           {floatingHeader}
           {selfPiP}
           {floatingControls}
@@ -283,9 +300,11 @@ export function ActiveCallScreen({
       <div ref={containerRef} className="ac ac--desktop">
         {headerBar}
         <div className="ac__video-area">
-          <div className="ac__group-grid">
-            {groupTiles}
-          </div>
+          {screenShareArea ?? (
+            <div className="ac__group-grid">
+              {groupTiles}
+            </div>
+          )}
         </div>
         {controlsArea}
       </div>
@@ -296,7 +315,7 @@ export function ActiveCallScreen({
     <div ref={containerRef} className="ac ac--desktop">
       {headerBar}
       <div className="ac__video-area">
-        {remoteVideoOrPlaceholder}
+        {screenShareArea ?? remoteVideoOrPlaceholder}
         {selfPiP}
         {floatingControls}
       </div>

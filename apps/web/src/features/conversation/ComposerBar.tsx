@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import { useCallback, useRef, useState, useEffect, type FormEvent } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
 import { EmojiPicker } from '../../components/EmojiPicker.tsx'
@@ -70,13 +71,11 @@ type ComposerBarProps = {
   activeChat: ChatSummary | null
   chatList: ReturnType<typeof useChatList>
   sendKey?: 'enter' | 'ctrl-enter'
-  spellCheck?: boolean
-  autoCapitalize?: boolean
   onDraftChange?: (text: string) => void
   onMessageSent?: () => void
 }
 
-export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', spellCheck = true, autoCapitalize = false, onDraftChange, onMessageSent }: ComposerBarProps) {
+export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', onDraftChange, onMessageSent }: ComposerBarProps) {
   const {
     attachPopoverOpen,
     setAttachPopoverOpen,
@@ -86,6 +85,19 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
   const videoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const attachDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close attach popover on outside click
+  useEffect(() => {
+    if (!attachPopoverOpen) return
+    function handlePointerDown(e: PointerEvent) {
+      if (attachDropdownRef.current && !attachDropdownRef.current.contains(e.target as Node)) {
+        setAttachPopoverOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [attachPopoverOpen, setAttachPopoverOpen])
 
   // Start / stop video duration timer
   useEffect(() => {
@@ -236,33 +248,53 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
       <input hidden onChange={media.handleAttachmentPick} ref={media.fileInputRef} type="file" />
 
       {/* Reply bar — sits above the compose row */}
-      {messages.replyTargetMessageId ? (
-        <div className="compose-reply-bar">
-          <div className="compose-reply-bar__accent" />
-          <div className="compose-reply-bar__content">
-            <strong>{messages.editingMessageId ? 'Editing' : 'Reply'}</strong>
-            <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : 'Earlier message'}</span>
-          </div>
-          <button className="compose-reply-bar__close" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label="Cancel reply">
-            <CloseIcon width={16} height={16} />
-          </button>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {messages.replyTargetMessageId ? (
+          <motion.div
+            key="reply-bar"
+            className="compose-reply-bar"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="compose-reply-bar__accent" />
+            <div className="compose-reply-bar__content">
+              <strong>{messages.editingMessageId ? 'Editing' : 'Reply'}</strong>
+              <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : 'Earlier message'}</span>
+            </div>
+            <button className="compose-reply-bar__close" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label="Cancel reply">
+              <CloseIcon width={16} height={16} />
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Edit bar — sits above the compose row */}
-      {messages.editingMessageId && !messages.replyTargetMessageId ? (
-        <div className="compose-edit-bar">
-          <EditSmallIcon />
-          <span>Edit Message</span>
-          <button className="compose-edit-bar__close" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label="Cancel edit">
-            <CloseIcon width={16} height={16} />
-          </button>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {messages.editingMessageId && !messages.replyTargetMessageId ? (
+          <motion.div
+            key="edit-bar"
+            className="compose-edit-bar"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <EditSmallIcon />
+            <span>Edit Message</span>
+            <button className="compose-edit-bar__close" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label="Cancel edit">
+              <CloseIcon width={16} height={16} />
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Main compose row */}
       <div className="live-composer__row">
-        <div className="dropdown-anchor">
+        <div className="dropdown-anchor" ref={attachDropdownRef}>
           <Tooltip text="Attach file">
             <button className="live-composer__btn" type="button" aria-label="Attach file" onClick={() => setAttachPopoverOpen((v) => !v)}>
               <AttachIcon width={22} height={22} />
@@ -306,8 +338,6 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             ref={draftInputRef}
             rows={1}
             value={messages.draft}
-            spellCheck={spellCheck}
-            autoCapitalize={autoCapitalize ? 'sentences' : 'off'}
           />
         </div>
         {messages.draft.trim().length > 0 ? (

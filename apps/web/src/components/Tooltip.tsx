@@ -9,19 +9,43 @@ type TooltipProps = {
 
 export function Tooltip({ text, children, delay = 400 }: TooltipProps) {
   const [visible, setVisible] = useState(false)
-  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const [style, setStyle] = useState<React.CSSProperties>({})
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const tooltipMeasureRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el || !triggerRef.current) return
+
+    const trigger = triggerRef.current.getBoundingClientRect()
+    const tip = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const pad = 8
+
+    // Vertical: prefer above, flip below if clipped
+    let top: number
+    let placement: 'above' | 'below'
+    if (trigger.top - tip.height - 6 < pad) {
+      top = trigger.bottom + 6
+      placement = 'below'
+    } else {
+      top = trigger.top - tip.height - 6
+      placement = 'above'
+    }
+
+    // Horizontal: center on trigger, then clamp to viewport
+    let left = trigger.left + trigger.width / 2 - tip.width / 2
+    if (left < pad) left = pad
+    if (left + tip.width > vw - pad) left = vw - pad - tip.width
+
+    setStyle({ top, left, transform: 'none', opacity: 1 })
+    void placement // used for future arrow direction if needed
+  }, [])
 
   const showTooltip = useCallback(() => {
     timerRef.current = setTimeout(() => {
       if (!triggerRef.current) return
-
-      const rect = triggerRef.current.getBoundingClientRect()
-      setCoords({
-        top: rect.top - 6,
-        left: rect.left + rect.width / 2
-      })
+      // Initial position off-screen for measurement
+      setStyle({ top: -9999, left: -9999, transform: 'none', opacity: 0 })
       setVisible(true)
     }, delay)
   }, [delay])
@@ -45,11 +69,9 @@ export function Tooltip({ text, children, delay = 400 }: TooltipProps) {
       {visible
         ? createPortal(
             <div
+              ref={tooltipMeasureRef}
               className="tooltip tooltip--visible"
-              style={{
-                top: coords.top,
-                left: coords.left,
-              }}
+              style={style}
             >
               {text}
             </div>,

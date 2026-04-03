@@ -63,12 +63,21 @@ export function useMessages(
 
   const messageItemsRef = useRef<CachedMessage[]>([])
   const lastLoadedChatIdRef = useRef<string | null>(null)
+  const memCacheRef = useRef(new Map<string, CachedMessage[]>())
   const linkMetadataInFlightRef = useRef(new Set<string>())
   const syncInFlightRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     messageItemsRef.current = messageItems
   }, [messageItems])
+
+  function formatPreviewText(msg: CachedMessage): string {
+    const t = msg.text
+    if (t.startsWith('Voice note:')) return 'Voice message'
+    if (t.startsWith('Round video:')) return 'Video message'
+    if (t.startsWith('Attachment:')) return 'Photo'
+    return t
+  }
 
   function replaceActiveMessages(chatId: string, nextMessages: CachedMessage[], syncSummary: boolean) {
     if (activeChatIdRef.current !== chatId) {
@@ -77,15 +86,14 @@ export function useMessages(
 
     messageItemsRef.current = nextMessages
     setMessageItems(nextMessages)
+    memCacheRef.current.set(chatId, nextMessages)
     void writeCachedMessages(chatId, nextMessages)
 
     // Persist the last decrypted message preview for the sidebar chat list.
     const lastDecrypted = [...nextMessages].reverse().find(
-      (m) => m.decryptable && m.text && m.side !== 'system'
+      (m) => m.decryptable && m.text && m.side !== 'system' && !m.deletedAt
     )
-    if (lastDecrypted) {
-      writeChatPreview(chatId, lastDecrypted.text)
-    }
+    writeChatPreview(chatId, lastDecrypted ? formatPreviewText(lastDecrypted) : '')
 
     if (syncSummary) {
       setChatItems((current) => syncChatSummary(current, chatId, nextMessages))
@@ -296,8 +304,26 @@ export function useMessages(
     // content while the server re-syncs.
     const chatChanged = lastLoadedChatIdRef.current !== chatId
     if (chatChanged) {
-      messageItemsRef.current = []
-      setMessageItems([])
+      // Save outgoing chat's messages to in-memory cache
+      const prevChatId = lastLoadedChatIdRef.current
+      if (prevChatId && messageItemsRef.current.length > 0) {
+        memCacheRef.current.set(prevChatId, messageItemsRef.current)
+        // Keep cache bounded to last 20 chats
+        if (memCacheRef.current.size > 20) {
+          const oldest = memCacheRef.current.keys().next().value!
+          memCacheRef.current.delete(oldest)
+        }
+      }
+
+      // Instantly restore from memory cache if available
+      const memCached = memCacheRef.current.get(chatId)
+      if (memCached) {
+        messageItemsRef.current = memCached
+        setMessageItems(memCached)
+      } else {
+        messageItemsRef.current = []
+        setMessageItems([])
+      }
       setHasMoreMessages(false)
     }
     lastLoadedChatIdRef.current = chatId
@@ -314,10 +340,6 @@ export function useMessages(
           }
 
           if (cached.length > 0) {
-            // Seed the in-memory decryption cache from the persisted messages so
-            // that projectMessage() can find previously-decrypted text without
-            // re-running the Double Ratchet (which would fail after page reload
-            // because chain counters already advanced in the previous session).
             seedDecryptedCacheFromPersisted(chatId, cached)
             messageItemsRef.current = cached
             setMessageItems(cached)
@@ -934,7 +956,7 @@ export function useMessages(
       )
 
       if (projected.decryptable && projected.text && projected.side !== 'system') {
-        writeChatPreview(chatId, projected.text)
+        writeChatPreview(chatId, formatPreviewText(projected))
 
         // Bump chatItems so the sidebar re-renders with the new preview.
         // Pass false — this is a non-active chat, so preserve/increment unread count.
