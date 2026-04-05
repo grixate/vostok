@@ -75,7 +75,7 @@ export function ActiveCallScreen({
   const [layout, setLayout] = useState<'mobile' | 'tablet' | 'desktop'>('desktop')
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const showVideo = mode === 'video'
+  const showVideo = true
   const isGroup = participants.length > 1
 
   useEffect(() => {

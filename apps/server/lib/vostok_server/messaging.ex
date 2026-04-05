@@ -515,10 +515,16 @@ defmodule VostokServer.Messaging do
     before_cursor = opts["before"]
 
     with {:ok, _membership} <- ensure_membership(chat_id, user_id) do
+      # Primary sort by inserted_at + id; seq is a tiebreaker for messages
+      # with identical timestamps (ensures causal order within a burst).
       query =
         from(message in Message,
           where: message.chat_id == ^chat_id,
-          order_by: [desc: message.inserted_at, desc: message.id],
+          order_by: [
+            desc: message.inserted_at,
+            desc: fragment("COALESCE(?, 0)", message.seq),
+            desc: message.id
+          ],
           limit: ^(limit + 1),
           preload: [
             recipient_envelopes: ^recipient_query(),
@@ -765,6 +771,13 @@ defmodule VostokServer.Messaging do
            ) do
       Multi.new()
       |> Multi.insert(:message, build_message_changeset(chat_id, sender_device_id, normalized))
+      |> Multi.run(:assign_seq, fn repo, %{message: message} ->
+        {1, [%{seq: seq}]} =
+          from(m in Message, where: m.id == ^message.id, select: %{seq: m.seq})
+          |> repo.update_all(set: [seq: dynamic([m], fragment("nextval('messages_chat_seq')"))])
+
+        {:ok, seq}
+      end)
       |> Multi.run(:recipient_envelopes, fn repo, %{message: message} ->
         insert_recipient_envelopes(
           repo,

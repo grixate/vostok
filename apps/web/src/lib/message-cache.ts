@@ -203,6 +203,88 @@ export async function writeCachedContact(contact: CachedContact): Promise<void> 
   })
 }
 
+// ── Cross-chat message search ───────────────────────────────────────────
+
+export type SearchResult = {
+  chatId: string
+  message: CachedMessage
+}
+
+export async function searchAllCachedMessages(
+  query: string,
+  limit = 50
+): Promise<SearchResult[]> {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return []
+
+  const database = await openMessageCacheDatabase()
+  if (!database) return searchLegacyCachedMessages(normalizedQuery, limit)
+
+  const results: SearchResult[] = []
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_MESSAGES, 'readonly')
+    const store = transaction.objectStore(STORE_MESSAGES)
+    const request = store.openCursor()
+
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (!cursor || results.length >= limit) {
+        resolve()
+        return
+      }
+
+      const record = cursor.value as { chatId: string; messages: CachedMessage[] }
+      if (Array.isArray(record?.messages)) {
+        for (const msg of record.messages) {
+          if (results.length >= limit) break
+          if (
+            !msg.deletedAt &&
+            msg.text &&
+            msg.text.toLowerCase().includes(normalizedQuery)
+          ) {
+            results.push({ chatId: record.chatId, message: msg })
+          }
+        }
+      }
+
+      cursor.continue()
+    }
+
+    request.onerror = () => reject(request.error)
+  })
+
+  return results
+}
+
+function searchLegacyCachedMessages(query: string, limit: number): SearchResult[] {
+  const results: SearchResult[] = []
+
+  for (let i = 0; i < window.localStorage.length && results.length < limit; i++) {
+    const key = window.localStorage.key(i)
+    if (!key?.startsWith(CACHE_PREFIX)) continue
+
+    const chatId = key.slice(CACHE_PREFIX.length)
+
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (!raw) continue
+      const messages = JSON.parse(raw) as CachedMessage[]
+
+      for (const msg of messages) {
+        if (results.length >= limit) break
+        if (!msg.deletedAt && msg.text?.toLowerCase().includes(query)) {
+          results.push({ chatId, message: msg })
+        }
+      }
+    } catch {
+      // Ignore corrupt entries
+    }
+  }
+
+  return results
+}
+
 // ── Storage management ──────────────────────────────────────────────────
 
 export async function getStorageEstimate(): Promise<{ usage: number; quota: number } | null> {

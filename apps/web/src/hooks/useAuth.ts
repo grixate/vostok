@@ -23,7 +23,7 @@ export function useAuth(serverBaseUrl?: string | null) {
   ))
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
   const [view, setView] = useState<AuthView>(() => (
-    useLegacyStorage && readAuthSession() ? 'chat' : 'welcome'
+    useLegacyStorage && readAuthSession() ? 'chat' : useLegacyStorage ? 'login' : 'welcome'
   ))
   const [error, setError] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
@@ -147,9 +147,12 @@ export function useAuth(serverBaseUrl?: string | null) {
         }
       })
       .catch(() => {
-        persistAuthSession(null)
-        setAuthSession(null)
-        setView('login')
+        // Refresh failed but we may have a valid refresh token — keep the
+        // stored session so the proactive refresh timer can retry, and the
+        // per-request 401 handler in api-request.ts can refresh on demand.
+        setAuthSession(stored)
+        setAuthSessionServerUrl(currentOriginBaseUrl)
+        setView('chat')
       })
       .finally(() => {
         setInitializing(false)
@@ -167,6 +170,7 @@ export function useAuth(serverBaseUrl?: string | null) {
     if (!authSession?.refreshToken) return
 
     const REFRESH_INTERVAL = 13 * 60 * 1000 // 13 min (tokens expire at 15)
+    const RETRY_DELAY = 60 * 1000 // 1 min retry on failure
     let timer: ReturnType<typeof setTimeout> | null = null
     let refreshing = false
     let cancelled = false
@@ -198,12 +202,11 @@ export function useAuth(serverBaseUrl?: string | null) {
         scheduleRefresh()
       } catch {
         if (cancelled) return
-        // Refresh token expired or revoked — force re-login
-        if (useLegacyStorage) {
-          persistAuthSession(null)
-        }
-        setAuthSession(null)
-        setView('login')
+        // Never auto-logout — just retry later. The refresh token is valid
+        // for 30 days. Failures here are transient (network, server restart).
+        // The user stays signed in with their existing access token until the
+        // next successful refresh.
+        timer = setTimeout(doRefresh, RETRY_DELAY)
       } finally {
         refreshing = false
       }

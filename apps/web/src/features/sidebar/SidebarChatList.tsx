@@ -148,7 +148,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
                     ? (readChatPreview(chat.id) ? `You: ${readChatPreview(chat.id)?.slice(0, 40) ?? ''}` : 'Your Cloud Storage')
                     : draftChatIds.has(chat.id)
                       ? `Draft: ${draftChatIds.get(chat.id)!.slice(0, 40)}`
-                      : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'Encrypted message' : 'No messages yet')
+                      : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'New message' : 'No messages yet')
 
                   return chatList.hasMultipleServers ? `${chat.serverLabel} · ${rawPreview}` : rawPreview
                 })()

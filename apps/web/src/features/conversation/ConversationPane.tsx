@@ -134,7 +134,7 @@ export function ConversationPane({
     if (chatList.activeChatId !== interruptedChatId) {
       chatList.setActiveChatId(interruptedChatId)
     }
-  }, [chatList])
+  }, [chatList.chatItems, chatList.activeChatId, chatList.setActiveChatId])
 
   const handleExpandCall = useCallback(() => {
     if (call.activeCall?.scope_type === 'chat' && call.activeCallChatId && chatList.activeChatId !== call.activeCallChatId) {
@@ -142,11 +142,11 @@ export function ConversationPane({
       chatList.setActiveChatId(call.activeCallChatId)
     }
     setCallUiMode('full')
-  }, [call.activeCall, call.activeCallChatId, chatList, rememberInterruptedChat])
+  }, [call.activeCall, call.activeCallChatId, chatList.activeChatId, chatList.setActiveChatId, rememberInterruptedChat])
 
   const handlePiPHangup = useCallback(() => {
     void call.handleEndCall()
-  }, [call])
+  }, [call.handleEndCall])
 
   // Track call lifecycle
   useEffect(() => {
@@ -783,7 +783,7 @@ export function ConversationPane({
           muted={callMuted}
           cameraOn={callCameraOn}
           onToggleMute={handleToggleMute}
-          onToggleCamera={call.activeCall.mode === 'video' || call.activeCall.media_mode === 'video' ? handleToggleCamera : undefined}
+          onToggleCamera={handleToggleCamera}
           onHangup={handlePiPHangup}
           onExpand={handleExpandCall}
         />

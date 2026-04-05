@@ -332,13 +332,15 @@ export function useCall(
     const deviceId = storedDevice.deviceId
     const client = createMembraneClient({
       onSendMediaEvent(mediaEvent) {
+        console.log('[membrane] sendMediaEvent', mediaEvent.slice(0, 80))
         void pushCallWebRtcMediaEvent(sessionToken, activeCallId, mediaEvent)
           .then((response) => {
             setCallWebRtcEndpoint(response.endpoint)
           })
-          .catch(() => undefined)
+          .catch((err) => console.warn('[membrane] sendMediaEvent failed', err))
       },
       onConnected(payload) {
+        console.log('[membrane] connected', payload.endpointId, 'otherEndpoints:', payload.otherEndpointCount)
         setTransportError(null)
         setMembraneClientConnected(true)
         setMembraneClientEndpointId(payload.endpointId)
@@ -358,6 +360,14 @@ export function useCall(
         setMembraneRemoteTracks([])
       },
       onRemoteStateChange(payload) {
+        console.log('[membrane] remoteStateChange', {
+          endpoints: payload.endpointCount,
+          tracks: payload.trackCount,
+          readyTracks: payload.readyTrackCount,
+          readyAudio: payload.readyAudioTrackCount,
+          readyVideo: payload.readyVideoTrackCount,
+          trackDetails: payload.tracks.map((t: { kind?: string | null; ready?: boolean }) => `${t.kind ?? '?'}:${t.ready ? 'ready' : 'pending'}`)
+        })
         setMembraneRemoteEndpointCount(payload.endpointCount)
         setMembraneRemoteTrackCount(payload.trackCount)
         setMembraneReadyTrackCount(payload.readyTrackCount)
@@ -808,6 +818,7 @@ export function useCall(
     }
 
     const bootstrap = (async () => {
+      console.log('[call] bootstrap START', { callId: currentCall.id, hasEndpoint: !!callWebRtcEndpoint?.exists, membraneConnected: membraneClientConnected })
       setTransportError(null)
       const result = await bootstrapActiveCallTransport({
         currentCall,
@@ -832,6 +843,7 @@ export function useCall(
         connectMembraneClient
       })
 
+      console.log('[call] bootstrap DONE', { endpointExists: result.endpoint?.exists, membraneRequested: result.membraneConnectRequestedCallId })
       setTurnCredentials(result.turnCredentials)
       if (result.participants) {
         setCallParticipants(result.participants)
@@ -841,12 +853,11 @@ export function useCall(
       membraneConnectRequestedCallIdRef.current = result.membraneConnectRequestedCallId
     })()
       .catch((error) => {
+        console.error('[call] bootstrap FAILED', error)
         const message =
           error instanceof Error ? error.message : 'Failed to initialize direct call transport.'
         setTransportError(message)
         setBanner({ tone: 'error', message })
-      })
-      .finally(() => {
         transportBootstrapRef.current = null
       })
 
@@ -865,15 +876,15 @@ export function useCall(
     }
 
     void bootstrapDirectCallTransport()
+  // bootstrapDirectCallTransport is a useEffectEvent — it reads current state
+  // internally, so only true triggers (call identity, auth, view) belong here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    activeCall,
-    callParticipants,
-    callRoom,
-    callWebRtcEndpoint,
-    membraneClientConnected,
+    activeCall?.id,
+    activeCall?.status,
     sessionToken,
-    storedDevice,
-    turnCredentials,
+    storedDevice?.deviceId,
+    membraneClientConnected,
     view
   ])
 
@@ -904,8 +915,11 @@ export function useCall(
       view,
       endpointExists: Boolean(callWebRtcEndpoint?.exists)
     })) {
+      console.log('[membrane] poll skipped', { callStatus: activeCall?.status, endpointExists: Boolean(callWebRtcEndpoint?.exists), view })
       return
     }
+
+    console.log('[membrane] poll started', { callId: activeCall?.id, endpointExists: callWebRtcEndpoint?.exists })
 
     if (!sessionToken || !activeCall) {
       return
@@ -931,10 +945,14 @@ export function useCall(
         )
 
         if (!cancelled) {
+          if (response.mediaEvents.length > 0) {
+            console.log('[membrane] poll got events:', response.mediaEvents.length, response.mediaEvents.map((e: string) => e.slice(0, 50)))
+          }
           setCallWebRtcEndpoint(response.endpoint)
           handleMembraneQueueBatch(response.mediaEvents)
         }
-      } catch {
+      } catch (err) {
+        console.warn('[membrane] poll error', err)
         // Ignore transient poll errors and continue interval polling.
       } finally {
         inFlight = false
@@ -1644,6 +1662,8 @@ export function useCall(
       return
     }
 
+    console.log('[call] attachLocalMedia', mode, 'membraneConnected:', membraneClientConnected, 'hasClient:', !!membraneClientRef.current)
+
     setLoading(true)
 
     try {
@@ -1658,6 +1678,8 @@ export function useCall(
         attachLocalTracks: (client, stream) =>
           attachCallLocalTracks(client, stream, attachLocalTracksToMembrane)
       })
+
+      console.log('[call] attachLocalMedia result', { trackIds: result.trackIds, audioTracks: result.localAudioTrackCount, videoTracks: result.localVideoTrackCount })
 
       localMediaStreamRef.current = result.stream
       membraneLocalTrackIdsRef.current = result.trackIds

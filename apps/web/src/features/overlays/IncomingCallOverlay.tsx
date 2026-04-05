@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { PhoneIcon, PhoneOffIcon, VideoIcon } from '../../icons/index.tsx'
 import { playRingtone, stopRingtone } from '../calls/callSounds.ts'
@@ -6,9 +6,10 @@ import type { useCall } from '../../hooks/useCall.ts'
 
 type IncomingCallOverlayProps = {
   call: ReturnType<typeof useCall>
+  onAccepted?: () => void
 }
 
-export function IncomingCallOverlay({ call }: IncomingCallOverlayProps) {
+export function IncomingCallOverlay({ call, onAccepted }: IncomingCallOverlayProps) {
   const { storedDevice } = useAppContext()
   const localDeviceId = storedDevice?.deviceId ?? null
   const activeCall = call.activeCall
@@ -24,6 +25,11 @@ export function IncomingCallOverlay({ call }: IncomingCallOverlayProps) {
     playRingtone()
     return () => { stopRingtone() }
   }, [isIncoming])
+
+  const handleAccept = useCallback(async () => {
+    await call.handleAcceptCall()
+    onAccepted?.()
+  }, [call, onAccepted])
 
   if (!isIncoming || !activeCall) return null
 
@@ -51,7 +57,7 @@ export function IncomingCallOverlay({ call }: IncomingCallOverlayProps) {
           <button
             type="button"
             className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--accept"
-            onClick={call.handleAcceptCall}
+            onClick={handleAccept}
             aria-label="Accept call"
           >
             <PhoneIcon width={24} height={24} />

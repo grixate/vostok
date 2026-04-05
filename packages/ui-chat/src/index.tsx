@@ -148,7 +148,6 @@ export function ConversationHeader({
         <div className="conversation-header__info">
           <span className="conversation-header__name">{title}</span>
           <span className={cx('conversation-header__status', online && 'conversation-header__status--online')}>
-            {online && <span className="conversation-header__online-dot" />}
             {subtitle}
           </span>
         </div>

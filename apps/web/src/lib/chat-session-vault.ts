@@ -3,7 +3,8 @@ import { base64ToBytes, bytesToBase64 } from './base64'
 import {
   bootstrapSecureStore,
   persistSecureStoreValue,
-  removeSecureStoreValue
+  removeSecureStoreValue,
+  whenSecureStoreReady
 } from './secure-kv-store'
 
 const SESSION_ALGORITHM = 'vostok-chat-session-v1'
@@ -148,6 +149,7 @@ export async function synchronizeChatSessions(
   sessions: ChatDeviceSession[]
 ): Promise<string[]> {
   ensureWebCrypto()
+  await whenSecureStoreReady()
 
   const synchronized: string[] = []
 
@@ -390,6 +392,8 @@ export async function decryptMessageWithSessions(
   message: ChatMessage,
   currentDeviceId: string
 ): Promise<string> {
+  await whenSecureStoreReady()
+
   // The self-session encrypts with the send chain key but decryption uses the
   // receive chain key — these are intentionally different in the Double Ratchet
   // protocol.  A device cannot decrypt its own outbound messages through the

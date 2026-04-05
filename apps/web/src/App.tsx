@@ -204,11 +204,12 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
     auth.authSessionServerUrl,
     activeServer?.url ?? null
   )
-  const onboarding = shouldShowOnboarding(
-    hasAuthenticatedServer,
-    !!auth.authSession,
-    authMatchesActiveServer
-  )
+  // In same-origin (legacy) mode with no multi-server config, skip the
+  // multi-server onboarding and go straight to the auth flow.
+  const isLegacyMode = servers.servers.length === 0
+  const onboarding = isLegacyMode
+    ? !auth.authSession
+    : shouldShowOnboarding(hasAuthenticatedServer, !!auth.authSession, authMatchesActiveServer)
   const appView = onboarding ? auth.view : 'chat'
   const fallbackAuthToken = authMatchesActiveServer ? auth.authSession?.accessToken ?? null : null
   const currentProfileUsername =
@@ -588,7 +589,11 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
       {profileOverlayOpen ? <ProfileOverlay auth={authView} /> : null}
       {shortcutsOpen ? <KeyboardShortcutsOverlay /> : null}
 
-      <IncomingCallOverlay call={call} />
+      <IncomingCallOverlay call={call} onAccepted={() => {
+        if (call.activeCallChatId) {
+          setActiveChatId(call.activeCallChatId)
+        }
+      }} />
       <BackupReminderBanner />
       <ToastStack />
     </div>
