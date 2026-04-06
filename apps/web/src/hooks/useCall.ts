@@ -37,8 +37,8 @@ import {
   sendCallSignal
 } from '../lib/api.ts'
 import { getDefaultApiBaseUrl } from '../lib/api.ts'
-import { buildApiRoot } from '../lib/api-request.ts'
 import {
+  attachLocalTrackToMembrane,
   attachLocalTracksToMembrane,
   cleanupMembraneClient,
   configureMembraneTurnServers,
@@ -47,6 +47,7 @@ import {
   getMembranePeerConnection,
   receiveMembraneMediaEvent,
   removeLocalTracksFromMembrane,
+  replaceLocalTrackInMembrane,
   updateMembraneEndpointMetadata,
   type MembraneClient,
   type MembraneRemoteEndpointSnapshot,
@@ -104,7 +105,6 @@ import {
   hasMatchingRemoteReadySignal,
   isParticipantJoined,
   shouldAttachLocalTracks,
-  shouldPollMembraneEndpoint,
   shouldSyncDirectMediaEncryption
 } from '../lib/call-transport.ts'
 import {
@@ -147,6 +147,12 @@ export function useCall(
   activeChatId: string | null,
   chatItems: MergedChatSummary[]
 ) {
+  type LocalTrackBinding = {
+    trackId: string
+    kind: 'audio' | 'video'
+    mediaTrackId: string
+  }
+
   const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   const [activeCall, setActiveCall] = useState<CallSession | null>(null)
   const [activeCallChatId, setActiveCallChatId] = useState<string | null>(null)
@@ -187,9 +193,11 @@ export function useCall(
   const membraneClientRef = useRef<MembraneClient | null>(null)
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
+  const membraneLocalTrackBindingsRef = useRef<LocalTrackBinding[]>([])
   const screenShareTrackIdsRef = useRef<string[]>([])
   const localMediaStreamRef = useRef<MediaStream | null>(null)
   const transportBootstrapRef = useRef<Promise<void> | null>(null)
+  const autoAttachMediaRef = useRef<{ callId: string; mode: 'audio' | 'audio_video' } | null>(null)
   const membraneConnectRequestedCallIdRef = useRef<string | null>(null)
   const transportStateCallIdRef = useRef<string | null>(null)
   const activeCallScanInFlightRef = useRef(false)
@@ -219,6 +227,7 @@ export function useCall(
     membraneClientRef.current = null
     membraneClientCallIdRef.current = null
     membraneLocalTrackIdsRef.current = []
+    membraneLocalTrackBindingsRef.current = []
     membraneConnectRequestedCallIdRef.current = null
     setMembraneClientReady(false)
     setMembraneClientConnected(false)
@@ -314,6 +323,51 @@ export function useCall(
     return false
   }, [callCapability.state, resolveCapabilityFailureMessage, setBanner])
 
+  const syncLocalMediaState = useCallback((stream: MediaStream | null) => {
+    const audioTrackCount = stream?.getAudioTracks().length ?? 0
+    const videoTrackCount = stream?.getVideoTracks().length ?? 0
+    setLocalAudioTrackCount(audioTrackCount)
+    setLocalVideoTrackCount(videoTrackCount)
+    setLocalMediaMode(videoTrackCount > 0 ? 'audio_video' : audioTrackCount > 0 ? 'audio' : 'none')
+  }, [])
+
+  const attachTracksWithBindings = useCallback(async (
+    client: MembraneClient,
+    stream: MediaStream,
+    tracks: MediaStreamTrack[]
+  ): Promise<LocalTrackBinding[]> => {
+    const bindings: LocalTrackBinding[] = []
+
+    for (const track of tracks) {
+      const trackId = await attachLocalTrackToMembrane(client, track, stream)
+      bindings.push({
+        trackId,
+        kind: track.kind as 'audio' | 'video',
+        mediaTrackId: track.id
+      })
+    }
+
+    return bindings
+  }, [])
+
+  const removeBoundLocalTracksByKind = useCallback(async (kind: 'audio' | 'video') => {
+    const bindings = membraneLocalTrackBindingsRef.current.filter((binding) => binding.kind === kind)
+
+    if (bindings.length === 0) {
+      return
+    }
+
+    await removeLocalTracksFromMembrane(
+      membraneClientRef.current,
+      bindings.map((binding) => binding.trackId)
+    )
+
+    membraneLocalTrackBindingsRef.current = membraneLocalTrackBindingsRef.current.filter(
+      (binding) => binding.kind !== kind
+    )
+    membraneLocalTrackIdsRef.current = membraneLocalTrackBindingsRef.current.map((binding) => binding.trackId)
+  }, [])
+
   function ensureMembraneClient(): MembraneClient {
     const activeCallId = activeCall?.id ?? null
 
@@ -391,6 +445,7 @@ export function useCall(
     membraneClientRef.current = client
     membraneClientCallIdRef.current = activeCallId
     membraneLocalTrackIdsRef.current = []
+    membraneLocalTrackBindingsRef.current = []
     setMembraneClientReady(true)
     setMembraneClientConnected(false)
     setMembraneRemoteEndpointCount(0)
@@ -467,16 +522,21 @@ export function useCall(
       return
     }
 
+    console.log('[membrane] processing batch:', events.length, 'events, hasClient:', !!membraneClientRef.current)
+
     setCallWebRtcMediaEvents((current) => [...events.reverse(), ...current].slice(0, 8))
 
     const nativeEvents = events.filter((eventPayload) => readMembraneNativeEventType(eventPayload) !== null)
+
+    console.log('[membrane] native events:', nativeEvents.length, 'of', events.length, nativeEvents.map(e => e.slice(0, 60)))
 
     if (nativeEvents.length > 0 && membraneClientRef.current) {
       for (const eventPayload of nativeEvents) {
         try {
           receiveMembraneMediaEvent(membraneClientRef.current, eventPayload)
-        } catch {
-          // Ignore malformed native events and keep the queue processing alive.
+          console.log('[membrane] fed event to client OK')
+        } catch (err) {
+          console.error('[membrane] receiveMediaEvent FAILED:', err)
         }
       }
     }
@@ -681,7 +741,6 @@ export function useCall(
 
     const token = sessionToken
     const currentCall = activeCall
-    const callId = currentCall.id
     let cancelled = false
     setCallWebRtcMediaEvents([])
 
@@ -858,6 +917,8 @@ export function useCall(
           error instanceof Error ? error.message : 'Failed to initialize direct call transport.'
         setTransportError(message)
         setBanner({ tone: 'error', message })
+      })
+      .finally(() => {
         transportBootstrapRef.current = null
       })
 
@@ -884,9 +945,39 @@ export function useCall(
     activeCall?.status,
     sessionToken,
     storedDevice?.deviceId,
-    membraneClientConnected,
     view
   ])
+
+  useEffect(() => {
+    if (!activeCall || activeCall.status !== 'active' || !sessionToken || view !== 'chat') {
+      autoAttachMediaRef.current = null
+      return
+    }
+
+    if (localMediaStreamRef.current) {
+      autoAttachMediaRef.current = null
+      return
+    }
+
+    const mode =
+      activeCall.mode === 'video' || activeCall.media_mode === 'video' ? 'audio_video' : 'audio'
+    const currentAttempt = autoAttachMediaRef.current
+
+    if (currentAttempt?.callId === activeCall.id && currentAttempt.mode === mode) {
+      return
+    }
+
+    autoAttachMediaRef.current = { callId: activeCall.id, mode }
+
+    void _handleAttachLocalMedia(mode).finally(() => {
+      if (
+        autoAttachMediaRef.current?.callId === activeCall.id &&
+        autoAttachMediaRef.current?.mode === mode
+      ) {
+        autoAttachMediaRef.current = null
+      }
+    })
+  }, [activeCall, sessionToken, view])
 
   useEffect(() => {
     if (!activeCall || activeCall.status !== 'active' || !turnCredentials) {
@@ -907,31 +998,26 @@ export function useCall(
     }
   }, [activeCall, turnCredentials])
 
-  // Poll Membrane WebRTC endpoint
+  // Poll Membrane WebRTC endpoint for media events.
+  // Deps intentionally exclude callWebRtcEndpoint to prevent restart loops —
+  // the poll itself updates endpoint state, which would tear down the interval.
+  const callWebRtcEndpointExistsRef = useRef(false)
   useEffect(() => {
-    if (!shouldPollMembraneEndpoint({
-      activeCall,
-      sessionToken,
-      view,
-      endpointExists: Boolean(callWebRtcEndpoint?.exists)
-    })) {
-      console.log('[membrane] poll skipped', { callStatus: activeCall?.status, endpointExists: Boolean(callWebRtcEndpoint?.exists), view })
+    callWebRtcEndpointExistsRef.current = Boolean(callWebRtcEndpoint?.exists)
+  }, [callWebRtcEndpoint?.exists])
+
+  useEffect(() => {
+    if (!activeCall || activeCall.status !== 'active' || !sessionToken || view !== 'chat') {
       return
     }
 
-    console.log('[membrane] poll started', { callId: activeCall?.id, endpointExists: callWebRtcEndpoint?.exists })
-
-    if (!sessionToken || !activeCall) {
-      return
-    }
     const token2 = sessionToken
-    const currentCall = activeCall
-    const callId = currentCall.id
+    const callId = activeCall.id
     let cancelled = false
     let inFlight = false
 
     async function syncMembraneWebRtcQueue() {
-      if (cancelled || inFlight) {
+      if (cancelled || inFlight || !callWebRtcEndpointExistsRef.current) {
         return
       }
 
@@ -946,19 +1032,20 @@ export function useCall(
 
         if (!cancelled) {
           if (response.mediaEvents.length > 0) {
-            console.log('[membrane] poll got events:', response.mediaEvents.length, response.mediaEvents.map((e: string) => e.slice(0, 50)))
+            console.log('[membrane] poll got events:', response.mediaEvents.length)
           }
+          callWebRtcEndpointExistsRef.current = response.endpoint.exists
           setCallWebRtcEndpoint(response.endpoint)
           handleMembraneQueueBatch(response.mediaEvents)
         }
-      } catch (err) {
-        console.warn('[membrane] poll error', err)
+      } catch {
         // Ignore transient poll errors and continue interval polling.
       } finally {
         inFlight = false
       }
     }
 
+    console.log('[membrane] poll interval started for call', callId)
     void syncMembraneWebRtcQueue()
     const intervalId = window.setInterval(() => void syncMembraneWebRtcQueue(), 1_000)
 
@@ -966,39 +1053,25 @@ export function useCall(
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [activeCall, callWebRtcEndpoint?.exists, sessionToken, view])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCall?.id, activeCall?.status, sessionToken, view])
 
-  // ICE reconnection — monitor ICE connection state and re-bootstrap on transient failures
+  // ICE reconnection — only recover from hard failures.
+  // During track renegotiation browsers commonly dip into `disconnected`
+  // briefly; treating that as a full reconnect creates overlapping offers
+  // and duplicate local publications.
   useEffect(() => {
     if (!activeCall || activeCall.status !== 'active' || !membraneClientConnected) return
 
     const pc = getMembranePeerConnection(membraneClientRef.current)
     if (!pc) return
 
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-
     function handleIceStateChange() {
       const state = pc!.iceConnectionState
 
-      if (state === 'disconnected') {
-        // Brief disconnect — wait 3s then try reconnect
-        reconnectTimer = setTimeout(() => {
-          if (pc!.iceConnectionState === 'disconnected' || pc!.iceConnectionState === 'failed') {
-            // Clear the connect request ref so bootstrapActiveCallTransport allows a reconnect
-            membraneConnectRequestedCallIdRef.current = null
-            setMembraneClientConnected(false)
-          }
-        }, 3000)
-      } else if (state === 'failed') {
-        // Immediate reconnect attempt
+      if (state === 'failed') {
         membraneConnectRequestedCallIdRef.current = null
         setMembraneClientConnected(false)
-      } else if (state === 'connected') {
-        // Recovered — clear any pending reconnect timer
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer)
-          reconnectTimer = null
-        }
       }
     }
 
@@ -1006,7 +1079,6 @@ export function useCall(
 
     return () => {
       pc.removeEventListener('iceconnectionstatechange', handleIceStateChange)
-      if (reconnectTimer) clearTimeout(reconnectTimer)
     }
   }, [activeCall, membraneClientConnected])
 
@@ -1083,7 +1155,15 @@ export function useCall(
     }
 
     ensureMediaE2eeController().attach(connection)
-  }, [activeCall, mediaEncryptionSupported, membraneClientConnected, resolveCapabilityFailureMessage])
+  }, [
+    activeCall,
+    localAudioTrackCount,
+    localVideoTrackCount,
+    mediaEncryptionSupported,
+    membraneClientConnected,
+    membraneRemoteTracks.length,
+    resolveCapabilityFailureMessage
+  ])
 
   useEffect(() => {
     if (!activeCall || (activeCall.status !== 'ringing' && activeCall.status !== 'active')) {
@@ -1667,6 +1747,56 @@ export function useCall(
     setLoading(true)
 
     try {
+      const currentStream = localMediaStreamRef.current
+      const alreadyHasAudio = (currentStream?.getAudioTracks().length ?? 0) > 0
+      const alreadyHasVideo = (currentStream?.getVideoTracks().length ?? 0) > 0
+
+      if (currentStream && mode === 'audio' && alreadyHasVideo) {
+        await removeBoundLocalTracksByKind('video')
+
+        for (const track of currentStream.getVideoTracks()) {
+          hiddenVideoTrackStateRef.current.delete(track)
+          currentStream.removeTrack(track)
+          track.stop()
+        }
+
+        localMediaStreamRef.current = currentStream
+        syncLocalMediaState(currentStream)
+        return
+      }
+
+      if (currentStream && mode === 'audio_video' && !alreadyHasVideo) {
+        const videoStream = await window.navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        })
+
+        const videoTracks = videoStream.getVideoTracks()
+        for (const track of videoTracks) {
+          currentStream.addTrack(track)
+        }
+
+        if (membraneClientRef.current && membraneClientConnected) {
+          const bindings = await attachTracksWithBindings(
+            membraneClientRef.current,
+            currentStream,
+            videoTracks
+          )
+          membraneLocalTrackBindingsRef.current = [
+            ...membraneLocalTrackBindingsRef.current,
+            ...bindings
+          ]
+          membraneLocalTrackIdsRef.current = membraneLocalTrackBindingsRef.current.map((binding) => binding.trackId)
+        }
+
+        localMediaStreamRef.current = currentStream
+        syncLocalMediaState(currentStream)
+        return
+      }
+
       const result = await replaceLocalMediaStream({
         mode,
         currentStream: localMediaStreamRef.current,
@@ -1683,9 +1813,12 @@ export function useCall(
 
       localMediaStreamRef.current = result.stream
       membraneLocalTrackIdsRef.current = result.trackIds
-      setLocalMediaMode(result.localMediaMode)
-      setLocalAudioTrackCount(result.localAudioTrackCount)
-      setLocalVideoTrackCount(result.localVideoTrackCount)
+      membraneLocalTrackBindingsRef.current = result.stream.getTracks().map((track, index) => ({
+        trackId: result.trackIds[index] ?? '',
+        kind: track.kind as 'audio' | 'video',
+        mediaTrackId: track.id
+      })).filter((binding) => binding.trackId)
+      syncLocalMediaState(result.stream)
     } catch (error) {
       const message = describeMediaDeviceError(error)
       setBanner({ tone: 'error', message })
@@ -1702,11 +1835,10 @@ export function useCall(
       removeLocalTracksFromMembrane
     )
     membraneLocalTrackIdsRef.current = []
+    membraneLocalTrackBindingsRef.current = []
 
     localMediaStreamRef.current = null
-    setLocalMediaMode('none')
-    setLocalAudioTrackCount(0)
-    setLocalVideoTrackCount(0)
+    syncLocalMediaState(null)
     setBanner({
       tone: 'success',
       message: 'Local microphone/camera tracks were removed from the native Membrane pipeline.'
@@ -1738,6 +1870,68 @@ export function useCall(
     if (!activeCall) return
 
     const currentMode = localVideoTrackCount > 0 ? 'audio_video' : 'audio'
+    const currentStream = localMediaStreamRef.current
+
+    if (currentStream) {
+      const currentTrack =
+        kind === 'audio'
+          ? currentStream.getAudioTracks()[0] ?? null
+          : currentStream.getVideoTracks()[0] ?? null
+
+      if (currentTrack) {
+        try {
+          const replacementStream = await window.navigator.mediaDevices.getUserMedia({
+            audio: kind === 'audio' ? { deviceId: { exact: deviceId } } : false,
+            video:
+              kind === 'video'
+                ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                : false
+          })
+
+          const replacementTrack =
+            kind === 'audio'
+              ? replacementStream.getAudioTracks()[0] ?? null
+              : replacementStream.getVideoTracks()[0] ?? null
+
+          if (!replacementTrack) {
+            throw new Error(`Failed to open the selected ${kind} device.`)
+          }
+
+          const binding =
+            membraneLocalTrackBindingsRef.current.find(
+              (item) => item.kind === kind && item.mediaTrackId === currentTrack.id
+            ) ??
+            membraneLocalTrackBindingsRef.current.find((item) => item.kind === kind) ??
+            null
+
+          if (membraneClientRef.current && membraneClientConnected && binding) {
+            await replaceLocalTrackInMembrane(
+              membraneClientRef.current,
+              binding.trackId,
+              replacementTrack,
+              { kind, source: 'browser' }
+            )
+            binding.mediaTrackId = replacementTrack.id
+            membraneLocalTrackIdsRef.current = membraneLocalTrackBindingsRef.current.map((item) => item.trackId)
+          }
+
+          if (kind === 'video') {
+            hiddenVideoTrackStateRef.current.delete(currentTrack)
+          }
+
+          currentStream.removeTrack(currentTrack)
+          currentTrack.stop()
+          currentStream.addTrack(replacementTrack)
+          localMediaStreamRef.current = currentStream
+          syncLocalMediaState(currentStream)
+          return
+        } catch (error) {
+          const message = describeMediaDeviceError(error)
+          setBanner({ tone: 'error', message })
+          return
+        }
+      }
+    }
 
     try {
       const audioConstraint = kind === 'audio'
@@ -1766,9 +1960,12 @@ export function useCall(
 
       localMediaStreamRef.current = result.stream
       membraneLocalTrackIdsRef.current = result.trackIds
-      setLocalMediaMode(result.localMediaMode)
-      setLocalAudioTrackCount(result.localAudioTrackCount)
-      setLocalVideoTrackCount(result.localVideoTrackCount)
+      membraneLocalTrackBindingsRef.current = result.stream.getTracks().map((track, index) => ({
+        trackId: result.trackIds[index] ?? '',
+        kind: track.kind as 'audio' | 'video',
+        mediaTrackId: track.id
+      })).filter((binding) => binding.trackId)
+      syncLocalMediaState(result.stream)
     } catch (error) {
       const message = describeMediaDeviceError(error)
       setBanner({ tone: 'error', message })
@@ -1886,6 +2083,8 @@ export function useCall(
     transportError,
     transportReadiness,
     turnCredentials,
+    localAudioTrackCount,
+    localVideoTrackCount,
     setActiveCall,
     callSignals,
     membraneRemoteEndpoints,

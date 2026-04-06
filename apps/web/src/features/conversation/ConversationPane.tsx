@@ -148,6 +148,10 @@ export function ConversationPane({
     void call.handleEndCall()
   }, [call.handleEndCall])
 
+  useEffect(() => {
+    setCallCameraOn(call.localVideoTrackCount > 0)
+  }, [call.localVideoTrackCount])
+
   // Track call lifecycle
   useEffect(() => {
     const prev = previousCallRef.current
@@ -328,14 +332,6 @@ export function ConversationPane({
     return undefined
   }, [call.activeCall?.status, endCall, isOutgoingCall])
 
-  // Auto-attach local media when call becomes active
-  useEffect(() => {
-    if (call.activeCall?.status === 'active' && !call.localMediaStreamRef.current) {
-      const mode = call.activeCall.mode === 'video' || call.activeCall.media_mode === 'video' ? 'audio_video' : 'audio'
-      attachLocalMedia(mode)
-    }
-  }, [attachLocalMedia, call.activeCall?.media_mode, call.activeCall?.mode, call.activeCall?.status, call.localMediaStreamRef])
-
   // Build remote stream from Membrane remote tracks
   const remoteStream = useMemo(() => {
     const readyTracks = call.membraneRemoteTracks
@@ -367,14 +363,12 @@ export function ConversationPane({
     const hasVideo = (call.localMediaStreamRef.current?.getVideoTracks().length ?? 0) > 0
 
     if (hasVideo) {
-      // Downgrade to audio-only — replaces stream and removes video tracks from Membrane
       await call._handleAttachLocalMedia('audio')
-      setCallCameraOn(false)
     } else {
-      // Upgrade to audio+video — replaces stream and adds video tracks to Membrane
       await call._handleAttachLocalMedia('audio_video')
-      setCallCameraOn(true)
     }
+
+    setCallCameraOn((call.localMediaStreamRef.current?.getVideoTracks().length ?? 0) > 0)
   }, [call])
 
   // Screen sharing toggle
@@ -623,13 +617,11 @@ export function ConversationPane({
       ? `Verified media encryption${call.currentKeyEpoch ? ` · epoch ${call.currentKeyEpoch}` : ''}`
       : call.mediaEncryptionState === 'encrypted'
         ? `Encrypted media${call.currentKeyEpoch ? ` · epoch ${call.currentKeyEpoch}` : ''}`
-        : call.mediaEncryptionState === 'negotiating'
-          ? 'Negotiating media encryption…'
-          : call.mediaEncryptionState === 'error'
+        : call.mediaEncryptionState === 'error'
             ? 'Media encryption unavailable'
             : undefined
   const activeScreenStatusLabel = call.directCallStatus === 'active'
-    ? mediaEncryptionLabel
+    ? (mediaEncryptionLabel ?? directCallStatusLabel)
     : (capabilityStatusLabel ?? directCallStatusLabel)
 
   if (profileOpen && resolvedChat) {

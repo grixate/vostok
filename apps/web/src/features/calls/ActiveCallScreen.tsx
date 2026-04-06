@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import { CallControls } from './CallControls.tsx'
 import { SelfPreviewPiP } from './SelfPreviewPiP.tsx'
 import { ScreenShareView } from './ScreenShareView.tsx'
@@ -70,13 +70,54 @@ export function ActiveCallScreen({
   onBack,
 }: ActiveCallScreenProps) {
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const duration = useCallTimer(true)
   const [layout, setLayout] = useState<'mobile' | 'tablet' | 'desktop'>('desktop')
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const showVideo = true
   const isGroup = participants.length > 1
+  const showVideo = true
+  const remoteTrackSignature = remoteStream
+    ? remoteStream
+        .getTracks()
+        .map((track) => `${track.kind}:${track.id}:${track.enabled ? 'on' : 'off'}`)
+        .join('|')
+    : 'none'
+  const remoteAudioSignature = remoteStream
+    ? remoteStream
+        .getAudioTracks()
+        .map((track) => `${track.id}:${track.enabled ? 'on' : 'off'}`)
+        .join('|')
+    : 'none'
+  const remoteVideoSignature = remoteStream
+    ? remoteStream
+        .getVideoTracks()
+        .map((track) => `${track.id}:${track.enabled ? 'on' : 'off'}`)
+        .join('|')
+    : 'none'
+  const localTrackSignature = localStream
+    ? localStream
+        .getTracks()
+        .map((track) => `${track.kind}:${track.id}:${track.enabled ? 'on' : 'off'}`)
+        .join('|')
+    : 'none'
+  const remoteAudioStream = useMemo(() => {
+    if (!remoteStream) {
+      return null
+    }
+
+    const tracks = remoteStream.getAudioTracks()
+    return tracks.length > 0 ? new MediaStream(tracks) : null
+  }, [remoteStream, remoteAudioSignature])
+  const remoteVideoStream = useMemo(() => {
+    if (!remoteStream) {
+      return null
+    }
+
+    const tracks = remoteStream.getVideoTracks()
+    return tracks.length > 0 ? new MediaStream(tracks) : null
+  }, [remoteStream, remoteVideoSignature])
 
   useEffect(() => {
     const el = containerRef.current
@@ -93,15 +134,30 @@ export function ActiveCallScreen({
 
   useEffect(() => {
     const el = remoteVideoRef.current
-    if (el && remoteStream) el.srcObject = remoteStream
+    if (el && remoteVideoStream) {
+      el.srcObject = remoteVideoStream
+      void el.play().catch(() => undefined)
+    }
     return () => { if (el) el.srcObject = null }
-  }, [remoteStream])
+  }, [remoteVideoStream, remoteVideoSignature])
+
+  useEffect(() => {
+    const el = remoteAudioRef.current
+    if (el && remoteAudioStream) {
+      el.srcObject = remoteAudioStream
+      void el.play().catch(() => undefined)
+    }
+    return () => { if (el) el.srcObject = null }
+  }, [remoteAudioStream, remoteAudioSignature])
 
   useEffect(() => {
     const el = localVideoRef.current
-    if (el && localStream) el.srcObject = localStream
+    if (el && localStream) {
+      el.srcObject = localStream
+      void el.play().catch(() => undefined)
+    }
     return () => { if (el) el.srcObject = null }
-  }, [localStream])
+  }, [localStream, localTrackSignature])
 
   // ── Shared JSX fragments ──────────────────────────────────────────────
 
@@ -243,6 +299,7 @@ export function ActiveCallScreen({
     if (isGroup) {
       return (
         <div ref={containerRef} className="ac ac--mobile">
+          <audio ref={remoteAudioRef} autoPlay playsInline />
           {headerBar}
           <div className="ac__video-area">
             <div className="ac__group-stacked">
@@ -256,6 +313,7 @@ export function ActiveCallScreen({
 
     return (
       <div ref={containerRef} className="ac ac--mobile">
+        <audio ref={remoteAudioRef} autoPlay playsInline />
         <div className="ac__video-area">
           {screenShareArea ?? remoteVideoOrPlaceholder}
           {floatingHeader}
@@ -271,6 +329,7 @@ export function ActiveCallScreen({
     if (isGroup) {
       return (
         <div ref={containerRef} className="ac ac--tablet">
+          <audio ref={remoteAudioRef} autoPlay playsInline />
           {headerBar}
           <div className="ac__video-area">
             <div className="ac__group-stacked">
@@ -284,6 +343,7 @@ export function ActiveCallScreen({
 
     return (
       <div ref={containerRef} className="ac ac--tablet">
+        <audio ref={remoteAudioRef} autoPlay playsInline />
         <div className="ac__video-area">
           {screenShareArea ?? remoteVideoOrPlaceholder}
           {floatingHeader}
@@ -298,6 +358,7 @@ export function ActiveCallScreen({
   if (isGroup) {
     return (
       <div ref={containerRef} className="ac ac--desktop">
+        <audio ref={remoteAudioRef} autoPlay playsInline />
         {headerBar}
         <div className="ac__video-area">
           {screenShareArea ?? (
@@ -313,6 +374,7 @@ export function ActiveCallScreen({
 
   return (
     <div ref={containerRef} className="ac ac--desktop">
+      <audio ref={remoteAudioRef} autoPlay playsInline />
       {headerBar}
       <div className="ac__video-area">
         {screenShareArea ?? remoteVideoOrPlaceholder}

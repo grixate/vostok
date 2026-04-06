@@ -166,9 +166,19 @@ export function configureMembraneTurnServers(
     internalClient.rtcConfig = { iceServers: [] }
   }
 
-  internalClient.rtcConfig.iceServers = turnCredentials
-    ? turnCredentialsToIceServers(turnCredentials)
-    : []
+  // For localhost development, use only STUN (no external TURN needed).
+  // The Membrane engine's integrated TURN handles server-side ICE.
+  const isLocalhost = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+  if (isLocalhost) {
+    internalClient.rtcConfig.iceServers = []
+    internalClient.rtcConfig.iceTransportPolicy = 'all'
+  } else {
+    internalClient.rtcConfig.iceServers = turnCredentials
+      ? turnCredentialsToIceServers(turnCredentials)
+      : []
+  }
 }
 
 export function receiveMembraneMediaEvent(client: MembraneClient, mediaEvent: string): void {
@@ -189,14 +199,50 @@ export async function attachLocalTracksToMembrane(
   const trackIds: string[] = []
 
   for (const track of stream.getTracks()) {
-    const trackId = await client.addTrack(track, stream, {
-      kind: track.kind as MembraneTrackMetadata['kind'],
-      source: 'browser'
-    })
+    const trackId = await attachLocalTrackToMembrane(client, track, stream)
     trackIds.push(trackId)
   }
 
   return trackIds
+}
+
+export async function attachLocalTrackToMembrane(
+  client: MembraneClient,
+  track: MediaStreamTrack,
+  stream: MediaStream,
+  source: MembraneTrackMetadata['source'] = 'browser'
+): Promise<string> {
+  const trackStream = new MediaStream([track])
+  const streamForTrack = stream.getTracks().some((candidate) => candidate.id === track.id)
+    ? trackStream
+    : stream
+
+  return client.addTrack(track, streamForTrack, {
+    kind: track.kind as MembraneTrackMetadata['kind'],
+    source
+  })
+}
+
+export async function replaceLocalTrackInMembrane(
+  client: MembraneClient,
+  trackId: string,
+  track: MediaStreamTrack,
+  metadata?: Partial<MembraneTrackMetadata>
+): Promise<boolean> {
+  const replaceTrack = (
+    client as unknown as {
+      replaceTrack: (
+        trackId: string,
+        track: MediaStreamTrack,
+        metadata?: Partial<MembraneTrackMetadata>
+      ) => Promise<boolean>
+    }
+  ).replaceTrack
+
+  return replaceTrack.call(client, trackId, track, {
+    kind: track.kind as MembraneTrackMetadata['kind'],
+    source: metadata?.source ?? 'browser'
+  })
 }
 
 export async function removeLocalTracksFromMembrane(
