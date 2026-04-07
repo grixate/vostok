@@ -102,7 +102,8 @@ function serverInfosEqual(left: ServerInfo | null, right: ServerInfo | null): bo
 }
 
 function App() {
-  const servers = useServers()
+  const existingChatActivityRef = useRef<(chatId: string) => void>(() => {})
+  const servers = useServers(existingChatActivityRef)
   const [storedDevice, setStoredDevice] = useState<StoredDevice | null>(null)
   const [sessionToken, setSessionToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -158,7 +159,10 @@ function App() {
       <AppContext.Provider value={appContextValue}>
         <ThemeContext.Provider value={themeContextValue}>
           <UIContext.Provider value={uiContextValue}>
-            <AppInner servers={servers} />
+            <AppInner
+              existingChatActivityRef={existingChatActivityRef}
+              servers={servers}
+            />
           </UIContext.Provider>
         </ThemeContext.Provider>
       </AppContext.Provider>
@@ -166,7 +170,13 @@ function App() {
   )
 }
 
-function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
+function AppInner({
+  servers,
+  existingChatActivityRef
+}: {
+  servers: ReturnType<typeof useServers>
+  existingChatActivityRef: React.RefObject<(chatId: string) => void>
+}) {
   const {
     contextMenuMessage,
     profileOverlayOpen,
@@ -305,10 +315,6 @@ function AppInner({ servers }: { servers: ReturnType<typeof useServers> }) {
 
     updateServer(server.id, { device })
   }, [storedDevice, updateServer])
-
-  // Ref-based callback so useChatList (called first) can notify useMessages
-  // (called later) about chat:activity events on non-active, existing chats.
-  const existingChatActivityRef = useRef<(chatId: string) => void>(() => {})
 
   const chatList = useChatList(appView, servers)
   const deferredActiveChatId = useDeferredValue(chatList.activeChatId)

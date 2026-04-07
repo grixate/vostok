@@ -160,14 +160,16 @@ export function configureMembraneTurnServers(
 ): void {
   const internalClient = client as unknown as {
     rtcConfig?: RTCConfiguration
+    __baseIceServers?: RTCIceServer[]
   }
 
   if (!internalClient.rtcConfig) {
     internalClient.rtcConfig = { iceServers: [] }
   }
 
-  // For localhost development, use only STUN (no external TURN needed).
-  // The Membrane engine's integrated TURN handles server-side ICE.
+  // For localhost development, rely on Membrane's integrated TURN, but still
+  // allow host candidates. After track renegotiation the loopback/host path is
+  // often the only route that stays connected cleanly in local dev.
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 
@@ -178,10 +180,14 @@ export function configureMembraneTurnServers(
     internalClient.rtcConfig.iceServers = turnCredentials
       ? turnCredentialsToIceServers(turnCredentials)
       : []
+    internalClient.rtcConfig.iceTransportPolicy = 'all'
   }
+
+  internalClient.__baseIceServers = [...(internalClient.rtcConfig.iceServers ?? [])]
 }
 
 export function receiveMembraneMediaEvent(client: MembraneClient, mediaEvent: string): void {
+  resetIntegratedTurnServers(client, mediaEvent)
   client.receiveMediaEvent(mediaEvent)
 }
 
@@ -275,4 +281,34 @@ function toTrackKind(value: string | undefined): 'audio' | 'video' | null {
   }
 
   return null
+}
+
+function resetIntegratedTurnServers(client: MembraneClient, mediaEvent: string): void {
+  const internalClient = client as unknown as {
+    rtcConfig?: RTCConfiguration
+    __baseIceServers?: RTCIceServer[]
+  }
+
+  if (!internalClient.rtcConfig) {
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(mediaEvent) as {
+      data?: {
+        data?: {
+          integratedTurnServers?: unknown
+        }
+      }
+      type?: string
+    }
+
+    if (!Array.isArray(parsed.data?.data?.integratedTurnServers)) {
+      return
+    }
+
+    internalClient.rtcConfig.iceServers = [...(internalClient.__baseIceServers ?? [])]
+  } catch {
+    // Ignore malformed events and let the Membrane client handle them.
+  }
 }

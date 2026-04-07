@@ -14,6 +14,7 @@ type CallStateHandler = {
   onState: (call: CallSession | null) => void
   onParticipants?: (payload: { callId: string; participants: CallParticipant[]; room: CallRoomState | null }) => void
   onSignal?: (payload: { callId: string; signal: CallSignal }) => void
+  onMediaEvent?: (payload: { callId: string; targetDeviceId: string; event: string }) => void
   onError?: () => void
 }
 
@@ -188,12 +189,20 @@ export function subscribeToCallStream(
     }
   })
 
+  channel.on('call:media_event', (payload: unknown) => {
+    const mediaEventPayload = readMediaEventPayload(payload)
+
+    if (mediaEventPayload) {
+      handlers.onMediaEvent?.(mediaEventPayload)
+    }
+  })
+
   channel
     .join()
     .receive('error', () => handlers.onError?.())
 
   return () => {
-    teardownChannel(channel, ['call:state', 'call:participant_state', 'call:signal'])
+    teardownChannel(channel, ['call:state', 'call:participant_state', 'call:signal', 'call:media_event'])
   }
 }
 
@@ -603,6 +612,34 @@ function readSignalPayload(payload: unknown): { callId: string; signal: CallSign
   return {
     callId: value.call_id,
     signal
+  }
+}
+
+function readMediaEventPayload(
+  payload: unknown
+): { callId: string; targetDeviceId: string; event: string } | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const value = payload as {
+    call_id?: unknown
+    target_device_id?: unknown
+    event?: unknown
+  }
+
+  if (
+    typeof value.call_id !== 'string' ||
+    typeof value.target_device_id !== 'string' ||
+    typeof value.event !== 'string'
+  ) {
+    return null
+  }
+
+  return {
+    callId: value.call_id,
+    targetDeviceId: value.target_device_id,
+    event: value.event
   }
 }
 

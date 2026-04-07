@@ -194,6 +194,9 @@ export function useCall(
   const membraneClientCallIdRef = useRef<string | null>(null)
   const membraneLocalTrackIdsRef = useRef<string[]>([])
   const membraneLocalTrackBindingsRef = useRef<LocalTrackBinding[]>([])
+  const membraneOfferInitializedRef = useRef(false)
+  const membraneIntegratedTurnSeenRef = useRef(false)
+  const membranePendingTurnForRenegotiationRef = useRef(false)
   const screenShareTrackIdsRef = useRef<string[]>([])
   const localMediaStreamRef = useRef<MediaStream | null>(null)
   const transportBootstrapRef = useRef<Promise<void> | null>(null)
@@ -208,6 +211,7 @@ export function useCall(
   const directMediaReadySentForCallRef = useRef<string | null>(null)
   const localGeneratedCallKeysRef = useRef<Record<string, Record<number, string>>>({})
   const hiddenVideoTrackStateRef = useRef(new WeakMap<MediaStreamTrack, boolean>())
+  const recentMembraneEventsRef = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
     callSignalsRef.current = callSignals
@@ -228,6 +232,9 @@ export function useCall(
     membraneClientCallIdRef.current = null
     membraneLocalTrackIdsRef.current = []
     membraneLocalTrackBindingsRef.current = []
+    membraneOfferInitializedRef.current = false
+    membraneIntegratedTurnSeenRef.current = false
+    membranePendingTurnForRenegotiationRef.current = false
     membraneConnectRequestedCallIdRef.current = null
     setMembraneClientReady(false)
     setMembraneClientConnected(false)
@@ -252,6 +259,7 @@ export function useCall(
     directMediaFingerprintRef.current = null
     directMediaReadySentForCallRef.current = null
     hiddenVideoTrackStateRef.current = new WeakMap()
+    recentMembraneEventsRef.current.clear()
     setMediaEncryptionState('disabled')
     setMediaEncryptionFingerprint(null)
     setCurrentKeyEpoch(null)
@@ -262,6 +270,88 @@ export function useCall(
     setLocalMediaMode('none')
     setLocalAudioTrackCount(0)
     setLocalVideoTrackCount(0)
+  }
+
+  function filterFreshMembraneEvents(events: string[]): string[] {
+    if (events.length === 0) {
+      return events
+    }
+
+    const now = Date.now()
+    const recentEvents = recentMembraneEventsRef.current
+    let allowedPendingIntegratedTurn = false
+
+    for (const [event, seenAt] of recentEvents) {
+      if (now - seenAt > 15_000) {
+        recentEvents.delete(event)
+      }
+    }
+
+    const freshEvents: string[] = []
+
+    for (const event of events) {
+      const negotiationEventKind = readMembraneNegotiationEventKind(event)
+      const shouldAllowPendingIntegratedTurn =
+        negotiationEventKind === 'integratedTurnServers' &&
+        membranePendingTurnForRenegotiationRef.current &&
+        !allowedPendingIntegratedTurn
+
+      if (shouldAllowPendingIntegratedTurn) {
+        allowedPendingIntegratedTurn = true
+        recentEvents.set(event, now)
+        freshEvents.push(event)
+        continue
+      }
+
+      const seenAt = recentEvents.get(event)
+
+      if (seenAt != null && now - seenAt <= 15_000) {
+        continue
+      }
+
+      recentEvents.set(event, now)
+      freshEvents.push(event)
+    }
+
+    return freshEvents
+  }
+
+  function readMembraneNegotiationEventKind(eventPayload: string): string | null {
+    try {
+      const parsed = JSON.parse(eventPayload) as {
+        type?: unknown
+        data?: {
+          type?: unknown
+          data?: {
+            type?: unknown
+            integratedTurnServers?: unknown
+          }
+        }
+      }
+
+      if (
+        typeof parsed.data?.data?.type === 'string' &&
+        parsed.data.data.type.length > 0
+      ) {
+        return parsed.data.data.type
+      }
+
+      if (
+        typeof parsed.data?.type === 'string' &&
+        parsed.data.type !== 'custom' &&
+        parsed.data.type.length > 0
+      ) {
+        return parsed.data.type
+      }
+
+      if (Array.isArray(parsed.data?.data?.integratedTurnServers)) {
+        return 'integratedTurnServers'
+      }
+    } catch {
+      return null
+    }
+
+    return null
   }
 
   const localDeviceId = storedDevice?.deviceId ?? null
@@ -387,6 +477,11 @@ export function useCall(
     const client = createMembraneClient({
       onSendMediaEvent(mediaEvent) {
         console.log('[membrane] sendMediaEvent', mediaEvent.slice(0, 80))
+
+        if (mediaEvent.includes('"renegotiateTracks"')) {
+          membranePendingTurnForRenegotiationRef.current = true
+        }
+
         void pushCallWebRtcMediaEvent(sessionToken, activeCallId, mediaEvent)
           .then((response) => {
             setCallWebRtcEndpoint(response.endpoint)
@@ -446,6 +541,9 @@ export function useCall(
     membraneClientCallIdRef.current = activeCallId
     membraneLocalTrackIdsRef.current = []
     membraneLocalTrackBindingsRef.current = []
+    membraneOfferInitializedRef.current = false
+    membraneIntegratedTurnSeenRef.current = false
+    membranePendingTurnForRenegotiationRef.current = false
     setMembraneClientReady(true)
     setMembraneClientConnected(false)
     setMembraneRemoteEndpointCount(0)
@@ -510,6 +608,21 @@ export function useCall(
     }
   )
 
+  const handleRealtimeCallMediaEvent = useEffectEvent(
+    (payload: { callId: string; targetDeviceId: string; event: string }) => {
+      if (
+        !activeCall ||
+        payload.callId !== activeCall.id ||
+        !localDeviceId ||
+        payload.targetDeviceId !== localDeviceId
+      ) {
+        return
+      }
+
+      handleMembraneQueueBatch([payload.event])
+    }
+  )
+
   const handleRealtimeCallSubscriptionError = useEffectEvent(() => {
     setBanner({
       tone: 'error',
@@ -518,22 +631,45 @@ export function useCall(
   })
 
   const handleMembraneQueueBatch = useEffectEvent((events: string[]) => {
-    if (events.length === 0) {
+    const freshEvents = filterFreshMembraneEvents(events)
+
+    if (freshEvents.length === 0) {
       return
     }
 
-    console.log('[membrane] processing batch:', events.length, 'events, hasClient:', !!membraneClientRef.current)
+    console.log('[membrane] processing batch:', freshEvents.length, 'events, hasClient:', !!membraneClientRef.current)
 
-    setCallWebRtcMediaEvents((current) => [...events.reverse(), ...current].slice(0, 8))
+    setCallWebRtcMediaEvents((current) => [[...freshEvents].reverse(), current].flat().slice(0, 8))
 
-    const nativeEvents = events.filter((eventPayload) => readMembraneNativeEventType(eventPayload) !== null)
+    const nativeEvents = freshEvents.filter((eventPayload) => readMembraneNativeEventType(eventPayload) !== null)
 
-    console.log('[membrane] native events:', nativeEvents.length, 'of', events.length, nativeEvents.map(e => e.slice(0, 60)))
+    console.log('[membrane] native events:', nativeEvents.length, 'of', freshEvents.length, nativeEvents.map(e => e.slice(0, 60)))
 
     if (nativeEvents.length > 0 && membraneClientRef.current) {
       for (const eventPayload of nativeEvents) {
         try {
+          const isIntegratedTurnEvent = eventPayload.includes('"integratedTurnServers"')
+          const negotiationEventKind = readMembraneNegotiationEventKind(eventPayload)
+          const peerConnection = getMembranePeerConnection(membraneClientRef.current)
+
+          if (negotiationEventKind === 'answer' && peerConnection?.signalingState === 'stable') {
+            console.warn('[membrane] skipping stale answer while signalingState=stable')
+            continue
+          }
+
+          if (isIntegratedTurnEvent) {
+            if (membraneIntegratedTurnSeenRef.current && !membranePendingTurnForRenegotiationRef.current) {
+              console.warn('[membrane] skipping duplicate integratedTurnServers after initial bootstrap')
+              continue
+            }
+
+            membraneIntegratedTurnSeenRef.current = true
+            membraneOfferInitializedRef.current = true
+            membranePendingTurnForRenegotiationRef.current = false
+          }
+
           receiveMembraneMediaEvent(membraneClientRef.current, eventPayload)
+
           console.log('[membrane] fed event to client OK')
         } catch (err) {
           console.error('[membrane] receiveMediaEvent FAILED:', err)
@@ -932,7 +1068,7 @@ export function useCall(
       sessionToken,
       storedDeviceId: storedDevice?.deviceId ?? null,
       view
-    })) {
+    }) || isEndingCall) {
       return
     }
 
@@ -943,6 +1079,8 @@ export function useCall(
   }, [
     activeCall?.id,
     activeCall?.status,
+    isEndingCall,
+    membraneClientConnected,
     sessionToken,
     storedDevice?.deviceId,
     view
@@ -1065,20 +1203,54 @@ export function useCall(
 
     const pc = getMembranePeerConnection(membraneClientRef.current)
     if (!pc) return
+    const peerConnection = pc
+
+    let disconnectedTimeoutId: number | null = null
+
+    function requestReconnect() {
+      resetMembraneClient()
+      membraneConnectRequestedCallIdRef.current = null
+      setMembraneClientConnected(false)
+    }
 
     function handleIceStateChange() {
-      const state = pc!.iceConnectionState
+      const state = peerConnection.iceConnectionState
 
       if (state === 'failed') {
-        membraneConnectRequestedCallIdRef.current = null
-        setMembraneClientConnected(false)
+        if (disconnectedTimeoutId != null) {
+          window.clearTimeout(disconnectedTimeoutId)
+          disconnectedTimeoutId = null
+        }
+        requestReconnect()
+        return
+      }
+
+      if (state === 'disconnected') {
+        if (disconnectedTimeoutId == null) {
+          disconnectedTimeoutId = window.setTimeout(() => {
+            disconnectedTimeoutId = null
+
+            if (peerConnection.iceConnectionState === 'disconnected') {
+              requestReconnect()
+            }
+          }, 3_000)
+        }
+        return
+      }
+
+      if (disconnectedTimeoutId != null) {
+        window.clearTimeout(disconnectedTimeoutId)
+        disconnectedTimeoutId = null
       }
     }
 
-    pc.addEventListener('iceconnectionstatechange', handleIceStateChange)
+    peerConnection.addEventListener('iceconnectionstatechange', handleIceStateChange)
 
     return () => {
-      pc.removeEventListener('iceconnectionstatechange', handleIceStateChange)
+      if (disconnectedTimeoutId != null) {
+        window.clearTimeout(disconnectedTimeoutId)
+      }
+      peerConnection.removeEventListener('iceconnectionstatechange', handleIceStateChange)
     }
   }, [activeCall, membraneClientConnected])
 
@@ -1243,6 +1415,10 @@ export function useCall(
       membraneClientConnected
     )
 
+    if (isEndingCall) {
+      return
+    }
+
     if (directMediaSyncState === 'skip') {
       return
     }
@@ -1315,7 +1491,7 @@ export function useCall(
     return () => {
       cancelled = true
     }
-  }, [activeCall, callSignals, localDeviceId, mediaEncryptionSupported, membraneClientConnected, sessionToken])
+  }, [activeCall, callSignals, isEndingCall, localDeviceId, mediaEncryptionSupported, membraneClientConnected, sessionToken])
 
   // Subscribe to call stream
   useEffect(() => {
@@ -1339,9 +1515,12 @@ export function useCall(
       onSignal(payload) {
         handleRealtimeCallSignal(payload)
       },
+      onMediaEvent(payload) {
+        handleRealtimeCallMediaEvent(payload)
+      },
       onError: handleRealtimeCallSubscriptionError
     })
-  }, [activeCallScope, deferredActiveChatId, sessionToken, view])
+  }, [activeCallScope, deferredActiveChatId, handleRealtimeCallMediaEvent, sessionToken, view])
 
   async function handleStartCall(mode: 'voice' | 'video' | 'group') {
     const rawActiveChatId = getRawChatId(activeChatId)

@@ -82,6 +82,8 @@ defmodule VostokServer.Messaging do
 
   alias VostokServer.Repo
 
+  @messages_seq_cache_key {__MODULE__, :messages_seq_supported}
+
   def list_chats_for_user(user_id, device_id \\ nil) when is_binary(user_id) do
     from(chat in Chat,
       join: membership in ChatMember,
@@ -513,6 +515,7 @@ defmodule VostokServer.Messaging do
              is_map(opts) do
     limit = parse_positive_integer(opts["limit"], 50)
     before_cursor = opts["before"]
+    supports_message_seq? = messages_seq_supported?()
 
     with {:ok, _membership} <- ensure_membership(chat_id, user_id) do
       # Primary sort by inserted_at + id; seq is a tiebreaker for messages
@@ -520,11 +523,7 @@ defmodule VostokServer.Messaging do
       query =
         from(message in Message,
           where: message.chat_id == ^chat_id,
-          order_by: [
-            desc: message.inserted_at,
-            desc: fragment("COALESCE(?, 0)", message.seq),
-            desc: message.id
-          ],
+          order_by: ^message_list_order(supports_message_seq?),
           limit: ^(limit + 1),
           preload: [
             recipient_envelopes: ^recipient_query(),
@@ -571,6 +570,61 @@ defmodule VostokServer.Messaging do
     do: min(value, 200)
 
   defp parse_positive_integer(_, default), do: default
+
+  defp maybe_assign_message_seq(multi) do
+    if messages_seq_supported?() do
+      Multi.run(multi, :assign_seq, fn repo, %{message: message} ->
+        {1, [%{seq: seq}]} =
+          from(m in Message, where: m.id == ^message.id, select: %{seq: field(m, :seq)})
+          |> repo.update_all(set: [seq: dynamic([m], fragment("nextval('messages_chat_seq')"))])
+
+        {:ok, seq}
+      end)
+    else
+      multi
+    end
+  end
+
+  defp message_list_order(true) do
+    [
+      desc: dynamic([message], message.inserted_at),
+      desc: dynamic([message], fragment("COALESCE(?, 0)", field(message, :seq))),
+      desc: dynamic([message], message.id)
+    ]
+  end
+
+  defp message_list_order(false) do
+    [
+      desc: dynamic([message], message.inserted_at),
+      desc: dynamic([message], message.id)
+    ]
+  end
+
+  defp messages_seq_supported? do
+    case :persistent_term.get(@messages_seq_cache_key, :unknown) do
+      :unknown ->
+        supported? =
+          case Ecto.Adapters.SQL.query(
+                 Repo,
+                 """
+                 SELECT 1
+                 FROM information_schema.columns
+                 WHERE table_name = 'messages' AND column_name = 'seq'
+                 LIMIT 1
+                 """,
+                 []
+               ) do
+            {:ok, %{num_rows: 1}} -> true
+            _ -> false
+          end
+
+        :persistent_term.put(@messages_seq_cache_key, supported?)
+        supported?
+
+      supported? ->
+        supported?
+    end
+  end
 
   def mark_chat_read(chat_id, user_id, current_device_id, attrs \\ %{})
 
@@ -771,13 +825,7 @@ defmodule VostokServer.Messaging do
            ) do
       Multi.new()
       |> Multi.insert(:message, build_message_changeset(chat_id, sender_device_id, normalized))
-      |> Multi.run(:assign_seq, fn repo, %{message: message} ->
-        {1, [%{seq: seq}]} =
-          from(m in Message, where: m.id == ^message.id, select: %{seq: m.seq})
-          |> repo.update_all(set: [seq: dynamic([m], fragment("nextval('messages_chat_seq')"))])
-
-        {:ok, seq}
-      end)
+      |> maybe_assign_message_seq()
       |> Multi.run(:recipient_envelopes, fn repo, %{message: message} ->
         insert_recipient_envelopes(
           repo,

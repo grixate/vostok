@@ -19,6 +19,7 @@ import {
 import {
   getServerIdFromQualifiedChatId,
   getRawChatId,
+  qualifyChatId,
   type ServerConnectionStatus,
   type ServerEntry
 } from '../lib/multi-server.ts'
@@ -49,7 +50,9 @@ function chatListsEqual(left: ChatSummary[], right: ChatSummary[]): boolean {
   })
 }
 
-export function useServers() {
+export function useServers(
+  existingChatActivityRef?: React.RefObject<(chatId: string) => void>
+) {
   const [servers, setServers] = useState<ServerEntry[]>(() => loadServers())
   const [activeServerId, setActiveServerIdState] = useState<string | null>(() => readActiveServerId())
   const [statusByServerId, setStatusByServerId] = useState<Record<string, ServerConnectionStatus>>({})
@@ -380,14 +383,11 @@ export function useServers() {
           connection.unsubscribePresence?.()
           connection.unsubscribeUser = connection.realtime.subscribeToUserStream(me.user.id, {
             onChatActivity(rawChatId) {
-              void refreshServerChats(server.id).catch(() => undefined)
-              setChatsByServerId((current) => {
-                const existing = current.get(server.id) ?? []
-                if (existing.some((chat) => chat.id === rawChatId)) {
-                  return current
-                }
-                return current
-              })
+              void refreshServerChats(server.id)
+                .then(() => {
+                  existingChatActivityRef?.current?.(qualifyChatId(server.id, rawChatId))
+                })
+                .catch(() => undefined)
             }
           })
           connection.unsubscribePresence = connection.realtime.subscribeToPresence({
@@ -434,7 +434,14 @@ export function useServers() {
     // and by removeServer.  Returning a cleanup would tear down live WebSocket
     // subscriptions every time `servers` changes during bootstrap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyServerUpdate, refreshServerChats, servers, setServerStatus, updateChatsForServer])
+  }, [
+    applyServerUpdate,
+    existingChatActivityRef,
+    refreshServerChats,
+    servers,
+    setServerStatus,
+    updateChatsForServer
+  ])
 
   useEffect(() => {
     const selectedServer = activeServerId

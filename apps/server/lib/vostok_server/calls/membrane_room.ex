@@ -17,6 +17,10 @@ defmodule VostokServer.Calls.MembraneRoom do
   alias Membrane.RTC.Engine.Message.EndpointMessage
   alias Membrane.RTC.Engine.Message.EndpointRemoved
 
+  alias VostokServer.Calls.CallSession
+  alias VostokServer.Repo
+  alias VostokServerWeb.Endpoint
+
   @log_file "/tmp/vostok-membrane.log"
 
   defp mlog(msg) do
@@ -111,6 +115,7 @@ defmodule VostokServer.Calls.MembraneRoom do
        call_id: call_id,
        engine_pid: engine_pid,
        mode: mode,
+       realtime_topic: call_topic(call_id),
        participants: %{},
        webrtc_endpoints: %{},
        outbound_media_events: %{}
@@ -149,14 +154,18 @@ defmodule VostokServer.Calls.MembraneRoom do
         state
       else
         mlog("CREATING ENDPOINT: #{endpoint_id}")
-        endpoint = %WebRTC{
-          rtc_engine: state.engine_pid,
-          owner: self(),
-          ice_name: endpoint_id,
-          handshake_opts: [client_mode: false, dtls_srtp: true],
-          integrated_turn_options: integrated_turn_options(),
-          metadata: metadata
-        }
+        turn_options = integrated_turn_options()
+        mlog("TURN OPTIONS for #{endpoint_id}: #{inspect(turn_options)}")
+
+        endpoint =
+          struct(WebRTC, %{
+            rtc_engine: state.engine_pid,
+            owner: self(),
+            ice_name: endpoint_id,
+            handshake_opts: [client_mode: false, dtls_srtp: true],
+            integrated_turn_options: turn_options,
+            metadata: metadata
+          })
 
         :ok = Engine.add_endpoint(state.engine_pid, endpoint, id: endpoint_id)
 
@@ -227,7 +236,13 @@ defmodule VostokServer.Calls.MembraneRoom do
         state
       ) do
     mlog("ENGINE EVENT for #{endpoint_id}: #{String.slice(to_string(event), 0, 200)}")
-    {:noreply, push_outbound_media_event(state, endpoint_id, event)}
+
+    next_state =
+      state
+      |> push_outbound_media_event(endpoint_id, event)
+      |> maybe_broadcast_media_event(endpoint_id, event)
+
+    {:noreply, next_state}
   end
 
   def handle_info(%EndpointCrashed{endpoint_id: endpoint_id, reason: reason}, state) do
@@ -311,28 +326,76 @@ defmodule VostokServer.Calls.MembraneRoom do
     |> update_in([:outbound_media_events], fn events -> Map.delete(events, endpoint_id) end)
   end
 
+  defp maybe_broadcast_media_event(%{realtime_topic: nil} = state, _endpoint_id, _event), do: state
+
+  defp maybe_broadcast_media_event(%{realtime_topic: topic, call_id: call_id} = state, endpoint_id, event) do
+    Endpoint.broadcast(topic, "call:media_event", %{
+      call_id: call_id,
+      target_device_id: endpoint_id,
+      event: event
+    })
+
+    state
+  end
+
   defp integrated_turn_options do
-    bind_ip =
+    explicit_bind_ip =
       Application.get_env(:vostok_server, :turn_bind_ip) ||
-        parse_ip(System.get_env("VOSTOK_TURN_BIND_IP")) ||
-        {0, 0, 0, 0}
+        parse_ip(System.get_env("VOSTOK_TURN_BIND_IP"))
+
+    explicit_public_ip =
+      Application.get_env(:vostok_server, :turn_public_ip) ||
+        parse_ip(System.get_env("VOSTOK_TURN_PUBLIC_IP"))
+
+    bind_ip =
+      explicit_bind_ip ||
+        default_turn_bind_ip()
 
     mock_ip =
-      Application.get_env(:vostok_server, :turn_public_ip) ||
-        parse_ip(System.get_env("VOSTOK_TURN_PUBLIC_IP")) ||
-        infer_turn_public_ip()
+      explicit_public_ip ||
+        default_turn_public_ip(bind_ip)
 
     [
       ip: bind_ip,
-      mock_ip: mock_ip || bind_ip,
+      mock_ip: mock_ip,
       ports_range: {50_000, 50_050}
     ]
   end
+
+  defp default_turn_bind_ip do
+    if endpoint_loopback_only?() or localhost_host?() do
+      {127, 0, 0, 1}
+    else
+      {0, 0, 0, 0}
+    end
+  end
+
+  defp default_turn_public_ip({127, 0, 0, 1}), do: {127, 0, 0, 1}
+  defp default_turn_public_ip(bind_ip), do: infer_turn_public_ip() || bind_ip
 
   defp infer_turn_public_ip do
     uri_host_ip() ||
       parse_ip(System.get_env("PHX_HOST")) ||
       first_non_loopback_ipv4()
+  end
+
+  defp endpoint_loopback_only? do
+    VostokServerWeb.Endpoint.config(:http)
+    |> Keyword.get(:ip)
+    |> loopback_ip?()
+  rescue
+    _ -> false
+  end
+
+  defp localhost_host? do
+    case System.get_env("PHX_HOST") do
+      nil ->
+        false
+
+      host ->
+        normalized = host |> String.trim() |> String.downcase()
+        normalized in ["localhost", "127.0.0.1", "::1"]
+    end
   end
 
   defp uri_host_ip do
@@ -366,6 +429,7 @@ defmodule VostokServer.Calls.MembraneRoom do
         |> Enum.find(fn
           {127, _, _, _} -> false
           {169, 254, _, _} -> false
+          {198, second, _, _} when second in 18..19 -> false
           {a, b, c, d} when is_integer(a) and is_integer(b) and is_integer(c) and is_integer(d) ->
             true
           _other ->
@@ -374,6 +438,23 @@ defmodule VostokServer.Calls.MembraneRoom do
       end)
     else
       _ -> nil
+    end
+  end
+
+  defp loopback_ip?({127, _, _, _}), do: true
+  defp loopback_ip?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  defp loopback_ip?(_other), do: false
+
+  defp call_topic(call_id) when is_binary(call_id) do
+    case Repo.get(CallSession, call_id) do
+      %CallSession{scope_type: "chat", chat_id: chat_id} when is_binary(chat_id) ->
+        "call:#{chat_id}"
+
+      %CallSession{scope_type: "call_room", call_room_id: room_id} when is_binary(room_id) ->
+        "call-room:#{room_id}"
+
+      _other ->
+        nil
     end
   end
 end
