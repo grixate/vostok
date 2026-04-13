@@ -18,7 +18,7 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - authenticated group-chat creation
 - group-title rename for active group chats
 - group-member admin controls (promote, demote, remove) for active group chats
-- group Sender Key rotation and inbound Sender Key visibility in active group chats
+- legacy group Sender Key visibility for decrypting older group history
 - detail-rail media gallery for recent attachments in the active chat
 - authenticated attachment uploads and encrypted file download
 - server-fetched link metadata previews for message URLs
@@ -31,20 +31,10 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - reply composer state with inline reply previews for current-thread messages
 - message edit/delete controls for outgoing messages
 - single pinned-message controls with a pinned-message banner in the active thread
-- persisted direct-chat session bootstrap with explicit initiator ephemeral keys, handshake assertions, and local session-key caching
-- new or re-handshaken direct-chat sessions now derive their local root key through an HKDF-based X3DH-style transcript
-- new or re-handshaken direct-chat sessions now seed distinct send and receive chains by initiator/recipient role
-- recipient-wrapped message encryption for devices with published encryption keys
-- per-message derived session-key encryption with local ratchet state and skipped-message handling when a full chat session map is available
-- session-encrypted headers now carry an explicit per-device ratchet version so future crypto migrations have a safe compatibility boundary
-- re-handshaken direct-chat sessions now mix the previous cached root into a new local ratchet epoch instead of blindly resetting chain state
-- session-encrypted headers now also carry a per-device local ratchet public key so peer key changes can drive a local DH-ratchet step between full re-handshakes
-- session-encrypted sends now report the `established_session_ids` they actually used, and the Stage 3 panel shows which cached sessions are still pending their first encrypted message
-- routine chat sync now only generates fresh initiator ephemeral bootstrap keys for recipients that do not already have an established session
-- the Stage 3 panel now includes an explicit `Rekey Active Sessions` action, which rotates selected device-pair sessions onto fresh pending-first-message session records
-- superseded session records are excluded from the outbound send path but still retained in local metadata so older encrypted messages remain decryptable
-- new outbound user messages now require session transport; the old recipient-wrapping and legacy local modes are decode-compatibility paths only
-- session synchronization now prunes consumed local one-time prekeys for device-pair sessions where this device acted as the one-time-prekey recipient
+- uniform `signal-v1` outbound message transport for new direct and group messages
+- on-demand Signal session bootstrap from published prekey bundles for messaging and call E2EE
+- per-device recipient-envelope coverage enforcement for multi-device decryptability
+- legacy sender-key and recipient-wrapped records kept only for backward-compatible decrypt paths
 - IndexedDB-backed local message cache for the selected chat
 - client-side safety-number display for published remote identity keys in the active chat
 - Phoenix Channel subscription for live updates in the active chat

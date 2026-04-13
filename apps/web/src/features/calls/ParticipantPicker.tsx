@@ -105,18 +105,7 @@ export function ParticipantPicker({ members, onStartCall, onClose }: Participant
               }}
             >
               <PhoneCallIcon width={16} height={16} />
-              Voice ({selected.size})
-            </button>
-            <button
-              type="button"
-              onClick={() => onStartCall(Array.from(selected), 'video')}
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                background: 'var(--bg-surface-1)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 510,
-              }}
-            >
-              Video ({selected.size})
+              Call ({selected.size})
             </button>
           </div>
         )}

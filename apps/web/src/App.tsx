@@ -118,6 +118,7 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats')
+
   const [initialSettingsSection, setInitialSettingsSection] = useState<string | null>(null)
 
   const chatSearchInputRef = useRef<HTMLInputElement | null>(null)
@@ -318,11 +319,11 @@ function AppInner({
 
   const chatList = useChatList(appView, servers)
   const deferredActiveChatId = useDeferredValue(chatList.activeChatId)
-  const activeChatIdRef = useRef<string | null>(deferredActiveChatId)
+  const activeChatIdRef = useRef<string | null>(chatList.activeChatId)
 
   useEffect(() => {
-    activeChatIdRef.current = deferredActiveChatId
-  }, [deferredActiveChatId])
+    activeChatIdRef.current = chatList.activeChatId
+  }, [chatList.activeChatId])
 
   function setActiveChatId(valueOrUpdater: string | null | ((current: string | null) => string | null)) {
     chatList.setActiveChatId((current) => {
@@ -342,7 +343,9 @@ function AppInner({
   }
 
   const activeChat =
-    chatList.chatItems.find((chat) => chat.id === deferredActiveChatId) ?? chatList.chatItems[0] ?? null
+    chatList.chatItems.find((chat) => chat.id === deferredActiveChatId) ??
+    chatList.chatItems.find((chat) => chat.id === chatList.activeChatId) ??
+    (chatList.activeChatId ? null : chatList.chatItems[0] ?? null)
 
   const groupChat = useGroupChat(
     appView,
@@ -366,7 +369,7 @@ function AppInner({
   )
   const messages = useMessages(
     appView,
-    deferredActiveChatId,
+    chatList.activeChatId,
     activeChatIdRef,
     chatList.chatItems,
     chatList.setChatItems,

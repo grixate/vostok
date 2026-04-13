@@ -77,16 +77,17 @@ describe('call-media', () => {
     expect(computeNextCallKeyEpoch([buildKey({ key_epoch: 2 }), buildKey({ key_epoch: 7 })])).toBe(8)
   })
 
-  it('builds join payloads with group E2EE metadata only when a key is present', () => {
+  it('builds join payloads that advertise signal-based media encryption', () => {
     expect(buildJoinPayload(buildCall({ mode: 'voice' }), null)).toEqual({
-      track_kind: 'audio'
+      track_kind: 'audio',
+      e2ee_capable: true,
+      e2ee_algorithm: 'signal-v1'
     })
 
     expect(buildJoinPayload(buildCall({ mode: 'group', media_mode: 'video' }), buildKey({ key_epoch: 4 }))).toEqual({
       track_kind: 'audio_video',
       e2ee_capable: true,
-      e2ee_algorithm: 'sframe-aes-gcm-v1',
-      e2ee_key_epoch: 4
+      e2ee_algorithm: 'signal-v1'
     })
   })
 

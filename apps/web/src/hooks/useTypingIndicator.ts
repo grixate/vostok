@@ -29,7 +29,7 @@ export function useTypingIndicator(activeChat: ChatSummary | null, token?: strin
           next.set(userId, username)
           return { chatId, users: next }
         })
-        // Auto-clear after 5 seconds if no stop event
+        // Auto-clear after 2.5 seconds if no stop event
         const existing = typingTimers.get(userId)
         if (existing) clearTimeout(existing)
         typingTimers.set(
@@ -45,7 +45,7 @@ export function useTypingIndicator(activeChat: ChatSummary | null, token?: strin
               return { chatId, users: next }
             })
             typingTimers.delete(userId)
-          }, 5000)
+          }, 2500)
         )
       },
       onTypingStop: (userId) => {
@@ -85,15 +85,27 @@ export function useTypingIndicator(activeChat: ChatSummary | null, token?: strin
       pushTypingStart(token, activeRawChatId)
     }
 
-    // Reset the stop timer
+    // Reset the stop timer — send stop after 1.5s of inactivity
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
     typingTimerRef.current = setTimeout(() => {
       isTypingRef.current = false
       if (token && activeRawChatId) {
         pushTypingStop(token, activeRawChatId)
       }
-    }, 3000)
+    }, 1500)
   }, [activeChatId, activeRawChatId, token])
+
+  // Immediately stop typing (call on message send)
+  const stopTypingNow = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current)
+      typingTimerRef.current = null
+    }
+    if (isTypingRef.current && token && activeRawChatId) {
+      isTypingRef.current = false
+      pushTypingStop(token, activeRawChatId)
+    }
+  }, [activeRawChatId, token])
 
   // Clean up on unmount or chat change
   useEffect(() => {
@@ -115,6 +127,7 @@ export function useTypingIndicator(activeChat: ChatSummary | null, token?: strin
     typingUsers: usernames,
     typingText,
     sendTypingEvent,
+    stopTypingNow,
   }
 }
 

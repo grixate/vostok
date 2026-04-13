@@ -23,7 +23,6 @@ import {
   cleanupAudio
 } from '../calls/callSounds.ts'
 import { useCallTimer } from '../../hooks/useCallTimer.ts'
-import { useCallQuality } from '../../hooks/useCallQuality.ts'
 import { useMediaDevices } from '../../hooks/useMediaDevices.ts'
 import { buildDirectCallStatusLabel } from '../../lib/call-runtime.ts'
 import { getRawChatId } from '../../lib/multi-server.ts'
@@ -55,6 +54,41 @@ type ConversationPaneProps = {
   onBack?: () => void
 }
 
+type MembraneRemoteTrack = ReturnType<typeof useCall>['membraneRemoteTracks'][number]
+
+function buildPreferredDirectRemoteTracks(tracks: MembraneRemoteTrack[]): MediaStreamTrack[] {
+  const preferredByKind = new Map<'audio' | 'video', MembraneRemoteTrack>()
+
+  for (const track of tracks) {
+    if (!track.ready || !track.mediaTrack || (track.kind !== 'audio' && track.kind !== 'video')) {
+      continue
+    }
+
+    if (track.kind === 'video' && track.source === 'placeholder') {
+      continue
+    }
+
+    const existing = preferredByKind.get(track.kind)
+
+    if (!existing) {
+      preferredByKind.set(track.kind, track)
+      continue
+    }
+
+    const existingScore = existing.source === 'browser' ? 1 : 0
+    const nextScore = track.source === 'browser' ? 1 : 0
+
+    if (nextScore > existingScore || (nextScore === existingScore && track.id > existing.id)) {
+      preferredByKind.set(track.kind, track)
+    }
+  }
+
+  return ['audio', 'video'].flatMap((kind) => {
+    const track = preferredByKind.get(kind as 'audio' | 'video')
+    return track?.mediaTrack ? [track.mediaTrack] : []
+  })
+}
+
 export function ConversationPane({
   activeChat,
   groupChat,
@@ -70,6 +104,26 @@ export function ConversationPane({
   initialSelectedMessageId,
   onBack
 }: ConversationPaneProps) {
+  const isVerboseCallDebugEnabled = useCallback(() => {
+    if (!import.meta.env.DEV) {
+      return false
+    }
+
+    try {
+      const runtimeOverride = window.localStorage.getItem('vostok.call.debug')
+      if (runtimeOverride === '0') {
+        return false
+      }
+      if (runtimeOverride === '1') {
+        return true
+      }
+    } catch {
+      // ignore storage access failures and keep default dev behavior
+    }
+
+    return true
+  }, [])
+
   const { storedDevice } = useAppContext()
   const { chatSearchOpen } = useUIContext()
   const selectedChat = chatList.activeChatId
@@ -84,7 +138,9 @@ export function ConversationPane({
   const [callScreenSharing, setCallScreenSharing] = useState(false)
   const [callEnded, setCallEnded] = useState<{ reason: string; duration: string } | null>(null)
   const callDuration = useCallTimer(call.activeCall?.status === 'active')
-  const callQuality = useCallQuality(call.membraneClientRef, call.activeCall?.status === 'active')
+  const callTransportStatus = call.callTransportStatus
+  const callQuality = call.callQualityIndicator
+  const callQualityProfile = call.callQualityProfile
   const callActive = call.activeCall?.status === 'active'
   const mediaDevices = useMediaDevices(!!callActive)
   const previousCallRef = useRef(call.activeCall)
@@ -149,14 +205,13 @@ export function ConversationPane({
   }, [call.handleEndCall])
 
   useEffect(() => {
-    setCallCameraOn(call.localVideoTrackCount > 0)
-  }, [call.localVideoTrackCount])
+    setCallCameraOn(call.localVideoSource === 'browser')
+  }, [call.localVideoSource])
 
   // Track call lifecycle
   useEffect(() => {
     const prev = previousCallRef.current
     const curr = call.activeCall
-    const isVideoCall = curr?.mode === 'video' || curr?.media_mode === 'video'
     const prevId = prev?.id ?? null
     const currId = curr?.id ?? null
     const hasNewCall = prevId !== currId && curr != null
@@ -166,7 +221,7 @@ export function ConversationPane({
       if (curr.status === 'ringing' || curr.status === 'active') {
         setCallUiMode('full')
         setCallMuted(true)
-        setCallCameraOn(isVideoCall)
+        setCallCameraOn(false)
         setCallScreenSharing(false)
         setCallEnded(null)
       }
@@ -190,7 +245,7 @@ export function ConversationPane({
       // Recover a surviving call after chat/view restoration without re-triggering on every render.
       setCallUiMode('full')
       setCallMuted(true)
-      setCallCameraOn(isVideoCall)
+      setCallCameraOn(false)
       setCallScreenSharing(false)
       setCallEnded(null)
     }
@@ -333,42 +388,86 @@ export function ConversationPane({
   }, [call.activeCall?.status, endCall, isOutgoingCall])
 
   // Build remote stream from Membrane remote tracks
-  const remoteStream = useMemo(() => {
-    const readyTracks = call.membraneRemoteTracks
-      .filter(t => t.ready && t.mediaTrack)
-      .map(t => t.mediaTrack!)
-    if (readyTracks.length === 0) return null
-    return new MediaStream(readyTracks)
-  }, [call.membraneRemoteTracks])
+  const remoteMediaTracks = useMemo(() => {
+    const readyTracks = call.membraneRemoteTracks.filter((track) => track.ready && track.mediaTrack)
 
-  const remoteCameraOn = call.membraneRemoteTracks.some(
-    t => t.ready && t.kind === 'video' && t.mediaTrack
-  )
+    if (call.activeCall?.mode === 'group') {
+      return readyTracks
+        .filter((track) => !(track.kind === 'video' && track.source === 'placeholder'))
+        .map((track) => track.mediaTrack!)
+    }
+
+    return buildPreferredDirectRemoteTracks(readyTracks)
+  }, [call.activeCall?.mode, call.membraneRemoteTracks])
+
+  const remoteStream = useMemo(() => {
+    if (remoteMediaTracks.length === 0) {
+      return null
+    }
+
+    return new MediaStream(remoteMediaTracks)
+  }, [remoteMediaTracks])
+
+  const remoteCameraOn = remoteMediaTracks.some((track) => track.kind === 'video')
+
+  useEffect(() => {
+    if (!isVerboseCallDebugEnabled() || call.activeCall?.status !== 'active') {
+      return
+    }
+
+    console.log('[call-debug] conversation.remote-stream', {
+      callId: call.activeCall?.id ?? null,
+      remoteCameraOn,
+      remoteMediaTracks: remoteMediaTracks.map((track) => ({
+        id: track.id,
+        kind: track.kind,
+        enabled: track.enabled,
+        muted: track.muted
+      })),
+      membraneRemoteTracks: call.membraneRemoteTracks.map((track) => ({
+        id: track.id,
+        endpointId: track.endpointId,
+        kind: track.kind,
+        source: track.source,
+        ready: track.ready,
+        mediaTrackId: track.mediaTrack?.id ?? null,
+        voiceActivity: track.voiceActivity
+      }))
+    })
+  }, [call.activeCall?.id, call.activeCall?.status, call.membraneRemoteTracks, isVerboseCallDebugEnabled, remoteCameraOn, remoteMediaTracks])
 
   // Real media toggle handlers
-  const handleToggleMute = useCallback(() => {
-    setCallMuted(prev => {
-      const next = !prev
-      const stream = call.localMediaStreamRef.current
-      if (stream) {
-        for (const track of stream.getAudioTracks()) {
-          track.enabled = !next
-        }
+  const handleToggleMute = useCallback(async () => {
+    const next = !callMuted
+    const stream = call.localMediaStreamRef.current
+
+    setCallMuted(next)
+    call.setLocalAudioMuted(next)
+
+    if (!next && call.activeCall?.status === 'active' && (!stream || call.localAudioSource === 'placeholder')) {
+      await attachLocalMedia('audio')
+      return
+    }
+
+    if (stream) {
+      for (const track of stream.getAudioTracks()) {
+        track.enabled = !next
       }
-      return next
-    })
-  }, [call.localMediaStreamRef])
+    }
+  }, [attachLocalMedia, call, callMuted])
+
+  useEffect(() => {
+    call.setLocalAudioMuted(callMuted)
+  }, [call, callMuted])
 
   const handleToggleCamera = useCallback(async () => {
-    const hasVideo = (call.localMediaStreamRef.current?.getVideoTracks().length ?? 0) > 0
+    const cameraActive = call.localVideoSource === 'browser'
 
-    if (hasVideo) {
+    if (cameraActive) {
       await call._handleAttachLocalMedia('audio')
     } else {
       await call._handleAttachLocalMedia('audio_video')
     }
-
-    setCallCameraOn((call.localMediaStreamRef.current?.getVideoTracks().length ?? 0) > 0)
   }, [call])
 
   // Screen sharing toggle
@@ -621,7 +720,7 @@ export function ConversationPane({
             ? 'Media encryption unavailable'
             : undefined
   const activeScreenStatusLabel = call.directCallStatus === 'active'
-    ? (mediaEncryptionLabel ?? directCallStatusLabel)
+    ? (mediaEncryptionLabel ? `${directCallStatusLabel} · ${mediaEncryptionLabel}` : directCallStatusLabel)
     : (capabilityStatusLabel ?? directCallStatusLabel)
 
   if (profileOpen && resolvedChat) {
@@ -687,8 +786,11 @@ export function ConversationPane({
             capabilityStatusLabel ??
             (call.activeCall.status === 'ringing' ? 'Group call ringing…' : mediaEncryptionLabel)
           }
+          showCameraControls={true}
           showScreenControls={true}
+          callTransportStatus={callTransportStatus}
           callQuality={callQuality}
+          callQualityProfile={callQualityProfile}
           audioDevices={mediaDevices.audioInputs}
           videoDevices={mediaDevices.videoInputs}
           participants={activeGroupParticipants}
@@ -725,8 +827,11 @@ export function ConversationPane({
           screenSharing={callScreenSharing}
           screenShareStream={screenShareStreamRef.current}
           statusLabel={activeScreenStatusLabel}
+          showCameraControls={true}
           showScreenControls={true}
+          callTransportStatus={callTransportStatus}
           callQuality={callQuality}
+          callQualityProfile={callQualityProfile}
           audioDevices={mediaDevices.audioInputs}
           videoDevices={mediaDevices.videoInputs}
           participants={call.activeCall.mode === 'group' ? activeGroupParticipants : undefined}
@@ -836,7 +941,7 @@ export function ConversationPane({
         chatList={chatList}
         sendKey={appSettings.settings.general_send_key}
         onDraftChange={(text) => { drafts.handleDraftChange(text); if (text.length > 0 && appSettings.settings.privacy_typing_indicators) typingIndicator.sendTypingEvent() }}
-        onMessageSent={drafts.handleMessageSent}
+        onMessageSent={() => { drafts.handleMessageSent(); typingIndicator.stopTypingNow() }}
       /> : null}
       {dragOver ? (
         <div className="drag-drop-overlay">

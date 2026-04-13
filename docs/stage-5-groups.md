@@ -35,7 +35,8 @@ This repository now includes production-ready group-chat foundations.
   - `POST /api/v1/chats/:chat_id/sender-keys`
 - Group Sender Key recipient inbox API:
   - `GET /api/v1/chats/:chat_id/sender-keys`
-- Web group-admin Sender Key rotation action plus inbound Sender Key list in the detail rail
+- Legacy Sender Key history import remains available so older group messages stay decryptable
+- New group messages now use the same per-device `signal-v1` transport as direct chats
 
 ## Not Yet Implemented
 
@@ -43,4 +44,4 @@ This repository now includes production-ready group-chat foundations.
 
 ## Current Meaning of Stage 5
 
-The backend now supports real group chat containers with multiple members, which gives the later rich-interaction work an actual chat surface to build on.
+The backend now supports real group chat containers with multiple members, replies/reactions/moderation controls, and the same Signal-based outbound transport contract used by direct chats. Sender-key records are still retained only as a backwards-compatibility path for older history.

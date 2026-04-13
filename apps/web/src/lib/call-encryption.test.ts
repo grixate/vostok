@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildDirectMediaKeySignalPayload,
-  buildDirectMediaReadySignalPayload,
-  needsNewDirectMediaKeyPair,
-  resolveLocalGeneratedGroupKey,
   shouldSyncGroupMediaEncryption
 } from './call-encryption.ts'
 import type { CallSession } from './api.ts'
@@ -31,14 +27,10 @@ function buildDevice(): StoredDevice {
   return {
     deviceId: 'device-self',
     deviceName: 'Web',
-    privateKeyPkcs8Base64: 'priv',
-    publicKeyBase64: 'pub',
-    encryptionPrivateKeyPkcs8Base64: 'enc-priv',
-    encryptionPublicKeyBase64: 'enc-pub',
-    signedPrekeyPublicKeyBase64: 'spk-pub',
-    signedPrekeyPrivateKeyPkcs8Base64: 'spk-priv',
-    signedPrekeys: [],
-    oneTimePrekeys: [],
+    registrationId: 12345,
+    identityKeyPairJson: '{"pubKey":"pub","privKey":"priv"}',
+    signedPreKeyIdCounter: 1,
+    oneTimePreKeyIdCounter: 17,
     sessionExpiresAt: '2026-04-02T09:00:00Z',
     sessionToken: 'token',
     username: 'jamie'
@@ -51,27 +43,5 @@ describe('call-encryption', () => {
     expect(shouldSyncGroupMediaEncryption(buildCall(), false, buildDevice(), true)).toBe('disabled')
     expect(shouldSyncGroupMediaEncryption(buildCall({ status: 'ringing' }), true, buildDevice(), true)).toBe('skip')
     expect(shouldSyncGroupMediaEncryption(buildCall({ mode: 'video' }), true, buildDevice(), true)).toBe('skip')
-  })
-
-  it('resolves locally generated group keys by call and epoch', () => {
-    expect(resolveLocalGeneratedGroupKey({ 'call-1': { 2: 'key-material' } }, 'call-1', 2)).toBe('key-material')
-    expect(resolveLocalGeneratedGroupKey({}, 'call-1', 2)).toBeNull()
-  })
-
-  it('detects when a new direct media key pair is required', () => {
-    expect(needsNewDirectMediaKeyPair(null, 'call-1')).toBe(true)
-    expect(needsNewDirectMediaKeyPair({ callId: 'call-2', keyPair: {} }, 'call-1')).toBe(true)
-    expect(needsNewDirectMediaKeyPair({ callId: 'call-1', keyPair: {} }, 'call-1')).toBe(false)
-  })
-
-  it('builds direct media signaling payloads', () => {
-    expect(JSON.parse(buildDirectMediaKeySignalPayload('public-key'))).toEqual({
-      kind: 'media_e2ee_key',
-      public_key: 'public-key'
-    })
-    expect(JSON.parse(buildDirectMediaReadySignalPayload('fingerprint'))).toEqual({
-      kind: 'media_e2ee_ready',
-      fingerprint: 'fingerprint'
-    })
   })
 })

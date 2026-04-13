@@ -163,10 +163,10 @@ defmodule VostokServerWeb.GroupFlowTest do
            } = json_response(charlie_list_conn, 200)
   end
 
-  test "group messages require sender-key transport unless explicit fallback is set", %{
+  test "group messages use signal transport while legacy sender-key payloads remain backwards compatible", %{
     conn: conn
   } do
-    %{token: alice_token} = register_device(conn, "alice-group-transport")
+    %{token: alice_token, device_id: alice_device_id} = register_device(conn, "alice-group-transport")
 
     %{token: bob_token, device_id: bob_device_id} =
       register_device(build_conn(), "bob-group-transport")
@@ -195,7 +195,7 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert %{"sender_keys" => [_]} = json_response(distribute_conn, 201)
 
-    legacy_group_message_conn =
+    missing_signal_transport_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/#{chat_id}/messages", %{
@@ -204,19 +204,48 @@ defmodule VostokServerWeb.GroupFlowTest do
         ciphertext: Base.encode64("legacy-ciphertext")
       })
 
-    assert %{"error" => "validation", "message" => legacy_error_message} =
-             json_response(legacy_group_message_conn, 422)
+    assert %{"error" => "validation", "message" => transport_error_message} =
+             json_response(missing_signal_transport_conn, 422)
 
     assert String.contains?(
-             legacy_error_message,
-             "Group messages must use crypto_scheme=group_sender_key_v1"
+             transport_error_message,
+             "Group messages must use crypto_scheme=signal-v1"
            )
 
-    sender_key_message_conn =
+    alice_envelope = Base.encode64("wrapped-for-alice")
+    bob_envelope = Base.encode64("wrapped-for-bob-signal")
+
+    signal_group_message_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/#{chat_id}/messages", %{
-        client_id: "sender-key-group-message",
+        client_id: "signal-group-message",
+        message_kind: "text",
+        crypto_scheme: "signal-v1",
+        header: Base.encode64("{\"algorithm\":\"signal-v1\"}"),
+        ciphertext: Base.encode64("group-ciphertext"),
+        recipient_envelopes: %{
+          alice_device_id => alice_envelope,
+          bob_device_id => bob_envelope
+        }
+      })
+
+    assert %{
+             "message" => %{
+               "client_id" => "signal-group-message",
+               "crypto_scheme" => "signal-v1",
+               "recipient_envelope" => ^alice_envelope,
+               "recipient_device_ids" => recipient_device_ids
+             }
+           } = json_response(signal_group_message_conn, 201)
+
+    assert Enum.sort(recipient_device_ids) == Enum.sort([alice_device_id, bob_device_id])
+
+    legacy_sender_key_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "legacy-sender-key-group-message",
         message_kind: "text",
         crypto_scheme: "group_sender_key_v1",
         sender_key_id: "sender-key-transport",
@@ -227,12 +256,12 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert %{
              "message" => %{
-               "client_id" => "sender-key-group-message",
+               "client_id" => "legacy-sender-key-group-message",
                "crypto_scheme" => "group_sender_key_v1",
                "sender_key_id" => "sender-key-transport",
                "sender_key_epoch" => 1
              }
-           } = json_response(sender_key_message_conn, 201)
+           } = json_response(legacy_sender_key_message_conn, 201)
 
     # The recipient can still fetch the active sender key state for decryptability.
     bob_sender_key_conn =
@@ -245,8 +274,8 @@ defmodule VostokServerWeb.GroupFlowTest do
   end
 
   test "group message permissions enforce admin pinning and admin-or-owner delete", %{conn: conn} do
-    %{token: alice_token} = register_device(conn, "alice-group-perms")
-    %{token: bob_token} = register_device(build_conn(), "bob-group-perms")
+    %{token: alice_token, device_id: alice_device_id} = register_device(conn, "alice-group-perms")
+    %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-group-perms")
 
     create_group_conn =
       build_conn()
@@ -264,8 +293,12 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> post("/api/v1/chats/#{chat_id}/messages", %{
         client_id: "bob-group-perms-message",
         message_kind: "text",
-        group_transport_fallback: true,
-        ciphertext: Base.encode64("member-message")
+        crypto_scheme: "signal-v1",
+        ciphertext: Base.encode64("member-message"),
+        recipient_envelopes: %{
+          alice_device_id => Base.encode64("wrapped-for-alice"),
+          bob_device_id => Base.encode64("wrapped-for-bob")
+        }
       })
 
     assert %{"message" => %{"id" => message_id}} = json_response(bob_message_conn, 201)
@@ -294,8 +327,12 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> patch("/api/v1/chats/#{chat_id}/messages/#{message_id}", %{
         client_id: "alice-edit-foreign-message",
         message_kind: "text",
-        group_transport_fallback: true,
-        ciphertext: Base.encode64("admin-cannot-edit-member")
+        crypto_scheme: "signal-v1",
+        ciphertext: Base.encode64("admin-cannot-edit-member"),
+        recipient_envelopes: %{
+          alice_device_id => Base.encode64("wrapped-edit-for-alice"),
+          bob_device_id => Base.encode64("wrapped-edit-for-bob")
+        }
       })
 
     assert %{"error" => "validation", "message" => edit_error} =

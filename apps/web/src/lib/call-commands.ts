@@ -1,5 +1,4 @@
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoom,
   CallRoomMember,
@@ -9,8 +8,7 @@ import type {
 } from './api.ts'
 import type { MergedChatSummary } from './multi-server.ts'
 import type { CallJoinPayload } from './call-media.ts'
-import { preferredTrackKind, selectLatestCallKey } from './call-media.ts'
-import type { StoredDevice } from '../types.ts'
+import { preferredTrackKind } from './call-media.ts'
 import type { BootstrapActiveCallTransportResult } from './call-orchestration.ts'
 
 export async function startChatCallSession(
@@ -90,10 +88,7 @@ export async function startAdHocCallSession(
 export async function joinExistingCallSession(options: {
   sessionToken: string
   activeCall: CallSession
-  storedDevice: StoredDevice | null
-  latestCallKey: CallKeyDistribution | null
-  rotateGroupCallKeysFor: (call: CallSession, opts?: { quiet?: boolean }) => Promise<CallKeyDistribution[] | null>
-  buildJoinPayload: (call: CallSession, latestCallKey: CallKeyDistribution | null) => CallJoinPayload
+  buildJoinPayload: (call: CallSession, latestCallKey: null) => CallJoinPayload
   joinCallSession: (token: string, callId: string, payload: CallJoinPayload) => Promise<{
     participants: CallParticipant[]
     room: CallRoomState | null
@@ -114,32 +109,12 @@ export async function joinExistingCallSession(options: {
   const {
     sessionToken,
     activeCall,
-    storedDevice,
-    latestCallKey,
-    rotateGroupCallKeysFor,
     buildJoinPayload,
     joinCallSession,
     fetchCallWebRtcEndpointState
   } = options
 
-  let nextLatestCallKey = latestCallKey
-
-  if (
-    activeCall.mode === 'group' &&
-    !nextLatestCallKey &&
-    storedDevice?.deviceId === activeCall.started_by_device_id
-  ) {
-    const rotated = await rotateGroupCallKeysFor(activeCall, { quiet: true })
-    nextLatestCallKey = rotated ? selectLatestCallKey(rotated) : null
-  }
-
-  if (activeCall.mode === 'group' && !nextLatestCallKey) {
-    return {
-      blockedMessage: 'Group call join is blocked until a media key epoch is available for this device.'
-    }
-  }
-
-  const joinPayload = buildJoinPayload(activeCall, nextLatestCallKey)
+  const joinPayload = buildJoinPayload(activeCall, null)
   const response = await joinCallSession(sessionToken, activeCall.id, joinPayload)
   const endpointResponse = await fetchCallWebRtcEndpointState(sessionToken, activeCall.id)
 

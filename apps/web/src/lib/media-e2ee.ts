@@ -20,11 +20,6 @@ type TestCallCapabilityWindow = Window & {
   __VOSTOK_TEST_CALL_CAPABILITY__?: CallCapability
 }
 
-type DirectMediaKeyPair = {
-  publicKeyBase64: string
-  privateKey: CryptoKey
-}
-
 type MutableKeyRef = {
   current: Uint8Array | null
 }
@@ -430,58 +425,4 @@ export class MediaE2eeController {
 
 export function supportsMediaE2EE(): boolean {
   return getCallCapability().state === 'supported'
-}
-
-export async function generateDirectMediaKeyPair(): Promise<DirectMediaKeyPair> {
-  const pair = await window.crypto.subtle.generateKey(
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256'
-    },
-    true,
-    ['deriveBits']
-  )
-
-  const publicKey = await window.crypto.subtle.exportKey('raw', pair.publicKey)
-
-  return {
-    publicKeyBase64: bytesToBase64(new Uint8Array(publicKey)),
-    privateKey: pair.privateKey
-  }
-}
-
-export async function deriveDirectMediaSharedKey(
-  privateKey: CryptoKey,
-  remotePublicKeyBase64: string
-): Promise<{ keyMaterialBase64: string; fingerprint: string }> {
-  const remotePublicKeyBytes = base64ToBytes(remotePublicKeyBase64)
-  const remotePublicKey = await window.crypto.subtle.importKey(
-    'raw',
-    toArrayBuffer(remotePublicKeyBytes),
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256'
-    },
-    false,
-    []
-  )
-
-  const sharedSecret = await window.crypto.subtle.deriveBits(
-    {
-      name: 'ECDH',
-      public: remotePublicKey
-    },
-    privateKey,
-    256
-  )
-
-  const digest = new Uint8Array(await window.crypto.subtle.digest('SHA-256', sharedSecret))
-  const fingerprint = Array.from(digest.slice(0, 6))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join(':')
-
-  return {
-    keyMaterialBase64: bytesToBase64(digest),
-    fingerprint
-  }
 }

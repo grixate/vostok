@@ -66,7 +66,6 @@ export function deriveDirectCallStatus({
   }
 
   if (
-    transportReadiness.localMediaReady &&
     transportReadiness.endpointReady &&
     transportReadiness.turnReady &&
     transportReadiness.membraneConnected

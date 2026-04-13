@@ -5,7 +5,6 @@ import {
   resolveChatScopedActiveCallDecision
 } from './call-state.ts'
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoom,
   CallRoomMember,
@@ -129,22 +128,6 @@ function buildCallRoomMember(overrides: Partial<CallRoomMember> = {}): CallRoomM
   }
 }
 
-function buildKey(overrides: Partial<CallKeyDistribution> = {}): CallKeyDistribution {
-  return {
-    id: 'key-1',
-    call_id: 'call-1',
-    owner_device_id: 'device-self',
-    recipient_device_id: 'device-peer',
-    key_epoch: 1,
-    algorithm: 'sframe-aes-gcm-v1',
-    status: 'active',
-    wrapped_key: 'wrapped',
-    inserted_at: '2026-04-01T09:30:00Z',
-    updated_at: '2026-04-01T09:30:00Z',
-    ...overrides
-  }
-}
-
 describe('call-state', () => {
   it('preserves calls that belong to a different chat or room', () => {
     const decision = resolveChatScopedActiveCallDecision(
@@ -201,7 +184,6 @@ describe('call-state', () => {
         room: buildCallRoom(),
         members: [buildCallRoomMember()]
       })),
-      fetchCallKeys: vi.fn(async () => ({ keys: [buildKey()] })),
       fetchCallWebRtcEndpointState: vi.fn(async () => ({
         endpoint: buildEndpoint(),
         room: buildRoomState({ participant_count: 3 })
@@ -212,7 +194,6 @@ describe('call-state', () => {
     expect(snapshot.displayTitle).toBe('Design Review')
     expect(snapshot.activeCallRoom?.id).toBe('room-1')
     expect(snapshot.activeCallRoomMembers).toHaveLength(1)
-    expect(snapshot.callKeys).toHaveLength(1)
     expect(snapshot.room?.participant_count).toBe(3)
   })
 
@@ -230,7 +211,6 @@ describe('call-state', () => {
         room: buildRoomState()
       })),
       fetchCallRoom,
-      fetchCallKeys: vi.fn(async () => ({ keys: [] })),
       fetchCallWebRtcEndpointState: vi.fn(async () => ({
         endpoint: buildEndpoint(),
         room: null
@@ -242,6 +222,5 @@ describe('call-state', () => {
     expect(snapshot.displayTitle).toBe('Jordan')
     expect(snapshot.activeCallRoom).toBeNull()
     expect(snapshot.activeCallRoomMembers).toEqual([])
-    expect(snapshot.callKeys).toEqual([])
   })
 })

@@ -42,11 +42,15 @@ defmodule VostokServerWeb.TopicChannelTest do
                alice.device.id,
                alice.user.id,
                %{
-                 "ciphertext" => ciphertext,
-                 "client_id" => "client-#{System.unique_integer([:positive])}",
-                 "message_kind" => "text"
-               },
-               alice.device.id
+                  "ciphertext" => ciphertext,
+                  "client_id" => "client-#{System.unique_integer([:positive])}",
+                  "crypto_scheme" => "signal-v1",
+                  "message_kind" => "text",
+                  "recipient_envelopes" => %{
+                    alice.device.id => Base.encode64("local-envelope")
+                  }
+                },
+                alice.device.id
              )
 
     message_id = message.id

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatSummary } from '../lib/api.ts'
-import { generateDeviceIdentity, generateDevicePrekeys } from '../lib/device-auth.ts'
+import { generateSignalIdentity, generateSignalPrekeys } from '../lib/signal-keys.ts'
+import { initSignalStore, arrayBufferToBase64 } from '../lib/signal-store.ts'
 import { createServerApiClient } from '../lib/server-api.ts'
 import { createServerRealtimeClient } from '../lib/server-realtime.ts'
 import {
@@ -32,6 +33,8 @@ type ConnectionRecord = {
   unsubscribePresence?: () => void
   bootstrapKey?: string | null
   bootstrappingKey?: string | null
+  chatSnapshotRequestId?: number
+  latestAppliedChatSnapshotRequestId?: number
 }
 
 function chatListsEqual(left: ChatSummary[], right: ChatSummary[]): boolean {
@@ -114,9 +117,44 @@ export function useServers(
 
   const getConnection = useCallback((serverId: string) => connectionsRef.current.get(serverId) ?? null, [])
 
+  const beginChatSnapshotRequest = useCallback((serverId: string): {
+    connection: ConnectionRecord | null
+    requestId: number
+  } => {
+    const connection = connectionsRef.current.get(serverId) ?? null
+    if (!connection) {
+      return { connection: null, requestId: 0 }
+    }
+
+    const requestId = (connection.chatSnapshotRequestId ?? 0) + 1
+    connection.chatSnapshotRequestId = requestId
+    return { connection, requestId }
+  }, [])
+
+  const applyChatSnapshotIfCurrent = useCallback((
+    serverId: string,
+    requestId: number,
+    chats: ChatSummary[],
+    source: 'bootstrap' | 'refresh'
+  ) => {
+    const connection = connectionsRef.current.get(serverId)
+
+    if (!connection) {
+      return
+    }
+
+    const latestApplied = connection.latestAppliedChatSnapshotRequestId ?? 0
+    if (requestId < latestApplied) {
+      return
+    }
+
+    connection.latestAppliedChatSnapshotRequestId = requestId
+    updateChatsForServer(serverId, chats)
+  }, [updateChatsForServer])
+
   const refreshServerChats = useCallback(async (serverId: string) => {
     const server = servers.find((entry) => entry.id === serverId)
-    const connection = connectionsRef.current.get(serverId)
+    const { connection, requestId } = beginChatSnapshotRequest(serverId)
 
     if (!server?.auth || !connection) {
       return
@@ -130,8 +168,8 @@ export function useServers(
       chats = [created.chat, ...chats]
     }
 
-    updateChatsForServer(serverId, chats)
-  }, [servers, updateChatsForServer])
+    applyChatSnapshotIfCurrent(serverId, requestId, chats, 'refresh')
+  }, [applyChatSnapshotIfCurrent, beginChatSnapshotRequest, servers])
 
   const addServer = useCallback((url: string, label: string, color: string) => {
     const entry = buildServerEntry(url, label, color)
@@ -217,7 +255,9 @@ export function useServers(
       if (!connectionsRef.current.has(server.id)) {
         connectionsRef.current.set(server.id, {
           api: createServerApiClient(server.url),
-          realtime: createServerRealtimeClient(server.url)
+          realtime: createServerRealtimeClient(server.url),
+          chatSnapshotRequestId: 0,
+          latestAppliedChatSnapshotRequestId: 0
         })
       }
 
@@ -306,6 +346,8 @@ export function useServers(
             return
           }
 
+          const { requestId: bootstrapChatSnapshotRequestId } = beginChatSnapshotRequest(server.id)
+
           const [me, listChatsResponse] = await Promise.all([
             connection.api.fetchMe(activeAuth.accessToken),
             connection.api.listChats(activeAuth.accessToken)
@@ -330,30 +372,62 @@ export function useServers(
             // Listing devices is optional at bootstrap time.
           }
 
+          // Detect legacy P-256 device and force re-registration
+          if (nextStoredDevice && nextStoredDevice.privateKeyPkcs8Base64 && !nextStoredDevice.identityKeyPairJson) {
+            nextStoredDevice = null
+            applyServerUpdate(server.id, (current) => ({ ...current, device: null }))
+          }
+
           if (!nextStoredDevice) {
             try {
-              const identity = await generateDeviceIdentity()
-              const prekeys = await generateDevicePrekeys(identity.signingPrivateKeyPkcs8Base64)
+              const signalIdentity = await generateSignalIdentity()
+              const signedPreKeyId = 1
+              const oneTimePreKeyStartId = 1
+              const signalPrekeys = await generateSignalPrekeys(
+                signalIdentity.identityKeyPair,
+                signedPreKeyId,
+                oneTimePreKeyStartId,
+                16
+              )
+
+              // Initialize Signal store and persist keys
+              const identityKeyPairJson = JSON.stringify({
+                pubKey: arrayBufferToBase64(signalIdentity.identityKeyPair.pubKey),
+                privKey: arrayBufferToBase64(signalIdentity.identityKeyPair.privKey)
+              })
+              const store = initSignalStore(identityKeyPairJson, signalIdentity.registrationId)
+
+              // Persist signed prekey and one-time prekeys in Signal store
+              await store.storeSignedPreKey(signedPreKeyId, signalPrekeys.signedPreKey.keyPair)
+              for (const preKey of signalPrekeys.preKeys) {
+                await store.storePreKey(preKey.keyId, preKey.keyPair)
+              }
+
+              const identityPubBase64 = arrayBufferToBase64(signalIdentity.identityKeyPair.pubKey)
+              const signedPreKeyPubBase64 = arrayBufferToBase64(signalPrekeys.signedPreKey.keyPair.pubKey)
+              const signedPreKeySigBase64 = arrayBufferToBase64(signalPrekeys.signedPreKey.signature)
+
               const linked = await connection.api.linkDevice(activeAuth.accessToken, {
                 device_name: 'Web',
-                device_identity_public_key: identity.signingPublicKeyBase64,
-                device_encryption_public_key: identity.encryptionPublicKeyBase64,
-                signed_prekey: prekeys.signedPrekey.publicKeyBase64,
-                signed_prekey_signature: prekeys.signedPrekey.signatureBase64,
-                one_time_prekeys: prekeys.oneTimePrekeys.map((key) => key.publicKeyBase64)
+                device_identity_public_key: identityPubBase64,
+                device_encryption_public_key: identityPubBase64,
+                signed_prekey: signedPreKeyPubBase64,
+                signed_prekey_signature: signedPreKeySigBase64,
+                registration_id: signalIdentity.registrationId,
+                signed_prekey_id: signedPreKeyId,
+                one_time_prekeys: signalPrekeys.preKeys.map((key) => ({
+                  key_id: key.keyId,
+                  public_key: arrayBufferToBase64(key.keyPair.pubKey)
+                }))
               })
 
               nextStoredDevice = {
                 deviceId: linked.device.id,
                 deviceName: linked.device.device_name,
-                privateKeyPkcs8Base64: identity.signingPrivateKeyPkcs8Base64,
-                publicKeyBase64: identity.signingPublicKeyBase64,
-                encryptionPrivateKeyPkcs8Base64: identity.encryptionPrivateKeyPkcs8Base64,
-                encryptionPublicKeyBase64: identity.encryptionPublicKeyBase64,
-                signedPrekeyPublicKeyBase64: prekeys.signedPrekey.publicKeyBase64,
-                signedPrekeyPrivateKeyPkcs8Base64: prekeys.signedPrekey.privateKeyPkcs8Base64,
-                signedPrekeys: [prekeys.signedPrekey],
-                oneTimePrekeys: prekeys.oneTimePrekeys,
+                registrationId: signalIdentity.registrationId,
+                identityKeyPairJson,
+                signedPreKeyIdCounter: signedPreKeyId,
+                oneTimePreKeyIdCounter: oneTimePreKeyStartId + signalPrekeys.preKeys.length,
                 sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                 sessionToken: activeAuth.accessToken,
                 username: me.user.username
@@ -363,6 +437,9 @@ export function useServers(
             } catch (deviceError) {
               console.warn(`[useServers] device bootstrap failed for ${server.url}:`, deviceError)
             }
+          } else if (nextStoredDevice.identityKeyPairJson) {
+            // Re-initialize Signal store from existing device
+            initSignalStore(nextStoredDevice.identityKeyPairJson, nextStoredDevice.registrationId)
           }
 
           let chats = listChatsResponse.chats
@@ -376,7 +453,7 @@ export function useServers(
             return
           }
 
-          updateChatsForServer(server.id, chats)
+          applyChatSnapshotIfCurrent(server.id, bootstrapChatSnapshotRequestId, chats, 'bootstrap')
 
           connection.realtime.connect(activeAuth.accessToken)
           connection.unsubscribeUser?.()
@@ -440,6 +517,8 @@ export function useServers(
     refreshServerChats,
     servers,
     setServerStatus,
+    applyChatSnapshotIfCurrent,
+    beginChatSnapshotRequest,
     updateChatsForServer
   ])
 

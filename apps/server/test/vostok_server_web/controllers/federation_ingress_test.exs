@@ -128,7 +128,11 @@ defmodule VostokServerWeb.FederationIngressTest do
           chat_id: chat_id,
           client_id: "remote-client-1",
           message_kind: "text",
-          ciphertext: Base.encode64("remote-ciphertext")
+          crypto_scheme: "signal-v1",
+          ciphertext: Base.encode64("remote-ciphertext"),
+          recipient_envelopes: %{
+            local_device_id => Base.encode64("remote-recipient-envelope")
+          }
         }
       })
 

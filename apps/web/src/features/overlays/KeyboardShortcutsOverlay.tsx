@@ -33,8 +33,7 @@ const SHORTCUT_GROUPS: { title: string; items: ShortcutEntry[] }[] = [
   {
     title: 'Calls',
     items: [
-      { keys: '⌘/Ctrl + Shift + A', label: 'Start voice call' },
-      { keys: '⌘/Ctrl + Shift + V', label: 'Start video call' },
+      { keys: '⌘/Ctrl + Shift + A', label: 'Start call' },
     ],
   },
   {

@@ -131,6 +131,6 @@ If the native Membrane dependencies fail to find OpenSSL during compile, export:
 
 ## Next Expected Work
 
-- audited Signal-library migration on top of the current Stage 3 API/session contracts
-- full sender-key and group interaction rules
+- continue hardening the live `signal-v1` messaging and calling transport
+- treat sender-key and explicit session bootstrap endpoints as legacy compatibility surfaces only
 - safety-number verification UX

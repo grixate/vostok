@@ -131,7 +131,6 @@ export function useGroupChat(
     }
 
     const token2 = sessionToken
-    const encryptionPrivateKeyPkcs8Base64 = storedDevice.encryptionPrivateKeyPkcs8Base64
     const groupChatId = getRawChatId(activeGroupChatId)
 
     if (!groupChatId) {
@@ -148,16 +147,19 @@ export function useGroupChat(
         const response = await listGroupSenderKeys(token2, rawGroupChatId)
 
         if (!cancelled) {
+          // Group sender keys are legacy — Signal pairwise sessions handle
+          // group message encryption now. Still load keys for decrypting
+          // old messages that used the sender key scheme.
           await storeInboundGroupSenderKeys(
             qualifiedGroupChatId,
             response.sender_keys,
-            encryptionPrivateKeyPkcs8Base64
+            undefined
           )
           if (rawGroupChatId !== qualifiedGroupChatId) {
             await storeInboundGroupSenderKeys(
               rawGroupChatId,
               response.sender_keys,
-              encryptionPrivateKeyPkcs8Base64
+              undefined
             )
           }
           setGroupSenderKeys(response.sender_keys)

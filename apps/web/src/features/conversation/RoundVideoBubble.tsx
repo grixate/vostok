@@ -11,6 +11,27 @@ type RoundVideoBubbleProps = {
   timestamp?: string
 }
 
+type RoundVideoProgressInput = {
+  currentTime: number
+  seekableEnd: number
+  duration: number
+}
+
+export function getRoundVideoPlayableDuration({ seekableEnd, duration }: Omit<RoundVideoProgressInput, 'currentTime'>): number {
+  if (seekableEnd > 0) {
+    return seekableEnd
+  }
+  return Number.isFinite(duration) && duration > 0 ? duration : 0
+}
+
+export function getRoundVideoProgress({ currentTime, seekableEnd, duration }: RoundVideoProgressInput): number {
+  const total = getRoundVideoPlayableDuration({ seekableEnd, duration })
+  if (total <= 0) {
+    return 0
+  }
+  return Math.min(1, Math.max(0, currentTime / total))
+}
+
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
@@ -29,22 +50,61 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
+    const el = video
 
-    function onMeta() { setDuration(video!.duration || 0) }
+    function getSeekableEnd() {
+      if (el.seekable.length > 0) {
+        return el.seekable.end(el.seekable.length - 1) || 0
+      }
+      return 0
+    }
+    function getPlayableDuration() {
+      return getRoundVideoPlayableDuration({
+        seekableEnd: getSeekableEnd(),
+        duration: el.duration
+      })
+    }
+    function syncDuration() {
+      setDuration(getPlayableDuration())
+    }
     function onTimeUpdate() {
-      setElapsed(video!.currentTime)
-      setProgress(video!.duration > 0 ? video!.currentTime / video!.duration : 0)
+      const current = el.currentTime || 0
+      setElapsed(current)
+      setProgress(getRoundVideoProgress({
+        currentTime: current,
+        seekableEnd: getSeekableEnd(),
+        duration: el.duration
+      }))
       // First timeupdate means a frame has been decoded and rendered
       setVideoReady(true)
     }
-    function onEnded() { setPlaying(false); setVideoReady(false); setElapsed(0); setProgress(0); video!.currentTime = 0 }
+    function onPlay() {
+      setPlaying(true)
+    }
+    function onPause() {
+      setPlaying(false)
+    }
+    function onEnded() {
+      const end = getPlayableDuration()
+      setPlaying(false)
+      setVideoReady(true)
+      setElapsed(end)
+      setDuration(end)
+      setProgress(1)
+    }
 
-    video.addEventListener('loadedmetadata', onMeta)
+    video.addEventListener('loadedmetadata', syncDuration)
+    video.addEventListener('durationchange', syncDuration)
     video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
     video.addEventListener('ended', onEnded)
     return () => {
-      video.removeEventListener('loadedmetadata', onMeta)
+      video.removeEventListener('loadedmetadata', syncDuration)
+      video.removeEventListener('durationchange', syncDuration)
       video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
       video.removeEventListener('ended', onEnded)
     }
   }, [playbackUrl])
@@ -54,9 +114,14 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
     if (!video) return
     if (playing) {
       video.pause()
-      setPlaying(false)
     } else {
-      void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+      const end = duration > 0 ? duration : video.duration
+      if (end > 0 && video.currentTime >= end - 0.05) {
+        video.currentTime = 0
+        setElapsed(0)
+        setProgress(0)
+      }
+      void video.play().catch(() => setPlaying(false))
     }
   }
 

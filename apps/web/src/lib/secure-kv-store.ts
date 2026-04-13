@@ -104,6 +104,58 @@ export function removeSecureStoreValue(key: string): void {
   void deleteRecord(key)
 }
 
+export async function clearSecureStorePrefixes(prefixes: string[]): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return
+  }
+
+  const normalizedPrefixes = [...new Set(prefixes.map((value) => value.trim()).filter(Boolean))]
+
+  if (normalizedPrefixes.length === 0) {
+    return
+  }
+
+  const localKeys: string[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (key && normalizedPrefixes.some((prefix) => key.startsWith(prefix))) {
+      localKeys.push(key)
+    }
+  }
+
+  for (const key of localKeys) {
+    window.localStorage.removeItem(key)
+  }
+
+  const database = await openDatabase()
+
+  if (!database) {
+    return
+  }
+
+  const persisted = await readAllRecords(database)
+  const matchingKeys = persisted
+    .map((record) => record.key)
+    .filter((key) => normalizedPrefixes.some((prefix) => key.startsWith(prefix)))
+
+  if (matchingKeys.length === 0) {
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(STORE_NAME)
+
+    for (const key of matchingKeys) {
+      store.delete(key)
+    }
+
+    transaction.oncomplete = () => resolve()
+    transaction.onerror =
+      () => reject(transaction.error ?? new Error('Failed to clear secure key entries.'))
+  }).catch(() => undefined)
+}
+
 async function writeRecord(key: string, value: string): Promise<void> {
   const database = await openDatabase()
 

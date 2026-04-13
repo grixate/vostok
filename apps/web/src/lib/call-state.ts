@@ -1,5 +1,4 @@
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoom,
   CallRoomMember,
@@ -92,7 +91,6 @@ export type LoadedCallStateSnapshot = {
   activeCallRoom: CallRoom | null
   activeCallRoomMembers: CallRoomMember[]
   displayTitle: string | null
-  callKeys: CallKeyDistribution[]
   endpoint: CallWebRtcEndpointState
 }
 
@@ -111,7 +109,6 @@ export async function loadCallStateSnapshot(options: {
     room: CallRoom
     members: CallRoomMember[]
   }>
-  fetchCallKeys: (token: string, callId: string) => Promise<{ keys: CallKeyDistribution[] }>
   fetchCallWebRtcEndpointState: (token: string, callId: string) => Promise<{
     endpoint: CallWebRtcEndpointState
     room: CallRoomState | null
@@ -125,7 +122,6 @@ export async function loadCallStateSnapshot(options: {
     chatItems,
     fetchCallState,
     fetchCallRoom,
-    fetchCallKeys,
     fetchCallWebRtcEndpointState,
     findMatchingCallChat
   } = options
@@ -149,11 +145,6 @@ export async function loadCallStateSnapshot(options: {
     displayTitle = matchedChat?.title ?? null
   }
 
-  const callKeys =
-    response.call.mode === 'group'
-      ? (await fetchCallKeys(token, call.id)).keys
-      : []
-
   const endpointResponse = await fetchCallWebRtcEndpointState(token, call.id)
 
   return {
@@ -163,7 +154,6 @@ export async function loadCallStateSnapshot(options: {
     activeCallRoom,
     activeCallRoomMembers,
     displayTitle,
-    callKeys,
     endpoint: endpointResponse.endpoint
   }
 }

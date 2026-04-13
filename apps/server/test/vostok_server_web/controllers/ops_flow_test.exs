@@ -816,6 +816,62 @@ defmodule VostokServerWeb.OpsFlowTest do
            } = json_response(bob_join_after_rotation_conn, 200)
   end
 
+  test "signal-based group joins do not require legacy call key distribution", %{conn: conn} do
+    %{token: alice_token} = register_device(conn, "alice-call-signal")
+    %{device_id: bob_device_id, token: bob_token} = register_device(build_conn(), "bob-call-signal")
+
+    create_chat_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/direct", %{username: "bob-call-signal"})
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_chat_conn, 201)
+
+    create_call_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/calls", %{mode: "group"})
+
+    assert %{"call" => %{"id" => call_id}} = json_response(create_call_conn, 201)
+
+    alice_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "signal-v1"
+      })
+
+    assert %{
+             "participant" => %{
+               "status" => "joined",
+               "e2ee_capable" => true,
+               "e2ee_algorithm" => "signal-v1",
+               "e2ee_key_epoch" => nil
+             }
+           } = json_response(alice_join_conn, 200)
+
+    bob_join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/calls/#{call_id}/join", %{
+        track_kind: "audio_video",
+        e2ee_capable: true,
+        e2ee_algorithm: "signal-v1"
+      })
+
+    assert %{
+             "participant" => %{
+               "device_id" => ^bob_device_id,
+               "status" => "joined",
+               "e2ee_capable" => true,
+               "e2ee_algorithm" => "signal-v1",
+               "e2ee_key_epoch" => nil
+             }
+           } = json_response(bob_join_conn, 200)
+  end
+
   defp register_device(conn, username) do
     {identity_public_key_raw, identity_private_key_raw} = :crypto.generate_key(:eddsa, :ed25519)
     public_key = Base.encode64(identity_public_key_raw)

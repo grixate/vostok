@@ -1,5 +1,3 @@
-import type { SignedPrekeyPair, PrekeyPair } from './lib/device-auth'
-
 export type AuthView =
   | 'welcome'
   | 'restore-backup'
@@ -37,17 +35,15 @@ export type AuthSession = {
 export type StoredDevice = {
   deviceId: string
   deviceName: string
-  privateKeyPkcs8Base64: string
-  publicKeyBase64: string
-  encryptionPrivateKeyPkcs8Base64?: string
-  encryptionPublicKeyBase64?: string
-  signedPrekeyPublicKeyBase64?: string
-  signedPrekeyPrivateKeyPkcs8Base64?: string
-  signedPrekeys?: SignedPrekeyPair[]
-  oneTimePrekeys?: PrekeyPair[]
+  registrationId: number
+  identityKeyPairJson: string
+  signedPreKeyIdCounter: number
+  oneTimePreKeyIdCounter: number
   sessionExpiresAt: string
   sessionToken: string
   username: string
+  /** @deprecated Legacy P-256 field — presence triggers re-registration */
+  privateKeyPkcs8Base64?: string
 }
 
 export type Banner = {

@@ -2,9 +2,14 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import { CallControls } from './CallControls.tsx'
 import { SelfPreviewPiP } from './SelfPreviewPiP.tsx'
 import { ScreenShareView } from './ScreenShareView.tsx'
-import { CallQualityIndicator, type CallQuality } from './CallQualityIndicator.tsx'
+import { CallQualityIndicator } from './CallQualityIndicator.tsx'
 import type { MediaDeviceOption } from '../../hooks/useMediaDevices.ts'
 import { useCallTimer } from '../../hooks/useCallTimer.ts'
+import type {
+  CallQualityIndicator as CallQuality,
+  CallQualityProfile,
+  CallTransportStatus
+} from '../../lib/call-quality-policy.ts'
 import {
   BackIcon,
   MicIcon,
@@ -32,8 +37,11 @@ type ActiveCallScreenProps = {
   screenSharing: boolean
   screenShareStream?: MediaStream | null
   statusLabel?: string
+  showCameraControls?: boolean
   showScreenControls?: boolean
+  callTransportStatus?: CallTransportStatus
   callQuality?: CallQuality
+  callQualityProfile?: CallQualityProfile
   audioDevices?: MediaDeviceOption[]
   videoDevices?: MediaDeviceOption[]
   participants?: Participant[]
@@ -57,8 +65,11 @@ export function ActiveCallScreen({
   screenSharing,
   screenShareStream,
   statusLabel,
+  showCameraControls,
   showScreenControls = false,
+  callTransportStatus = 'connected',
   callQuality,
+  callQualityProfile,
   audioDevices = [],
   videoDevices = [],
   participants = [],
@@ -77,7 +88,9 @@ export function ActiveCallScreen({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const isGroup = participants.length > 1
-  const showVideo = true
+  const showVideo = mode === 'video'
+  const showCamera = showCameraControls ?? showVideo
+  const effectiveCallQuality: CallQuality = callQuality ?? 'good'
   const remoteTrackSignature = remoteStream
     ? remoteStream
         .getTracks()
@@ -171,7 +184,11 @@ export function ActiveCallScreen({
         )}
         <div className="ac__avatar ac__avatar--36">{contactInitial}</div>
         <span className="ac__header-name">{contactName}</span>
-        {callQuality ? <CallQualityIndicator quality={callQuality} /> : <span className="ac__status-dot" />}
+        <CallQualityIndicator
+          transportStatus={callTransportStatus}
+          quality={effectiveCallQuality}
+          profile={callQualityProfile}
+        />
         {statusLabel ? <span className="ac__timer">{statusLabel}</span> : null}
       </div>
       <div className="ac__header-right">
@@ -188,7 +205,11 @@ export function ActiveCallScreen({
       <div className="ac__floating-header-info">
         <div className="ac__floating-header-top">
           <span className="ac__header-name">{contactName}</span>
-          {callQuality ? <CallQualityIndicator quality={callQuality} /> : <span className="ac__status-dot" />}
+          <CallQualityIndicator
+            transportStatus={callTransportStatus}
+            quality={effectiveCallQuality}
+            profile={callQualityProfile}
+          />
         </div>
         <span className="ac__timer">{statusLabel ?? duration}</span>
       </div>
@@ -199,7 +220,7 @@ export function ActiveCallScreen({
     muted,
     cameraOn,
     screenSharing,
-    showCamera: showVideo,
+    showCamera,
     showScreen: showScreenControls,
     audioDevices,
     videoDevices,

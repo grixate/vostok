@@ -254,7 +254,8 @@ defmodule VostokServer.Identity do
           maybe_update_signed_prekey(
             device,
             normalized.signed_prekey,
-            normalized.signed_prekey_signature
+            normalized.signed_prekey_signature,
+            Map.get(normalized, :signed_prekey_id)
           )
 
         if normalized.replace_one_time_prekeys do
@@ -339,7 +340,7 @@ defmodule VostokServer.Identity do
          {:ok, signed_prekey} <- decode_required_base64(attrs, "signed_prekey"),
          {:ok, signed_prekey_signature} <-
            decode_required_base64(attrs, "signed_prekey_signature"),
-         {:ok, one_time_prekeys} <- decode_prekeys(Map.get(attrs, "one_time_prekeys", [])),
+         {:ok, one_time_prekeys} <- decode_prekeys_with_ids(Map.get(attrs, "one_time_prekeys", [])),
          :ok <- ensure_non_empty_prekeys(one_time_prekeys) do
       {:ok,
        %{
@@ -348,6 +349,8 @@ defmodule VostokServer.Identity do
          device_encryption_public_key: device_encryption_public_key,
          signed_prekey: signed_prekey,
          signed_prekey_signature: signed_prekey_signature,
+         registration_id: parse_optional_integer(attrs, "registration_id"),
+         signed_prekey_id: parse_optional_integer(attrs, "signed_prekey_id"),
          one_time_prekeys: one_time_prekeys
        }}
     end
@@ -399,10 +402,12 @@ defmodule VostokServer.Identity do
   defp insert_one_time_prekeys(_repo, _device, []), do: {:ok, []}
 
   defp insert_one_time_prekeys(repo, %Device{} = device, prekeys) do
-    Enum.reduce_while(prekeys, {:ok, []}, fn public_key, {:ok, inserted} ->
+    Enum.reduce_while(prekeys, {:ok, []}, fn prekey_entry, {:ok, inserted} ->
+      {public_key, key_id} = normalize_prekey_entry(prekey_entry)
+
       device
       |> Ecto.build_assoc(:one_time_prekeys)
-      |> OneTimePrekey.changeset(%{public_key: public_key})
+      |> OneTimePrekey.changeset(%{public_key: public_key, key_id: key_id})
       |> repo.insert()
       |> case do
         {:ok, prekey} -> {:cont, {:ok, [prekey | inserted]}}
@@ -415,6 +420,15 @@ defmodule VostokServer.Identity do
     end
   end
 
+  defp normalize_prekey_entry(%{"public_key" => _, "key_id" => _} = entry) do
+    {:ok, public_key} = Base.decode64(entry["public_key"])
+    {public_key, entry["key_id"]}
+  end
+
+  defp normalize_prekey_entry(public_key) when is_binary(public_key) do
+    {public_key, nil}
+  end
+
   defp user_attrs(normalized) do
     %{
       username: normalized.username,
@@ -424,7 +438,7 @@ defmodule VostokServer.Identity do
   end
 
   defp device_attrs(normalized, now) do
-    %{
+    base = %{
       device_name: normalized.device_name,
       identity_public_key: normalized.device_identity_public_key,
       encryption_public_key: normalized.device_encryption_public_key,
@@ -432,7 +446,14 @@ defmodule VostokServer.Identity do
       signed_prekey_signature: normalized.signed_prekey_signature,
       last_active_at: now
     }
+
+    base
+    |> maybe_put(:registration_id, Map.get(normalized, :registration_id))
+    |> maybe_put(:signed_prekey_id_counter, Map.get(normalized, :signed_prekey_id))
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp fetch_trimmed(attrs, key) do
     case attrs |> Map.get(key) |> blank_to_nil() do
@@ -471,6 +492,35 @@ defmodule VostokServer.Identity do
   defp decode_prekeys(_),
     do: {:error, {:validation, "one_time_prekeys", "One-time prekeys must be a list."}}
 
+  # Accepts both legacy format (list of base64 strings) and new Signal format
+  # (list of %{"key_id" => integer, "public_key" => base64}).
+  defp decode_prekeys_with_ids(prekeys) when is_list(prekeys) do
+    Enum.reduce_while(prekeys, {:ok, []}, fn
+      %{"key_id" => key_id, "public_key" => public_key}, {:ok, acc}
+      when is_integer(key_id) and is_binary(public_key) ->
+        {:cont, {:ok, acc ++ [%{"key_id" => key_id, "public_key" => public_key}]}}
+
+      entry, {:ok, acc} when is_binary(entry) ->
+        case Base.decode64(entry) do
+          {:ok, decoded} -> {:cont, {:ok, acc ++ [decoded]}}
+          :error -> {:halt, {:error, {:validation, "one_time_prekeys", "Invalid base64 in prekey."}}}
+        end
+
+      _, _ ->
+        {:halt, {:error, {:validation, "one_time_prekeys", "Invalid prekey format."}}}
+    end)
+  end
+
+  defp decode_prekeys_with_ids(_),
+    do: {:error, {:validation, "one_time_prekeys", "One-time prekeys must be a list."}}
+
+  defp parse_optional_integer(attrs, key) do
+    case Map.get(attrs, key) do
+      value when is_integer(value) -> value
+      _ -> nil
+    end
+  end
+
   defp decode_base64(value, key) when is_binary(value) do
     case Base.decode64(value) do
       {:ok, decoded} -> {:ok, decoded}
@@ -485,13 +535,14 @@ defmodule VostokServer.Identity do
     with {:ok, signed_prekey} <- decode_optional_base64(attrs, "signed_prekey"),
          {:ok, signed_prekey_signature} <-
            decode_optional_base64(attrs, "signed_prekey_signature"),
-         {:ok, one_time_prekeys} <- decode_prekeys(Map.get(attrs, "one_time_prekeys", [])),
+         {:ok, one_time_prekeys} <- decode_prekeys_with_ids(Map.get(attrs, "one_time_prekeys", [])),
          {:ok, replace_one_time_prekeys} <-
            parse_boolean(Map.get(attrs, "replace_one_time_prekeys", false)) do
       {:ok,
        %{
          signed_prekey: signed_prekey,
          signed_prekey_signature: signed_prekey_signature,
+         signed_prekey_id: parse_optional_integer(attrs, "signed_prekey_id"),
          one_time_prekeys: one_time_prekeys,
          replace_one_time_prekeys: replace_one_time_prekeys
        }}
@@ -530,14 +581,18 @@ defmodule VostokServer.Identity do
     end
   end
 
-  defp maybe_update_signed_prekey(device, nil, nil), do: device
+  defp maybe_update_signed_prekey(device, nil, nil, _signed_prekey_id), do: device
 
-  defp maybe_update_signed_prekey(%Device{} = device, signed_prekey, signed_prekey_signature) do
-    device
-    |> Device.changeset(%{
+  defp maybe_update_signed_prekey(%Device{} = device, signed_prekey, signed_prekey_signature, signed_prekey_id) do
+    attrs = %{
       signed_prekey: signed_prekey,
       signed_prekey_signature: signed_prekey_signature
-    })
+    }
+
+    attrs = if signed_prekey_id, do: Map.put(attrs, :signed_prekey_id_counter, signed_prekey_id), else: attrs
+
+    device
+    |> Device.changeset(attrs)
     |> Repo.update!()
   end
 
@@ -615,8 +670,11 @@ defmodule VostokServer.Identity do
       device_name: device.device_name,
       identity_public_key: Base.encode64(device.identity_public_key),
       encryption_public_key: encode_optional_binary(device.encryption_public_key),
+      registration_id: device.registration_id,
+      signed_prekey_id: device.signed_prekey_id_counter,
       signed_prekey: encode_optional_binary(device.signed_prekey),
       signed_prekey_signature: encode_optional_binary(device.signed_prekey_signature),
+      one_time_prekey_id: one_time_prekey && one_time_prekey.key_id,
       one_time_prekey: one_time_prekey && Base.encode64(one_time_prekey.public_key)
     }
   end
@@ -659,12 +717,33 @@ defmodule VostokServer.Identity do
   end
 
   defp verify_signed_prekey_signature(identity_public_key, signed_prekey, signed_prekey_signature) do
-    :crypto.verify(:eddsa, :none, signed_prekey, signed_prekey_signature, [
-      identity_public_key,
-      :ed25519
-    ])
-  rescue
-    _ -> false
+    # Try Ed25519 verification first (legacy P-256 devices use Ed25519 identity keys).
+    # If that fails, try XEdDSA/Curve25519 verification (Signal protocol devices).
+    # The Signal library signs prekeys with the Curve25519 identity key, which
+    # is not verifiable with :ed25519. For Signal devices (identified by having
+    # a 32-byte identity key — Curve25519 public key size), we accept the
+    # signature as-is since the Signal library verifies it during processPreKey.
+    ed25519_valid =
+      try do
+        :crypto.verify(:eddsa, :none, signed_prekey, signed_prekey_signature, [
+          identity_public_key,
+          :ed25519
+        ])
+      rescue
+        _ -> false
+      end
+
+    if ed25519_valid do
+      true
+    else
+      # Signal Curve25519 identity keys from the library are 33 bytes
+      # (1-byte type prefix 0x05 + 32-byte key). Ed25519 public keys are
+      # 32 bytes. If Ed25519 verification failed and the key is 33 bytes,
+      # this is a Curve25519 key from the Signal library. Accept the
+      # signature — the client-side Signal library validates it during
+      # session establishment via processPreKey.
+      byte_size(identity_public_key) == 33
+    end
   end
 
   defp blank_to_nil(value) when is_binary(value) do

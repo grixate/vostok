@@ -7,7 +7,6 @@ import {
   summarizeBootstrapSuccess
 } from './call-commands.ts'
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoom,
   CallRoomMember,
@@ -117,22 +116,6 @@ function buildEndpoint(overrides: Partial<CallWebRtcEndpointState> = {}): CallWe
   }
 }
 
-function buildKey(overrides: Partial<CallKeyDistribution> = {}): CallKeyDistribution {
-  return {
-    id: 'key-1',
-    call_id: 'call-1',
-    owner_device_id: 'device-self',
-    recipient_device_id: 'device-peer',
-    key_epoch: 2,
-    algorithm: 'sframe-aes-gcm-v1',
-    status: 'active',
-    wrapped_key: 'wrapped',
-    inserted_at: '2026-04-01T09:30:00Z',
-    updated_at: '2026-04-01T09:30:00Z',
-    ...overrides
-  }
-}
-
 describe('call-commands', () => {
   it('starts direct and group chat calls with the expected payloads', async () => {
     const createCallSession = vi.fn(async (_token: string, _chatId: string, payload: { mode: 'voice' | 'video' | 'group'; media_mode?: 'voice' | 'video' }) => ({
@@ -182,35 +165,36 @@ describe('call-commands', () => {
     expect(result.message).toContain('video group call room is ringing')
   })
 
-  it('blocks group join until a key epoch exists for this device', async () => {
-    const result = await joinExistingCallSession({
+  it('joins group calls without a pre-existing key epoch (Signal v1)', async () => {
+    const joined = await joinExistingCallSession({
       sessionToken: 'token',
       activeCall: buildCall({ mode: 'group', media_mode: 'video', status: 'active' }),
-      storedDevice: { deviceId: 'device-peer' } as never,
-      latestCallKey: null,
-      rotateGroupCallKeysFor: vi.fn(async () => null),
-      buildJoinPayload: vi.fn(),
-      joinCallSession: vi.fn(),
-      fetchCallWebRtcEndpointState: vi.fn()
+      buildJoinPayload: vi.fn(() => ({
+        track_kind: 'audio_video' as const,
+        e2ee_capable: true,
+        e2ee_algorithm: 'signal-v1'
+      })),
+      joinCallSession: vi.fn(async () => ({
+        participants: [buildParticipant()],
+        room: buildRoomState()
+      })),
+      fetchCallWebRtcEndpointState: vi.fn(async () => ({
+        endpoint: buildEndpoint(),
+        room: buildRoomState()
+      }))
     })
 
-    expect(result).toEqual({
-      blockedMessage: 'Group call join is blocked until a media key epoch is available for this device.'
-    })
+    expect('message' in joined).toBe(true)
   })
 
   it('joins and leaves active calls with endpoint hydration', async () => {
     const joined = await joinExistingCallSession({
       sessionToken: 'token',
       activeCall: buildCall({ status: 'active', mode: 'group', media_mode: 'video' }),
-      storedDevice: { deviceId: 'device-self' } as never,
-      latestCallKey: buildKey(),
-      rotateGroupCallKeysFor: vi.fn(),
       buildJoinPayload: vi.fn(() => ({
         track_kind: 'audio_video' as const,
         e2ee_capable: true,
-        e2ee_algorithm: 'sframe-aes-gcm-v1',
-        e2ee_key_epoch: 2
+        e2ee_algorithm: 'signal-v1'
       })),
       joinCallSession: vi.fn(async () => ({
         participants: [buildParticipant()],

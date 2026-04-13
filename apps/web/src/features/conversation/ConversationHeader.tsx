@@ -52,12 +52,7 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
     ? (!call.isCallSessionReady
         ? 'Calls are still loading for this account.'
         : (call.callCapabilityReason ?? 'Calls are unavailable on this browser.'))
-    : 'Call'
-  const videoTooltip = callingUnavailable
-    ? (!call.isCallSessionReady
-        ? 'Calls are still loading for this account.'
-        : (call.callCapabilityReason ?? 'Calls are unavailable on this browser.'))
-    : 'Video call'
+    : 'Call (camera optional)'
 
   const presenceSubtitle = isPresenceOnline ? 'online' : 'last seen recently'
   const defaultSubtitle = activeChat.is_self_chat
@@ -90,32 +85,36 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
       actions={(
         <>
           {supportsCalling ? (
-            <>
-              <Tooltip text={callTooltip}>
-                <button
-                  className="conversation-header__btn"
-                  type="button"
-                  aria-label="Call"
-                  onClick={() => call.handleStartCall('voice')}
-                  disabled={callingUnavailable}
-                  title={callTooltip}
-                >
+            <Tooltip text={callTooltip}>
+              <button
+                className="conversation-header__btn"
+                type="button"
+                aria-label="Call"
+                onClick={() => call.handleStartCall('voice')}
+                disabled={callingUnavailable}
+                title={callTooltip}
+              >
+                <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                   <PhoneIcon />
-                </button>
-              </Tooltip>
-              <Tooltip text={videoTooltip}>
-                <button
-                  className="conversation-header__btn"
-                  type="button"
-                  aria-label="Video call"
-                  onClick={() => call.handleStartCall('video')}
-                  disabled={callingUnavailable}
-                  title={videoTooltip}
-                >
-                  <VideoCamIcon />
-                </button>
-              </Tooltip>
-            </>
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: -5,
+                      bottom: -4,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 12,
+                      height: 12,
+                      borderRadius: 999,
+                      background: 'var(--bg-surface-2)'
+                    }}
+                  >
+                    <VideoCamIcon width={9} height={9} />
+                  </span>
+                </span>
+              </button>
+            </Tooltip>
           ) : null}
           <Tooltip text="Search in chat">
             <button className="conversation-header__btn" type="button" aria-label="Search in chat" onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>

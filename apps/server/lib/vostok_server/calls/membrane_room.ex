@@ -13,6 +13,7 @@ defmodule VostokServer.Calls.MembraneRoom do
   alias Membrane.RTC.Engine
   alias Membrane.RTC.Engine.Endpoint.WebRTC
   alias Membrane.RTC.Engine.Endpoint.WebRTC.MediaEvent
+  alias Membrane.RTC.Engine.Endpoint.WebRTC.SimulcastConfig
   alias Membrane.RTC.Engine.Message.EndpointCrashed
   alias Membrane.RTC.Engine.Message.EndpointMessage
   alias Membrane.RTC.Engine.Message.EndpointRemoved
@@ -22,6 +23,8 @@ defmodule VostokServer.Calls.MembraneRoom do
   alias VostokServerWeb.Endpoint
 
   @log_file "/tmp/vostok-membrane.log"
+  @default_media_event_queue_limit 64
+  @default_turn_ports_range {50_000, 50_050}
 
   defp mlog(msg) do
     line = "[#{DateTime.utc_now()}] #{msg}\n"
@@ -108,6 +111,7 @@ defmodule VostokServer.Calls.MembraneRoom do
   def init({call_id, mode}) do
     {:ok, engine_pid} = Engine.start_link([], [])
     :ok = Engine.register(engine_pid, self())
+    endpoint_quality = endpoint_quality_options()
 
     {:ok,
      %{
@@ -118,12 +122,24 @@ defmodule VostokServer.Calls.MembraneRoom do
        realtime_topic: call_topic(call_id),
        participants: %{},
        webrtc_endpoints: %{},
-       outbound_media_events: %{}
+       outbound_media_events: %{},
+       turn_ports_range: turn_ports_range(),
+       media_event_queue_limit: media_event_queue_limit(),
+       media_event_stats: %{
+         forwarded: 0,
+         invalid: 0,
+         dropped_missing_endpoint: 0,
+         received_from_engine: 0,
+         polled: 0,
+         truncated: 0
+       },
+       endpoint_quality: endpoint_quality
      }}
   end
 
   @impl true
   def handle_call(:describe, _from, state) do
+    state = ensure_runtime_defaults(state)
     {:reply, present_state(state), state}
   end
 
@@ -148,6 +164,8 @@ defmodule VostokServer.Calls.MembraneRoom do
   end
 
   def handle_call({:ensure_webrtc_endpoint, endpoint_id, metadata}, _from, state) do
+    state = ensure_runtime_defaults(state)
+
     next_state =
       if Map.has_key?(state.webrtc_endpoints, endpoint_id) do
         mlog("ENDPOINT already exists: #{endpoint_id}")
@@ -156,6 +174,7 @@ defmodule VostokServer.Calls.MembraneRoom do
         mlog("CREATING ENDPOINT: #{endpoint_id}")
         turn_options = integrated_turn_options()
         mlog("TURN OPTIONS for #{endpoint_id}: #{inspect(turn_options)}")
+        endpoint_quality = state.endpoint_quality
 
         endpoint =
           struct(WebRTC, %{
@@ -164,17 +183,30 @@ defmodule VostokServer.Calls.MembraneRoom do
             ice_name: endpoint_id,
             handshake_opts: [client_mode: false, dtls_srtp: true],
             integrated_turn_options: turn_options,
+            simulcast_config: %SimulcastConfig{
+              enabled: endpoint_quality.simulcast_enabled,
+              initial_target_variant: &__MODULE__.initial_track_variant/1
+            },
+            video_tracks_limit: endpoint_quality.video_tracks_limit,
+            toilet_capacity: endpoint_quality.toilet_capacity,
+            filter_codecs: &__MODULE__.balanced_codec_filter/1,
             metadata: metadata
           })
 
-        :ok = Engine.add_endpoint(state.engine_pid, endpoint, id: endpoint_id)
+        try do
+          :ok = Engine.add_endpoint(state.engine_pid, endpoint, id: endpoint_id)
 
-        state
-        |> put_in([:webrtc_endpoints, endpoint_id], %{
-          endpoint_id: endpoint_id,
-          metadata: metadata
-        })
-        |> put_in([:outbound_media_events, endpoint_id], [])
+          state
+          |> put_in([:webrtc_endpoints, endpoint_id], %{
+            endpoint_id: endpoint_id,
+            metadata: metadata
+          })
+          |> put_in([:outbound_media_events, endpoint_id], [])
+        catch
+          kind, reason ->
+            mlog("FAILED to add endpoint #{endpoint_id}: #{kind} #{inspect(reason)}")
+            state
+        end
       end
 
     {:reply, present_endpoint_state(next_state, endpoint_id), next_state}
@@ -185,8 +217,15 @@ defmodule VostokServer.Calls.MembraneRoom do
   end
 
   def handle_call({:remove_webrtc_endpoint, endpoint_id}, _from, state) do
+    state = ensure_runtime_defaults(state)
+
     if Map.has_key?(state.webrtc_endpoints, endpoint_id) do
-      :ok = Engine.remove_endpoint(state.engine_pid, endpoint_id)
+      try do
+        :ok = Engine.remove_endpoint(state.engine_pid, endpoint_id)
+      catch
+        kind, reason ->
+          mlog("FAILED to remove endpoint #{endpoint_id}: #{kind} #{inspect(reason)}")
+      end
     end
 
     next_state =
@@ -198,21 +237,29 @@ defmodule VostokServer.Calls.MembraneRoom do
   end
 
   def handle_call({:forward_media_event, endpoint_id, event}, _from, state) do
+    state = ensure_runtime_defaults(state)
+
     next_state =
       if Map.has_key?(state.webrtc_endpoints, endpoint_id) do
         case MediaEvent.decode(event) do
           {:ok, _decoded_event} ->
             mlog("FORWARD media event for #{endpoint_id}: #{String.slice(event, 0, 200)}")
-            :ok = Engine.message_endpoint(state.engine_pid, endpoint_id, {:media_event, event})
-            state
+            try do
+              :ok = Engine.message_endpoint(state.engine_pid, endpoint_id, {:media_event, event})
+              bump_media_event_stat(state, :forwarded)
+            catch
+              kind, reason ->
+                mlog("FAILED to forward media event for #{endpoint_id}: #{kind} #{inspect(reason)}")
+                bump_media_event_stat(state, :dropped_missing_endpoint)
+            end
 
           {:error, :invalid_media_event} ->
             mlog("REJECTED invalid media event for #{endpoint_id}: #{String.slice(event, 0, 200)}")
-            state
+            bump_media_event_stat(state, :invalid)
         end
       else
         mlog("DROPPED media event — endpoint #{endpoint_id} not found")
-        state
+        bump_media_event_stat(state, :dropped_missing_endpoint)
       end
 
     {:reply, %{endpoint: present_endpoint_state(next_state, endpoint_id), media_events: []},
@@ -220,7 +267,9 @@ defmodule VostokServer.Calls.MembraneRoom do
   end
 
   def handle_call({:poll_media_events, endpoint_id}, _from, state) do
+    state = ensure_runtime_defaults(state)
     {events, next_state} = pop_media_events(state, endpoint_id)
+    next_state = increment_media_event_stat(next_state, :polled, length(events))
 
     if length(events) > 0 do
       mlog("POLL returning #{length(events)} event(s) for #{endpoint_id}")
@@ -239,6 +288,7 @@ defmodule VostokServer.Calls.MembraneRoom do
 
     next_state =
       state
+      |> bump_media_event_stat(:received_from_engine)
       |> push_outbound_media_event(endpoint_id, event)
       |> maybe_broadcast_media_event(endpoint_id, event)
 
@@ -272,6 +322,8 @@ defmodule VostokServer.Calls.MembraneRoom do
   defp via(call_id), do: {:via, Registry, {VostokServer.Calls.RoomRegistry, call_id}}
 
   defp present_state(state) do
+    state = ensure_runtime_defaults(state)
+
     endpoints =
       state.engine_pid
       |> Engine.get_endpoints()
@@ -292,7 +344,11 @@ defmodule VostokServer.Calls.MembraneRoom do
       participant_count: map_size(state.participants),
       active_device_ids: state.participants |> Map.keys() |> Enum.sort(),
       track_count: length(tracks),
-      webrtc_endpoint_count: map_size(state.webrtc_endpoints)
+      webrtc_endpoint_count: map_size(state.webrtc_endpoints),
+      turn_ports_range: present_turn_ports_range(state.turn_ports_range),
+      media_event_queue_limit: state.media_event_queue_limit,
+      media_event_stats: state.media_event_stats,
+      endpoint_quality: state.endpoint_quality
     }
   end
 
@@ -313,11 +369,22 @@ defmodule VostokServer.Calls.MembraneRoom do
   end
 
   defp push_outbound_media_event(state, endpoint_id, event) do
-    update_in(state.outbound_media_events, fn events ->
-      Map.update(events, endpoint_id, [event], fn current ->
-        Enum.take(current ++ [event], -20)
+    queue_limit = state |> Map.get(:media_event_queue_limit, @default_media_event_queue_limit) |> max(1)
+    existing_events = Map.get(state.outbound_media_events, endpoint_id, [])
+    truncated? = length(existing_events) >= queue_limit
+
+    updated_state =
+      update_in(state.outbound_media_events, fn events ->
+        Map.update(events, endpoint_id, [event], fn current ->
+          Enum.take(current ++ [event], -queue_limit)
+        end)
       end)
-    end)
+
+    if truncated? do
+      bump_media_event_stat(updated_state, :truncated)
+    else
+      updated_state
+    end
   end
 
   defp drop_endpoint(state, endpoint_id) do
@@ -347,30 +414,33 @@ defmodule VostokServer.Calls.MembraneRoom do
       Application.get_env(:vostok_server, :turn_public_ip) ||
         parse_ip(System.get_env("VOSTOK_TURN_PUBLIC_IP"))
 
+    inferred_public_ip =
+      explicit_public_ip ||
+        infer_turn_public_ip()
+
     bind_ip =
       explicit_bind_ip ||
-        default_turn_bind_ip()
+        default_turn_bind_ip(inferred_public_ip)
 
     mock_ip =
-      explicit_public_ip ||
+      inferred_public_ip ||
         default_turn_public_ip(bind_ip)
 
     [
       ip: bind_ip,
       mock_ip: mock_ip,
-      ports_range: {50_000, 50_050}
+      ports_range: turn_ports_range()
     ]
   end
 
-  defp default_turn_bind_ip do
-    if endpoint_loopback_only?() or localhost_host?() do
+  defp default_turn_bind_ip(public_ip) do
+    if endpoint_loopback_only?() and is_nil(public_ip) do
       {127, 0, 0, 1}
     else
       {0, 0, 0, 0}
     end
   end
 
-  defp default_turn_public_ip({127, 0, 0, 1}), do: {127, 0, 0, 1}
   defp default_turn_public_ip(bind_ip), do: infer_turn_public_ip() || bind_ip
 
   defp infer_turn_public_ip do
@@ -385,17 +455,6 @@ defmodule VostokServer.Calls.MembraneRoom do
     |> loopback_ip?()
   rescue
     _ -> false
-  end
-
-  defp localhost_host? do
-    case System.get_env("PHX_HOST") do
-      nil ->
-        false
-
-      host ->
-        normalized = host |> String.trim() |> String.downcase()
-        normalized in ["localhost", "127.0.0.1", "::1"]
-    end
   end
 
   defp uri_host_ip do
@@ -439,6 +498,122 @@ defmodule VostokServer.Calls.MembraneRoom do
     else
       _ -> nil
     end
+  end
+
+  def initial_track_variant(_track), do: :high
+
+  def balanced_codec_filter(%{name: "opus"}), do: true
+  def balanced_codec_filter(%{name: "VP8"}), do: true
+
+  def balanced_codec_filter(%{name: "H264", format_parms: fmtp}) do
+    case fmtp do
+      %{profile_level_id: profile_level_id} when profile_level_id in [0x42E01F, 0x42001F, 0x42E01E] ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  def balanced_codec_filter(_encoding), do: false
+
+  defp endpoint_quality_options do
+    %{
+      simulcast_enabled: Application.get_env(:vostok_server, :call_simulcast_enabled, true),
+      video_tracks_limit: Application.get_env(:vostok_server, :call_video_tracks_limit, 8),
+      toilet_capacity: Application.get_env(:vostok_server, :call_webrtc_toilet_capacity, 320)
+    }
+  end
+
+  defp media_event_queue_limit do
+    Application.get_env(
+      :vostok_server,
+      :call_media_event_queue_limit,
+      @default_media_event_queue_limit
+    )
+    |> normalize_positive_integer(@default_media_event_queue_limit)
+  end
+
+  defp turn_ports_range do
+    start_port =
+      Application.get_env(:vostok_server, :turn_ports_range_start, elem(@default_turn_ports_range, 0))
+      |> normalize_positive_integer(elem(@default_turn_ports_range, 0))
+
+    end_port =
+      Application.get_env(:vostok_server, :turn_ports_range_end, elem(@default_turn_ports_range, 1))
+      |> normalize_positive_integer(elem(@default_turn_ports_range, 1))
+
+    if end_port < start_port do
+      @default_turn_ports_range
+    else
+      {start_port, end_port}
+    end
+  end
+
+  defp normalize_positive_integer(value, _fallback) when is_integer(value) and value > 0, do: value
+  defp normalize_positive_integer(_value, fallback), do: fallback
+
+  defp bump_media_event_stat(state, key), do: increment_media_event_stat(state, key, 1)
+
+  defp increment_media_event_stat(state, key, amount) do
+    stats = Map.get(state, :media_event_stats, default_media_event_stats())
+    updated_stats = Map.update(stats, key, amount, &(&1 + amount))
+    Map.put(state, :media_event_stats, updated_stats)
+  end
+
+  defp default_media_event_stats do
+    %{
+      forwarded: 0,
+      invalid: 0,
+      dropped_missing_endpoint: 0,
+      received_from_engine: 0,
+      polled: 0,
+      truncated: 0
+    }
+  end
+
+  defp ensure_runtime_defaults(state) do
+    endpoint_quality =
+      case Map.fetch(state, :endpoint_quality) do
+        {:ok, quality} when is_map(quality) -> quality
+        _other -> endpoint_quality_options()
+      end
+
+    queue_limit =
+      case Map.fetch(state, :media_event_queue_limit) do
+        {:ok, value} when is_integer(value) and value > 0 -> value
+        _other -> media_event_queue_limit()
+      end
+
+    turn_range =
+      case Map.fetch(state, :turn_ports_range) do
+        {:ok, {start_port, end_port}} when is_integer(start_port) and is_integer(end_port) ->
+          {start_port, end_port}
+
+        _other ->
+          turn_ports_range()
+      end
+
+    state
+    |> Map.put(:endpoint_quality, endpoint_quality)
+    |> Map.put(:media_event_queue_limit, queue_limit)
+    |> Map.put(:media_event_stats, Map.get(state, :media_event_stats, default_media_event_stats()))
+    |> Map.put(:turn_ports_range, turn_range)
+  end
+
+  defp present_turn_ports_range({start_port, end_port})
+       when is_integer(start_port) and is_integer(end_port) do
+    %{
+      start: start_port,
+      end: end_port
+    }
+  end
+
+  defp present_turn_ports_range(_range) do
+    %{
+      start: elem(@default_turn_ports_range, 0),
+      end: elem(@default_turn_ports_range, 1)
+    }
   end
 
   defp loopback_ip?({127, _, _, _}), do: true

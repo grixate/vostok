@@ -5,7 +5,6 @@ import {
   syncMembraneWebRtcQueue
 } from './call-orchestration.ts'
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoomState,
   CallSession,
@@ -36,8 +35,10 @@ function buildDevice(overrides: Partial<StoredDevice> = {}): StoredDevice {
   return {
     deviceId: 'device-self',
     deviceName: 'Laptop',
-    privateKeyPkcs8Base64: 'pkcs8',
-    publicKeyBase64: 'pub',
+    registrationId: 12345,
+    identityKeyPairJson: '{"pubKey":"pub","privKey":"priv"}',
+    signedPreKeyIdCounter: 1,
+    oneTimePreKeyIdCounter: 17,
     sessionExpiresAt: '2026-04-01T10:30:00Z',
     sessionToken: 'token',
     username: 'jamie',
@@ -96,22 +97,6 @@ function buildTurn(overrides: Partial<TurnCredentials> = {}): TurnCredentials {
   }
 }
 
-function buildKey(overrides: Partial<CallKeyDistribution> = {}): CallKeyDistribution {
-  return {
-    id: 'key-1',
-    call_id: 'call-1',
-    owner_device_id: 'device-self',
-    recipient_device_id: 'device-peer',
-    key_epoch: 1,
-    algorithm: 'sframe-aes-gcm-v1',
-    status: 'active',
-    wrapped_key: 'wrapped',
-    inserted_at: '2026-04-01T09:30:00Z',
-    updated_at: '2026-04-01T09:30:00Z',
-    ...overrides
-  }
-}
-
 describe('call-orchestration', () => {
   it('refreshes TURN, joins, provisions, and connects the Membrane client', async () => {
     const client = { id: 'membrane-client' }
@@ -136,9 +121,11 @@ describe('call-orchestration', () => {
       fetchTurnCredentials,
       callParticipants: [],
       isParticipantJoined: () => false,
-      latestCallKey: null,
-      rotateGroupCallKeysFor: vi.fn(),
-      buildJoinPayload: vi.fn(() => ({ track_kind: 'audio_video' as const })),
+      buildJoinPayload: vi.fn(() => ({
+        track_kind: 'audio_video' as const,
+        e2ee_capable: true,
+        e2ee_algorithm: 'signal-v1'
+      })),
       joinCallSession,
       currentEndpoint: null,
       currentRoom: null,
@@ -151,7 +138,11 @@ describe('call-orchestration', () => {
     })
 
     expect(fetchTurnCredentials).toHaveBeenCalledWith('token', { ttl_seconds: 600 })
-    expect(joinCallSession).toHaveBeenCalledWith('token', 'call-1', { track_kind: 'audio_video' })
+    expect(joinCallSession).toHaveBeenCalledWith('token', 'call-1', {
+      track_kind: 'audio_video',
+      e2ee_capable: true,
+      e2ee_algorithm: 'signal-v1'
+    })
     expect(provisionCallWebRtcEndpoint).toHaveBeenCalledWith('token', 'call-1')
     expect(configureMembraneTurnServers).toHaveBeenCalledWith(client, result.turnCredentials)
     expect(connectMembraneClient).toHaveBeenCalledWith(client, expect.objectContaining({
@@ -166,13 +157,9 @@ describe('call-orchestration', () => {
     expect(result.membraneConnectRequestedCallId).toBe('call-1')
   })
 
-  it('rotates group keys for the call owner before joining when the epoch is missing', async () => {
-    const rotatedKeys = [buildKey({ key_epoch: 4 })]
+  it('joins group calls without a pre-existing key epoch (Signal v1)', async () => {
     const buildJoinPayload = vi.fn(() => ({
-      track_kind: 'audio' as const,
-      e2ee_capable: true,
-      e2ee_algorithm: 'sframe-aes-gcm-v1',
-      e2ee_key_epoch: 4
+      track_kind: 'audio' as const
     }))
 
     await bootstrapActiveCallTransport({
@@ -184,8 +171,6 @@ describe('call-orchestration', () => {
       fetchTurnCredentials: vi.fn(),
       callParticipants: [],
       isParticipantJoined: () => false,
-      latestCallKey: null,
-      rotateGroupCallKeysFor: vi.fn(async () => rotatedKeys),
       buildJoinPayload,
       joinCallSession: vi.fn(async () => ({
         participants: [buildParticipant({ track_kind: 'audio' })],
@@ -201,9 +186,11 @@ describe('call-orchestration', () => {
       connectMembraneClient: vi.fn()
     })
 
+    // Signal v1: group calls join without a pre-existing key epoch.
+    // The key exchange happens after joining via pairwise Signal sessions.
     expect(buildJoinPayload).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'group' }),
-      expect.objectContaining({ key_epoch: 4 })
+      null
     )
   })
 
@@ -220,8 +207,6 @@ describe('call-orchestration', () => {
       fetchTurnCredentials: vi.fn(),
       callParticipants: [buildParticipant()],
       isParticipantJoined: () => true,
-      latestCallKey: null,
-      rotateGroupCallKeysFor: vi.fn(),
       buildJoinPayload: vi.fn(),
       joinCallSession: vi.fn(),
       currentEndpoint: buildEndpoint({ endpoint_id: 'endpoint-existing' }),

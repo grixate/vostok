@@ -14,6 +14,7 @@ import type { StorageTracker } from './storage-tracker.ts'
 // ─── Defaults ──────────────────────────────────────────────────────────────────
 
 const MB = 1024 * 1024
+const MAX_AUTO_READY_PLAYBACK_ENTRIES = 24
 
 const DEFAULT_CHAT_CONFIG: AutoDownloadChatConfig = {
   photos:         { max_size_bytes: 5 * MB,  on_cellular: true },
@@ -259,6 +260,34 @@ export class DownloadManager {
     return entry
   }
 
+  private trimAutoReadyEntries(protectedUploadId?: string) {
+    const autoReadyEntries: Array<[string, DownloadEntry]> = []
+
+    for (const [uploadId, entry] of this.entries) {
+      if (uploadId === protectedUploadId) {
+        continue
+      }
+      if (entry.priority !== 'auto' || entry.state.status !== 'ready') {
+        continue
+      }
+      autoReadyEntries.push([uploadId, entry])
+    }
+
+    const overflow = autoReadyEntries.length - MAX_AUTO_READY_PLAYBACK_ENTRIES
+    if (overflow <= 0) {
+      return
+    }
+
+    for (let i = 0; i < overflow; i += 1) {
+      const [uploadId, entry] = autoReadyEntries[i]
+      if (entry.state.status === 'ready') {
+        URL.revokeObjectURL(entry.state.playbackUrl)
+      }
+      this.chatIdByUploadId.delete(uploadId)
+      this.setState(entry, { status: 'idle' })
+    }
+  }
+
   private setState(entry: DownloadEntry, state: AttachmentDownloadState) {
     entry.state = state
     for (const cb of entry.listeners) {
@@ -364,6 +393,7 @@ export class DownloadManager {
       }
 
       this.setState(entry, { status: 'ready', playbackUrl })
+      this.trimAutoReadyEntries(attachment.uploadId)
 
       // Record in storage tracker
       if (this.storageTracker) {

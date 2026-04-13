@@ -39,6 +39,60 @@ env_boolean = fn key, default ->
   end
 end
 
+first_non_loopback_ipv4 = fn ->
+  with {:ok, ifaddrs} <- :inet.getifaddrs() do
+    ifaddrs
+    |> Enum.find_value(fn {_name, attrs} ->
+      attrs
+      |> Keyword.get_values(:addr)
+      |> Enum.find(fn
+        {127, _, _, _} -> false
+        {169, 254, _, _} -> false
+        {198, second, _, _} when second in 18..19 -> false
+        {a, b, c, d}
+            when is_integer(a) and is_integer(b) and is_integer(c) and is_integer(d) ->
+          true
+        _other ->
+          false
+      end)
+    end)
+  else
+    _ -> nil
+  end
+end
+
+default_turn_host = fn fallback_host ->
+  configured_phx_host =
+    System.get_env("PHX_HOST")
+    |> case do
+      nil -> nil
+      value -> value |> String.trim()
+    end
+
+  cond do
+    System.get_env("VOSTOK_TURN_PUBLIC_HOST") not in [nil, ""] ->
+      System.get_env("VOSTOK_TURN_PUBLIC_HOST")
+
+    configured_phx_host not in [nil, "", "localhost", "127.0.0.1", "::1"] ->
+      configured_phx_host
+
+    inferred_ip = first_non_loopback_ipv4.() ->
+      inferred_ip |> Tuple.to_list() |> Enum.join(".")
+
+    true ->
+      fallback_host
+  end
+end
+
+default_turn_uris = fn fallback_host ->
+  host = default_turn_host.(fallback_host)
+
+  [
+    "turn:#{host}:3478?transport=udp",
+    "turn:#{host}:3478?transport=tcp"
+  ]
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
@@ -106,13 +160,19 @@ if config_env() == :prod do
 
   turn_uris =
     case System.get_env("VOSTOK_TURN_URIS") do
-      nil -> ["turn:localhost:3478?transport=udp", "turn:localhost:3478?transport=tcp"]
+      nil -> default_turn_uris.(host)
       val -> val |> String.split(",") |> Enum.map(&String.trim/1)
     end
 
   config :vostok_server,
     turn_shared_secret: System.get_env("VOSTOK_TURN_SHARED_SECRET", "vostok-dev-turn-secret"),
-    public_turn_uris: turn_uris
+    public_turn_uris: turn_uris,
+    turn_ports_range_start: env_integer.("VOSTOK_TURN_PORT_RANGE_START", 50_000),
+    turn_ports_range_end: env_integer.("VOSTOK_TURN_PORT_RANGE_END", 50_050),
+    call_media_event_queue_limit: env_integer.("VOSTOK_CALL_MEDIA_EVENT_QUEUE_LIMIT", 64),
+    call_simulcast_enabled: env_boolean.("VOSTOK_CALL_SIMULCAST_ENABLED", true),
+    call_video_tracks_limit: env_integer.("VOSTOK_CALL_VIDEO_TRACKS_LIMIT", 8),
+    call_webrtc_toilet_capacity: env_integer.("VOSTOK_CALL_WEBRTC_TOILET_CAPACITY", 320)
 
   config :vostok_server, VostokServerWeb.Endpoint,
     url: [host: host, port: 443, scheme: System.get_env("PHX_SCHEME", "https")],
@@ -224,11 +284,17 @@ if config_env() in [:dev, :test] do
 
   dev_turn_uris =
     case System.get_env("VOSTOK_TURN_URIS") do
-      nil -> ["turn:localhost:3478?transport=udp", "turn:localhost:3478?transport=tcp"]
+      nil -> default_turn_uris.(host)
       val -> val |> String.split(",") |> Enum.map(&String.trim/1)
     end
 
   config :vostok_server,
     turn_shared_secret: System.get_env("VOSTOK_TURN_SHARED_SECRET", "vostok-dev-turn-secret"),
-    public_turn_uris: dev_turn_uris
+    public_turn_uris: dev_turn_uris,
+    turn_ports_range_start: env_integer.("VOSTOK_TURN_PORT_RANGE_START", 50_000),
+    turn_ports_range_end: env_integer.("VOSTOK_TURN_PORT_RANGE_END", 50_050),
+    call_media_event_queue_limit: env_integer.("VOSTOK_CALL_MEDIA_EVENT_QUEUE_LIMIT", 64),
+    call_simulcast_enabled: env_boolean.("VOSTOK_CALL_SIMULCAST_ENABLED", true),
+    call_video_tracks_limit: env_integer.("VOSTOK_CALL_VIDEO_TRACKS_LIMIT", 8),
+    call_webrtc_toilet_capacity: env_integer.("VOSTOK_CALL_WEBRTC_TOILET_CAPACITY", 320)
 end

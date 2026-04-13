@@ -16,7 +16,9 @@ export type LinkDevicePayload = {
   device_encryption_public_key: string
   signed_prekey: string
   signed_prekey_signature: string
-  one_time_prekeys: string[]
+  registration_id?: number
+  signed_prekey_id?: number
+  one_time_prekeys: string[] | Array<{ key_id: number; public_key: string }>
 }
 
 export type MeResponse = {
@@ -151,8 +153,11 @@ export type PrekeyDeviceBundle = {
   device_name: string
   identity_public_key: string
   encryption_public_key: string | null
+  registration_id: number | null
+  signed_prekey_id: number | null
   signed_prekey: string | null
   signed_prekey_signature: string | null
+  one_time_prekey_id: number | null
   one_time_prekey: string | null
 }
 

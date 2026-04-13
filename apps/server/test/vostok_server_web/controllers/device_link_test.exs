@@ -107,6 +107,23 @@ defmodule VostokServerWeb.DeviceLinkTest do
     primary_envelope = Base.encode64("primary-envelope")
     linked_envelope = Base.encode64("linked-envelope")
 
+    no_envelopes_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{primary_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "no-envelopes",
+        ciphertext: ciphertext,
+        header: header,
+        crypto_scheme: "signal-v1",
+        message_kind: "text"
+      })
+
+    assert %{
+             "error" => "validation",
+             "message" =>
+               "Signal-encrypted messages must include recipient_envelopes for every active recipient device."
+           } = json_response(no_envelopes_conn, 422)
+
     missing_envelope_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{primary_token}")
@@ -114,6 +131,7 @@ defmodule VostokServerWeb.DeviceLinkTest do
         client_id: "missing-envelope",
         ciphertext: ciphertext,
         header: header,
+        crypto_scheme: "signal-v1",
         message_kind: "text",
         recipient_envelopes: %{
           primary_device_id => primary_envelope
@@ -132,6 +150,7 @@ defmodule VostokServerWeb.DeviceLinkTest do
         client_id: "complete-envelope",
         ciphertext: ciphertext,
         header: header,
+        crypto_scheme: "signal-v1",
         message_kind: "text",
         recipient_envelopes: %{
           primary_device_id => primary_envelope,

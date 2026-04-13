@@ -1,10 +1,31 @@
-import type { CallKeyDistribution, CallSession, CallSignal } from './api.ts'
-import type { StoredDevice } from '../types.ts'
-import type {
-  DirectMediaPairEntry,
-  LocalGeneratedCallKeys
-} from './call-encryption.ts'
+import type { CallSession, CallSignal } from './api.ts'
 import type { MediaEncryptionState } from './media-e2ee.ts'
+import { getSignalStore } from './signal-store.ts'
+import {
+  decryptMessage,
+  deriveGroupCallKey,
+  generateMediaKeyMaterial,
+  mediaKeyFingerprint,
+  wrapMediaKeyForDevice
+} from './signal-sessions.ts'
+
+type WrappedSignalMediaKey = {
+  body: string
+  type: number
+}
+
+type GroupCallKeySignalPayload = {
+  kind: 'signal_group_call_key'
+  sender_device_id: string
+  wrapped_keys: Record<string, WrappedSignalMediaKey>
+}
+
+type DirectCallKeySignalPayload = {
+  kind: 'signal_direct_call_key'
+  call_id: string
+  sender_device_id: string
+  wrapped_key: WrappedSignalMediaKey
+}
 
 export type GroupMediaEncryptionSyncResult = {
   state: MediaEncryptionState
@@ -15,236 +36,324 @@ export type GroupMediaEncryptionSyncResult = {
 export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
   options: {
     activeCall: CallSession
-    currentDevice: StoredDevice
-    latestCallKey: CallKeyDistribution | null
-    localGeneratedCallKeys: LocalGeneratedCallKeys
-    resolveLocalGeneratedGroupKey: (
-      localGeneratedCallKeys: LocalGeneratedCallKeys,
-      callId: string,
-      keyEpoch: number
-    ) => string | null
-    unwrapWrappedGroupKey: (
-      wrappedKey: string,
-      encryptionPrivateKeyPkcs8Base64?: string
-    ) => Promise<string | null>
+    participantDeviceIds: string[]
+    isInitiator: boolean
+    callSignals: CallSignal[]
+    localDeviceId: string | null
+    groupCallKeyGeneratedForCallId: string | null
+    setGroupCallKeyGeneratedForCallId: (callId: string) => void
     membraneClient: unknown
     getPeerConnection: (client: unknown) => ConnectionType | null
     ensureController: () => ControllerType
     updateControllerKey: (controller: ControllerType, keyMaterialBase64: string | null) => void
     attachController: (controller: ControllerType, connection: ConnectionType) => void
-  }
-): Promise<GroupMediaEncryptionSyncResult> {
-  const {
-    activeCall,
-    currentDevice,
-    latestCallKey,
-    localGeneratedCallKeys,
-    resolveLocalGeneratedGroupKey,
-    unwrapWrappedGroupKey,
-    membraneClient,
-    getPeerConnection,
-    ensureController,
-    updateControllerKey,
-    attachController
-  } = options
-
-  const locallyGeneratedKey = latestCallKey
-    ? resolveLocalGeneratedGroupKey(
-        localGeneratedCallKeys,
-        activeCall.id,
-        latestCallKey.key_epoch
-      )
-    : null
-
-  const keyMaterial =
-    locallyGeneratedKey ||
-    (latestCallKey
-      ? await unwrapWrappedGroupKey(
-          latestCallKey.wrapped_key,
-          currentDevice.encryptionPrivateKeyPkcs8Base64
-        )
-      : null)
-
-  if (!keyMaterial || !latestCallKey) {
-    return {
-      state: 'error',
-      fingerprint: null,
-      currentKeyEpoch: null
-    }
-  }
-
-  const connection = getPeerConnection(membraneClient)
-
-  if (!connection) {
-    return {
-      state: 'negotiating',
-      fingerprint: null,
-      currentKeyEpoch: null
-    }
-  }
-
-  const controller = ensureController()
-  updateControllerKey(controller, keyMaterial)
-  attachController(controller, connection)
-
-  return {
-    state: 'encrypted',
-    fingerprint: null,
-    currentKeyEpoch: latestCallKey.key_epoch
-  }
-}
-
-export type DirectMediaEncryptionSyncResult<PairType> = {
-  state: MediaEncryptionState
-  fingerprint: string | null
-  currentKeyEpoch: number | null
-  nextPairEntry: DirectMediaPairEntry<PairType> | null
-  readySentForCallId: string | null
-}
-
-export async function syncDirectMediaEncryption<ControllerType, ConnectionType, PairType>(
-  options: {
-    activeCall: CallSession
-    sessionToken: string
-    callSignals: CallSignal[]
-    localDeviceId: string | null
-    currentPairEntry: DirectMediaPairEntry<PairType> | null
-    readySentForCallId: string | null
-    needsNewDirectMediaKeyPair: (
-      pairEntry: DirectMediaPairEntry<PairType> | null,
-      callId: string
-    ) => boolean
-    generateDirectMediaKeyPair: () => Promise<PairType & { publicKeyBase64: string; privateKey: CryptoKey }>
     sendCallSignal: (
       token: string,
       callId: string,
-      payload: { signal_type: 'heartbeat'; payload: string }
+      payload: { signal_type: 'heartbeat'; payload: string; target_device_id?: string }
     ) => Promise<unknown>
-    buildDirectMediaKeySignalPayload: (publicKeyBase64: string) => string
-    findRemoteMediaKeySignal: (
-      signals: CallSignal[],
-      localDeviceId: string | null,
-      parseMediaSignal: (payload: string) => { kind: 'media_e2ee_key'; public_key: string } | { kind: 'media_e2ee_ready'; fingerprint: string } | null
-    ) => { publicKey: string } | null
-    parseMediaSignal: (payload: string) => { kind: 'media_e2ee_key'; public_key: string } | { kind: 'media_e2ee_ready'; fingerprint: string } | null
-    deriveDirectMediaSharedKey: (
-      privateKey: CryptoKey,
-      remotePublicKeyBase64: string
-    ) => Promise<{ keyMaterialBase64: string; fingerprint: string }>
-    membraneClient: unknown
-    getPeerConnection: (client: unknown) => ConnectionType | null
-    ensureController: () => ControllerType
-    updateControllerKey: (controller: ControllerType, keyMaterialBase64: string | null) => void
-    attachController: (controller: ControllerType, connection: ConnectionType) => void
-    buildDirectMediaReadySignalPayload: (fingerprint: string) => string
-    hasMatchingRemoteReadySignal: (
-      signals: CallSignal[],
-      localDeviceId: string | null,
-      fingerprint: string,
-      parseMediaSignal: (payload: string) => { kind: 'media_e2ee_key'; public_key: string } | { kind: 'media_e2ee_ready'; fingerprint: string } | null
-    ) => boolean
-  }
-): Promise<DirectMediaEncryptionSyncResult<PairType & { publicKeyBase64: string; privateKey: CryptoKey }>> {
+    ensureRemoteSessions: (deviceIds: string[]) => Promise<string[]>
+    sessionToken: string
+    groupCallKeyMaterial: string | null
+    setGroupCallKeyMaterial: (key: string) => void
+    distributedParticipantDeviceIds: string[]
+    setDistributedParticipantDeviceIds: (deviceIds: string[]) => void
+    }
+): Promise<GroupMediaEncryptionSyncResult> {
   const {
     activeCall,
-    sessionToken,
+    participantDeviceIds,
+    isInitiator,
     callSignals,
     localDeviceId,
-    currentPairEntry,
-    readySentForCallId,
-    needsNewDirectMediaKeyPair,
-    generateDirectMediaKeyPair,
-    sendCallSignal,
-    buildDirectMediaKeySignalPayload,
-    findRemoteMediaKeySignal,
-    parseMediaSignal,
-    deriveDirectMediaSharedKey,
+    groupCallKeyGeneratedForCallId,
+    setGroupCallKeyGeneratedForCallId,
     membraneClient,
     getPeerConnection,
     ensureController,
     updateControllerKey,
     attachController,
-    buildDirectMediaReadySignalPayload,
-    hasMatchingRemoteReadySignal
+    sendCallSignal,
+    ensureRemoteSessions,
+    sessionToken,
+    groupCallKeyMaterial,
+    setGroupCallKeyMaterial,
+    distributedParticipantDeviceIds,
+    setDistributedParticipantDeviceIds
   } = options
 
-  let nextPairEntry = currentPairEntry as DirectMediaPairEntry<PairType & { publicKeyBase64: string; privateKey: CryptoKey }> | null
+  const store = getSignalStore()
+  let activeGroupCallKeyMaterial = groupCallKeyMaterial
 
-  if (needsNewDirectMediaKeyPair(nextPairEntry, activeCall.id)) {
-    const keyPair = await generateDirectMediaKeyPair()
-    nextPairEntry = { callId: activeCall.id, keyPair }
+  if (isInitiator && participantDeviceIds.length > 0) {
+    if (!localDeviceId) {
+      return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+    }
 
-    await sendCallSignal(sessionToken, activeCall.id, {
-      signal_type: 'heartbeat',
-      payload: buildDirectMediaKeySignalPayload(keyPair.publicKeyBase64)
+    const undistributedParticipantIds = participantDeviceIds.filter((deviceId) => {
+      return !distributedParticipantDeviceIds.includes(deviceId)
     })
-  }
 
-  if (!nextPairEntry) {
-    return {
-      state: 'negotiating',
-      fingerprint: null,
-      currentKeyEpoch: null,
-      nextPairEntry,
-      readySentForCallId
+    try {
+      if (!activeGroupCallKeyMaterial && groupCallKeyGeneratedForCallId !== activeCall.id) {
+        const readyParticipantIds = await ensureRemoteSessions(participantDeviceIds)
+
+        if (readyParticipantIds.length > 0) {
+          const { keyMaterialBase64, wrappedKeys } = await deriveGroupCallKey(store, readyParticipantIds)
+          activeGroupCallKeyMaterial = keyMaterialBase64
+          setGroupCallKeyMaterial(keyMaterialBase64)
+          setGroupCallKeyGeneratedForCallId(activeCall.id)
+          setDistributedParticipantDeviceIds(readyParticipantIds)
+
+          await sendCallSignal(sessionToken, activeCall.id, {
+            signal_type: 'heartbeat',
+            payload: JSON.stringify({
+              kind: 'signal_group_call_key',
+              wrapped_keys: wrappedKeys,
+              sender_device_id: localDeviceId
+            } satisfies GroupCallKeySignalPayload)
+          })
+        }
+      } else if (activeGroupCallKeyMaterial && undistributedParticipantIds.length > 0) {
+        const readyParticipantIds = await ensureRemoteSessions(undistributedParticipantIds)
+
+        if (readyParticipantIds.length > 0) {
+          const wrappedKeys = Object.fromEntries(
+            await Promise.all(
+              readyParticipantIds.map(async (deviceId) => {
+                return [deviceId, await wrapMediaKeyForDevice(store, deviceId, activeGroupCallKeyMaterial!)] as const
+              })
+            )
+          )
+
+          await sendCallSignal(sessionToken, activeCall.id, {
+            signal_type: 'heartbeat',
+            payload: JSON.stringify({
+              kind: 'signal_group_call_key',
+              wrapped_keys: wrappedKeys,
+              sender_device_id: localDeviceId
+            } satisfies GroupCallKeySignalPayload)
+          })
+          setDistributedParticipantDeviceIds(
+            Array.from(new Set([...distributedParticipantDeviceIds, ...readyParticipantIds]))
+          )
+        }
+      }
+    } catch (error) {
+      console.warn('[syncGroupMediaEncryption] Failed to generate group call key:', error)
+      return { state: 'error', fingerprint: null, currentKeyEpoch: null }
     }
   }
 
-  const remoteKeySignal = findRemoteMediaKeySignal(callSignals, localDeviceId, parseMediaSignal)
+  if (!isInitiator && !activeGroupCallKeyMaterial) {
+    for (const signal of [...callSignals].reverse()) {
+      if (signal.signal_type !== 'heartbeat' || !signal.payload) continue
+      try {
+        const parsed = parseGroupCallKeySignal(signal.payload)
+        if (!parsed) continue
+        if (!localDeviceId || !parsed.wrapped_keys[localDeviceId]) continue
 
-  if (!remoteKeySignal) {
-    return {
-      state: 'negotiating',
-      fingerprint: null,
-      currentKeyEpoch: null,
-      nextPairEntry,
-      readySentForCallId
+        const wrapped = parsed.wrapped_keys[localDeviceId]
+        const decryptedKey = await decryptMessage(store, parsed.sender_device_id, wrapped.body, wrapped.type)
+        setGroupCallKeyMaterial(decryptedKey)
+        activeGroupCallKeyMaterial = decryptedKey
+        break
+      } catch {
+        // Not our key or couldn't decrypt, try next signal
+      }
     }
   }
 
-  const sharedKey = await deriveDirectMediaSharedKey(
-    nextPairEntry.keyPair.privateKey,
-    remoteKeySignal.publicKey
-  )
+  if (!activeGroupCallKeyMaterial) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
 
   const connection = getPeerConnection(membraneClient)
-
   if (!connection) {
-    return {
-      state: 'negotiating',
-      fingerprint: null,
-      currentKeyEpoch: null,
-      nextPairEntry,
-      readySentForCallId
-    }
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
   }
 
   const controller = ensureController()
-  updateControllerKey(controller, sharedKey.keyMaterialBase64)
+  updateControllerKey(controller, activeGroupCallKeyMaterial)
   attachController(controller, connection)
 
-  let nextReadySentForCallId = readySentForCallId
-
-  if (readySentForCallId !== activeCall.id) {
-    nextReadySentForCallId = activeCall.id
-    await sendCallSignal(sessionToken, activeCall.id, {
-      signal_type: 'heartbeat',
-      payload: buildDirectMediaReadySignalPayload(sharedKey.fingerprint)
-    })
+  return {
+    state: 'encrypted',
+    fingerprint: mediaKeyFingerprint(activeGroupCallKeyMaterial),
+    currentKeyEpoch: null
   }
+}
 
-  const matchingReady = hasMatchingRemoteReadySignal(
+export type DirectMediaEncryptionSyncResult = {
+  state: MediaEncryptionState
+  fingerprint: string | null
+  currentKeyEpoch: number | null
+}
+
+export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
+  options: {
+    activeCall: CallSession
+    remoteDeviceId: string | null
+    callSignals: CallSignal[]
+    localDeviceId: string | null
+    isInitiator: boolean
+    membraneClient: unknown
+    getPeerConnection: (client: unknown) => ConnectionType | null
+    ensureController: () => ControllerType
+    updateControllerKey: (controller: ControllerType, keyMaterialBase64: string | null) => void
+    attachController: (controller: ControllerType, connection: ConnectionType) => void
+    sendCallSignal: (
+      token: string,
+      callId: string,
+      payload: { signal_type: 'heartbeat'; payload: string; target_device_id?: string }
+    ) => Promise<unknown>
+    sessionToken: string
+    directCallKeyMaterial: string | null
+    setDirectCallKeyMaterial: (key: string) => void
+    directCallKeyGeneratedForCallId: string | null
+    setDirectCallKeyGeneratedForCallId: (callId: string) => void
+    ensureRemoteSession: (deviceId: string) => Promise<boolean>
+  }
+): Promise<DirectMediaEncryptionSyncResult> {
+  const {
+    activeCall,
+    remoteDeviceId,
     callSignals,
     localDeviceId,
-    sharedKey.fingerprint,
-    parseMediaSignal
-  )
+    isInitiator,
+    membraneClient,
+    getPeerConnection,
+    ensureController,
+    updateControllerKey,
+    attachController,
+    sendCallSignal,
+    sessionToken,
+    directCallKeyMaterial,
+    setDirectCallKeyMaterial,
+    directCallKeyGeneratedForCallId,
+    setDirectCallKeyGeneratedForCallId,
+    ensureRemoteSession
+  } = options
+
+  if (!remoteDeviceId) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
+
+  const store = getSignalStore()
+  let activeDirectCallKeyMaterial = directCallKeyMaterial
+
+  try {
+    if (
+      isInitiator &&
+      !activeDirectCallKeyMaterial &&
+      directCallKeyGeneratedForCallId !== activeCall.id
+    ) {
+      if (!localDeviceId) {
+        return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+      }
+
+      const ready = await ensureRemoteSession(remoteDeviceId)
+
+      if (!ready) {
+        return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+      }
+
+      const keyMaterialBase64 = generateMediaKeyMaterial()
+      const wrappedKey = await wrapMediaKeyForDevice(store, remoteDeviceId, keyMaterialBase64)
+
+      await sendCallSignal(sessionToken, activeCall.id, {
+        signal_type: 'heartbeat',
+        target_device_id: remoteDeviceId,
+        payload: JSON.stringify({
+          kind: 'signal_direct_call_key',
+          call_id: activeCall.id,
+          sender_device_id: localDeviceId,
+          wrapped_key: wrappedKey
+        } satisfies DirectCallKeySignalPayload)
+      })
+
+      setDirectCallKeyMaterial(keyMaterialBase64)
+      setDirectCallKeyGeneratedForCallId(activeCall.id)
+      activeDirectCallKeyMaterial = keyMaterialBase64
+    }
+  } catch (error) {
+    console.warn('[syncDirectMediaEncryption] Failed to distribute call key:', error)
+    return { state: 'error', fingerprint: null, currentKeyEpoch: null }
+  }
+
+  if (!activeDirectCallKeyMaterial) {
+    for (const signal of [...callSignals].reverse()) {
+      if (signal.signal_type !== 'heartbeat' || !signal.payload) continue
+      if (signal.target_device_id && signal.target_device_id !== localDeviceId) continue
+
+      try {
+        const parsed = parseDirectCallKeySignal(signal.payload)
+        if (!parsed || parsed.call_id !== activeCall.id || parsed.sender_device_id === localDeviceId) {
+          continue
+        }
+
+        const decryptedKey = await decryptMessage(
+          store,
+          parsed.sender_device_id,
+          parsed.wrapped_key.body,
+          parsed.wrapped_key.type
+        )
+        setDirectCallKeyMaterial(decryptedKey)
+        activeDirectCallKeyMaterial = decryptedKey
+        break
+      } catch {
+        // Ignore malformed or undecryptable key signals and keep scanning.
+      }
+    }
+  }
+
+  if (!activeDirectCallKeyMaterial) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
+
+  const connection = getPeerConnection(membraneClient)
+  if (!connection) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
+
+  const controller = ensureController()
+  updateControllerKey(controller, activeDirectCallKeyMaterial)
+  attachController(controller, connection)
 
   return {
-    state: matchingReady ? 'verified' : 'encrypted',
-    fingerprint: sharedKey.fingerprint,
-    currentKeyEpoch: 1,
-    nextPairEntry,
-    readySentForCallId: nextReadySentForCallId
+    state: 'encrypted',
+    fingerprint: mediaKeyFingerprint(activeDirectCallKeyMaterial),
+    currentKeyEpoch: null
   }
+}
+
+function parseGroupCallKeySignal(payload: string): GroupCallKeySignalPayload | null {
+  const parsed = JSON.parse(payload) as Partial<GroupCallKeySignalPayload>
+  if (
+    parsed.kind !== 'signal_group_call_key' ||
+    typeof parsed.sender_device_id !== 'string' ||
+    !parsed.wrapped_keys ||
+    typeof parsed.wrapped_keys !== 'object'
+  ) {
+    return null
+  }
+
+  return parsed as GroupCallKeySignalPayload
+}
+
+function parseDirectCallKeySignal(payload: string): DirectCallKeySignalPayload | null {
+  const parsed = JSON.parse(payload) as Partial<DirectCallKeySignalPayload>
+  if (
+    parsed.kind !== 'signal_direct_call_key' ||
+    typeof parsed.call_id !== 'string' ||
+    typeof parsed.sender_device_id !== 'string' ||
+    !parsed.wrapped_key ||
+    typeof parsed.wrapped_key !== 'object' ||
+    typeof parsed.wrapped_key.body !== 'string' ||
+    typeof parsed.wrapped_key.type !== 'number'
+  ) {
+    return null
+  }
+
+  return parsed as DirectCallKeySignalPayload
 }

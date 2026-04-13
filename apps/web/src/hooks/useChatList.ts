@@ -77,20 +77,32 @@ export function useChatList(
 
   const setChatItems = useCallback(
     (valueOrUpdater: React.SetStateAction<MergedChatSummary[]>) => {
+      const current = servers.mergedChats
       const next = typeof valueOrUpdater === 'function'
-        ? valueOrUpdater(servers.mergedChats)
+        ? valueOrUpdater(current)
         : valueOrUpdater
 
-      const grouped = new Map<string, MergedChatSummary[]>()
-      for (const chat of next) {
-        const group = grouped.get(chat.serverId) ?? []
-        group.push(chat)
-        grouped.set(chat.serverId, group)
+      const changedByServer = new Map<string, Map<string, MergedChatSummary>>()
+
+      for (const nextChat of next) {
+        const currentChat = current.find((chat) => chat.id === nextChat.id)
+        if (currentChat && JSON.stringify(currentChat) === JSON.stringify(nextChat)) {
+          continue
+        }
+
+        const byChatId = changedByServer.get(nextChat.serverId) ?? new Map<string, MergedChatSummary>()
+        byChatId.set(nextChat.rawId, nextChat)
+        changedByServer.set(nextChat.serverId, byChatId)
       }
 
-      for (const server of servers.servers) {
-        const chats = grouped.get(server.id) ?? []
-        servers.updateChatsForServer(server.id, chats.map(toRawChat))
+      for (const [serverId, changedChats] of changedByServer) {
+        const existingServerChats = servers.chatsByServerId.get(serverId) ?? []
+        const mergedServerChats = existingServerChats.map((chat) => {
+          const changed = changedChats.get(chat.id)
+          return changed ? toRawChat(changed) : chat
+        })
+
+        servers.updateChatsForServer(serverId, mergedServerChats)
       }
     },
     [servers]
@@ -126,6 +138,14 @@ export function useChatList(
       if (current && chatItems.some((chat) => chat.id === current)) {
         return current
       }
+
+      if (current) {
+        // Keep the current chat selection stable if a refreshed chat list
+        // momentarily omits it. This happens in fresh-account first-message
+        // flows where listChats can lag behind the active thread state.
+        return current
+      }
+
       return chatItems[0]?.id ?? null
     })
   }, [chatItems, setActiveChatId, view])

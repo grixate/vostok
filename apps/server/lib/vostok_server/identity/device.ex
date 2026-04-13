@@ -19,6 +19,9 @@ defmodule VostokServer.Identity.Device do
     field :push_token, :string
     field :push_token_updated_at, :utc_datetime_usec
     field :last_active_at, :utc_datetime_usec
+    field :registration_id, :integer
+    field :signed_prekey_id_counter, :integer, default: 0
+    field :one_time_prekey_id_counter, :integer, default: 0
     field :revoked_at, :utc_datetime_usec
 
     belongs_to :user, VostokServer.Identity.User
@@ -37,6 +40,9 @@ defmodule VostokServer.Identity.Device do
       :encryption_public_key,
       :signed_prekey,
       :signed_prekey_signature,
+      :registration_id,
+      :signed_prekey_id_counter,
+      :one_time_prekey_id_counter,
       :push_provider,
       :push_token,
       :push_token_updated_at,

@@ -1,10 +1,8 @@
 import type { ChatMessage, RecipientDevice } from './api'
 import { base64ToBytes, bytesToBase64 } from './base64'
-import {
-  decryptMessageWithSessions,
-  isSessionHeader
-} from './chat-session-vault'
 import { bootstrapSecureStore, persistSecureStoreValue, whenSecureStoreReady } from './secure-kv-store'
+import { decryptMessage as signalDecrypt } from './signal-sessions'
+import { getSignalStore } from './signal-store'
 
 const LEGACY_MESSAGE_KEY_STORAGE = 'vostok.message-key'
 const CONTENT_IV_BYTES = 12
@@ -342,7 +340,7 @@ export async function encryptLegacyMessageText(plaintext: string): Promise<strin
 export async function decryptMessageText(
   message: ChatMessage,
   currentDeviceId: string,
-  encryptionPrivateKeyPkcs8Base64?: string
+  _encryptionPrivateKeyPkcs8Base64?: string
 ): Promise<string> {
   // Plaintext messages (crypto_scheme: 'none') are just base64-encoded text.
   if (message.crypto_scheme === 'none') {
@@ -353,24 +351,88 @@ export async function decryptMessageText(
   // attempting any decryption that reads keys from localStorage.
   await whenSecureStoreReady()
 
-  if (message.header && message.recipient_envelope && isSessionHeader(message.header)) {
-    return decryptMessageWithSessions(message, currentDeviceId)
+  // Signal protocol v1 messages
+  if (message.crypto_scheme === 'signal-v1') {
+    return decryptSignalMessage(message, currentDeviceId)
   }
 
-  if (message.header && message.chat_id && isGroupSenderKeyHeader(message.header)) {
+  if (message.crypto_scheme === 'group_sender_key_v1') {
     return decryptGroupSenderMessage(message)
   }
 
-  if (
-    encryptionPrivateKeyPkcs8Base64 &&
-    message.header &&
-    message.recipient_envelope &&
-    isEnvelopeHeader(message.header)
-  ) {
-    return decryptRecipientEnvelope(message, encryptionPrivateKeyPkcs8Base64)
+  // Legacy crypto schemes — show placeholder instead of attempting decrypt
+  // with the old P-256 code that has been removed.
+  throw new Error('[Message encrypted with an older protocol version]')
+}
+
+async function decryptSignalMessage(
+  message: ChatMessage,
+  currentDeviceId: string
+): Promise<string> {
+  const store = getSignalStore()
+  const senderDeviceId = message.sender_device_id
+
+  if (!senderDeviceId) {
+    throw new Error('Signal message missing sender_device_id')
   }
 
-  return decryptLegacyMessageText(message.ciphertext)
+  if (!currentDeviceId) {
+    throw new Error('Signal message decryption requires the current device id.')
+  }
+
+  // Own outbound messages: the sender encrypted for their own device using
+  // their own session. Decrypt from the recipient_envelopes using the sender's
+  // address — the library stores the session state for self-encryption.
+  // If no envelope exists for this device, let the error propagate so the
+  // sent-plaintext cache in projectMessage() can handle it.
+
+  // The server delivers the device-specific envelope as `recipient_envelope`.
+  // Fall back to the top-level `ciphertext` if no per-device envelope exists.
+  const ciphertext = message.recipient_envelope ?? message.ciphertext
+
+  if (!ciphertext) {
+    throw new Error('No encrypted envelope found for this device')
+  }
+
+  // Parse header to get message type
+  let messageType = 1 // default: WhisperMessage
+  if (message.header) {
+    try {
+      const headerJson = JSON.parse(atob(message.header)) as {
+        algorithm?: string
+        type_map?: Record<string, number>
+      }
+      if (headerJson.type_map?.[currentDeviceId] !== undefined) {
+        messageType = headerJson.type_map[currentDeviceId]
+      } else if (!message.recipient_envelope && headerJson.type_map) {
+        // Fallback: if our device isn't in the map, use the first entry's type.
+        // Only do this when we are decrypting the shared top-level ciphertext.
+        // If a device-specific recipient envelope exists but our device id is
+        // missing from type_map, guessing another device's type can corrupt the
+        // local Signal ratchet and turn a transient state issue into a
+        // persistent MessageCounterError on later retries.
+        const firstType = Object.values(headerJson.type_map)[0]
+        if (firstType !== undefined) {
+          messageType = firstType
+        }
+      } else if (headerJson.type_map && message.recipient_envelope) {
+        throw new Error(
+          `Signal message type_map is missing an entry for current device ${currentDeviceId}.`
+        )
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Signal message type_map is missing an entry')
+      ) {
+        throw error
+      }
+
+      // If header parse fails, default to WhisperMessage
+    }
+  }
+
+  return signalDecrypt(store, senderDeviceId, ciphertext, messageType)
 }
 
 async function decryptGroupSenderMessage(message: ChatMessage): Promise<string> {

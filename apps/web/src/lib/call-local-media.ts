@@ -1,4 +1,5 @@
 import type { MembraneClient } from './membrane-native.ts'
+import { buildCallCaptureConstraints } from './call-quality-policy.ts'
 
 export function stopLocalMediaStream(stream: MediaStream | null) {
   if (!stream) {
@@ -78,15 +79,7 @@ export async function replaceLocalMediaStream(options: {
   }
 
   const stream = await getUserMedia(
-    mode === 'audio'
-      ? { audio: true, video: false }
-      : {
-          audio: true,
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        }
+    buildCallCaptureConstraints(mode, 'high')
   )
 
   const trackIds =

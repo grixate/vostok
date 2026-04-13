@@ -33,6 +33,20 @@ export type MembraneRemoteTrackSnapshot = {
   voiceActivity: 'speech' | 'silence' | null
 }
 
+export type MembraneLocalTrackSnapshot = {
+  trackId: string
+  mediaTrackId: string | null
+  kind: 'audio' | 'video' | null
+  source: string | null
+}
+
+export type MembranePeerConnectionSnapshot = {
+  connectionState: RTCPeerConnectionState | null
+  iceConnectionState: RTCIceConnectionState | null
+  iceGatheringState: RTCIceGatheringState | null
+  signalingState: RTCSignalingState | null
+}
+
 export type MembraneClient = WebRTCEndpoint<MembraneEndpointMetadata, MembraneTrackMetadata>
 
 export type MembraneClientHandlers = {
@@ -53,11 +67,92 @@ export type MembraneClientHandlers = {
   onConnectionError?: (message: string) => void
 }
 
+type InternalMembraneClient = {
+  connection?: RTCPeerConnection
+  onTrack?: () => (event: RTCTrackEvent) => void
+  midToTrackId?: Map<string | null, string>
+  trackIdToTrack?: Map<string, {
+    stream: MediaStream | null
+    track: MediaStreamTrack | null
+  }>
+  localEndpoint?: unknown
+  checkIfTrackBelongToEndpoint?: (trackId: string, endpoint?: unknown) => boolean
+}
+
+function installSafeOnTrackHandler(client: MembraneClient): void {
+  const internalClient = client as unknown as InternalMembraneClient
+  const pendingTracksByMid = new Map<string | null, { stream: MediaStream | null; track: MediaStreamTrack }>()
+
+  const applyPendingTracks = () => {
+    if (pendingTracksByMid.size === 0) {
+      return
+    }
+
+    for (const [mid, pending] of pendingTracksByMid) {
+      const trackId = internalClient.midToTrackId?.get(mid)
+      if (!trackId) {
+        continue
+      }
+
+      const trackContext = internalClient.trackIdToTrack?.get(trackId)
+      if (!trackContext) {
+        continue
+      }
+
+      trackContext.stream = pending.stream
+      trackContext.track = pending.track
+      client.emit('trackReady', trackContext as never)
+      pendingTracksByMid.delete(mid)
+    }
+  }
+
+  const originalOnTrackFactory = internalClient.onTrack?.bind(internalClient)
+  if (!originalOnTrackFactory) {
+    return
+  }
+
+  internalClient.onTrack = () => (event: RTCTrackEvent) => {
+    const [stream] = event.streams
+    const mid = event.transceiver?.mid ?? null
+    const trackId = internalClient.midToTrackId?.get(mid)
+
+    if (!trackId) {
+      pendingTracksByMid.set(mid, { stream: stream ?? null, track: event.track })
+      return
+    }
+
+    if (internalClient.checkIfTrackBelongToEndpoint?.(trackId, internalClient.localEndpoint)) {
+      return
+    }
+
+    const trackContext = internalClient.trackIdToTrack?.get(trackId)
+    if (!trackContext) {
+      pendingTracksByMid.set(mid, { stream: stream ?? null, track: event.track })
+      return
+    }
+
+    trackContext.stream = stream ?? null
+    trackContext.track = event.track
+    client.emit('trackReady', trackContext as never)
+  }
+
+  // Re-evaluate pending on every remote-state sync; this captures late
+  // trackId mapping updates after renegotiation.
+  const originalSyncHook = () => {
+    applyPendingTracks()
+  }
+  ;(client as unknown as { __vostokApplyPendingOnTrack?: () => void }).__vostokApplyPendingOnTrack = originalSyncHook
+}
+
 export function createMembraneClient(handlers: MembraneClientHandlers): MembraneClient {
   const client = new WebRTCEndpoint<MembraneEndpointMetadata, MembraneTrackMetadata>()
+  installSafeOnTrackHandler(client)
   const observedTrackIds = new Set<string>()
 
   const syncRemoteState = () => {
+    const applyPendingOnTrack = (client as unknown as { __vostokApplyPendingOnTrack?: () => void }).__vostokApplyPendingOnTrack
+    applyPendingOnTrack?.()
+
     const remoteEndpoints = Object.values(client.getRemoteEndpoints())
     const remoteTracks = Object.values(client.getRemoteTracks())
 
@@ -67,7 +162,8 @@ export function createMembraneClient(handlers: MembraneClientHandlers): Membrane
       }
 
       observedTrackIds.add(track.trackId)
-      track.on('voiceActivityChanged', syncRemoteState)
+      // Voice activity can fire at very high frequency when a remote mic is unmuted.
+      // We don't currently consume VAD in UI logic, so avoid flooding React state updates.
       track.on('encodingChanged', syncRemoteState)
     }
 
@@ -167,28 +263,78 @@ export function configureMembraneTurnServers(
     internalClient.rtcConfig = { iceServers: [] }
   }
 
-  // For localhost development, rely on Membrane's integrated TURN, but still
-  // allow host candidates. After track renegotiation the loopback/host path is
-  // often the only route that stays connected cleanly in local dev.
-  const isLocalhost = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-
-  if (isLocalhost) {
-    internalClient.rtcConfig.iceServers = []
-    internalClient.rtcConfig.iceTransportPolicy = 'all'
-  } else {
-    internalClient.rtcConfig.iceServers = turnCredentials
-      ? turnCredentialsToIceServers(turnCredentials)
-      : []
-    internalClient.rtcConfig.iceTransportPolicy = 'all'
-  }
+  internalClient.rtcConfig.iceServers = turnCredentials
+    ? turnCredentialsToIceServers(turnCredentials)
+    : []
+  internalClient.rtcConfig.iceTransportPolicy = 'all'
 
   internalClient.__baseIceServers = [...(internalClient.rtcConfig.iceServers ?? [])]
 }
 
 export function receiveMembraneMediaEvent(client: MembraneClient, mediaEvent: string): void {
-  resetIntegratedTurnServers(client, mediaEvent)
-  client.receiveMediaEvent(mediaEvent)
+  const normalizedMediaEvent = normalizeIntegratedTurnServers(client, mediaEvent)
+  client.receiveMediaEvent(normalizedMediaEvent)
+}
+
+export function shouldSkipStaleMembraneMediaEvent(
+  client: MembraneClient,
+  mediaEvent: string
+): boolean {
+  const internalClient = client as unknown as {
+    idToEndpoint?: Map<string, { id: string; tracks: Map<string, unknown> }>
+    localEndpoint?: { id?: string | null }
+    trackIdToTrack?: Map<string, unknown>
+  }
+
+  try {
+    const parsed = JSON.parse(mediaEvent) as {
+      type?: unknown
+      data?: {
+        id?: unknown
+        endpointId?: unknown
+        trackIds?: unknown
+      }
+    }
+
+    if (parsed.type === 'endpointRemoved') {
+      const endpointId = typeof parsed.data?.id === 'string' ? parsed.data.id : null
+
+      if (!endpointId || endpointId === internalClient.localEndpoint?.id) {
+        return false
+      }
+
+      return !internalClient.idToEndpoint?.has(endpointId)
+    }
+
+    if (parsed.type === 'tracksRemoved') {
+      const endpointId = typeof parsed.data?.endpointId === 'string' ? parsed.data.endpointId : null
+      const trackIds = Array.isArray(parsed.data?.trackIds)
+        ? parsed.data.trackIds.filter((trackId): trackId is string => typeof trackId === 'string')
+        : []
+
+      if (!endpointId || endpointId === internalClient.localEndpoint?.id) {
+        return false
+      }
+
+      const endpoint = internalClient.idToEndpoint?.get(endpointId)
+
+      if (!endpoint) {
+        return true
+      }
+
+      if (trackIds.length === 0) {
+        return false
+      }
+
+      return trackIds.every((trackId) => {
+        return !endpoint.tracks.has(trackId) && !internalClient.trackIdToTrack?.has(trackId)
+      })
+    }
+  } catch {
+    return false
+  }
+
+  return false
 }
 
 export function updateMembraneEndpointMetadata(
@@ -275,6 +421,126 @@ export function getMembranePeerConnection(client: MembraneClient | null): RTCPee
   return internalClient.connection ?? null
 }
 
+export function getMembranePeerConnectionSnapshot(
+  client: MembraneClient | null
+): MembranePeerConnectionSnapshot {
+  const connection = getMembranePeerConnection(client)
+
+  if (!connection) {
+    return {
+      connectionState: null,
+      iceConnectionState: null,
+      iceGatheringState: null,
+      signalingState: null
+    }
+  }
+
+  return {
+    connectionState: connection.connectionState,
+    iceConnectionState: connection.iceConnectionState,
+    iceGatheringState: connection.iceGatheringState,
+    signalingState: connection.signalingState
+  }
+}
+
+export function getMembraneLocalTrackSnapshots(client: MembraneClient | null): MembraneLocalTrackSnapshot[] {
+  if (!client) {
+    return []
+  }
+
+  const internalClient = client as unknown as {
+    localTrackIdToTrack?: Map<string, {
+      track?: MediaStreamTrack | null
+      metadata?: Partial<MembraneTrackMetadata> | null
+    }>
+  }
+
+  const entries = Array.from(internalClient.localTrackIdToTrack?.entries() ?? [])
+
+  return entries
+    .map(([trackId, context]) => ({
+      trackId,
+      mediaTrackId: context.track?.id ?? null,
+      kind: context.metadata?.kind ?? null,
+      source: context.metadata?.source ?? null
+    }))
+    .sort((left, right) => left.trackId.localeCompare(right.trackId))
+}
+
+export function findMembraneLocalTrackId(
+  client: MembraneClient | null,
+  track: MediaStreamTrack | null,
+  kind?: MembraneTrackMetadata['kind'],
+  source?: MembraneTrackMetadata['source']
+): string | null {
+  if (!client || !track) {
+    return null
+  }
+
+  const internalClient = client as unknown as {
+    localTrackIdToTrack?: Map<string, {
+      track?: MediaStreamTrack | null
+      metadata?: Partial<MembraneTrackMetadata> | null
+    }>
+  }
+
+  const entries = internalClient.localTrackIdToTrack?.entries()
+
+  if (!entries) {
+    return null
+  }
+
+  for (const [trackId, context] of entries) {
+    if (context.track?.id !== track.id) {
+      continue
+    }
+
+    if (kind && context.metadata?.kind && context.metadata.kind !== kind) {
+      continue
+    }
+
+    if (source && context.metadata?.source && context.metadata.source !== source) {
+      continue
+    }
+
+    return trackId
+  }
+
+  return null
+}
+
+export function isMembranePeerConnectionHealthy(client: MembraneClient | null): boolean {
+  const connection = getMembranePeerConnection(client)
+
+  if (!connection) {
+    return false
+  }
+
+  if (connection.connectionState !== 'connected') {
+    return false
+  }
+
+  return connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed'
+}
+
+export function canMutateMembraneTracks(client: MembraneClient | null): boolean {
+  const connection = getMembranePeerConnection(client)
+
+  if (!connection) {
+    return false
+  }
+
+  if (connection.signalingState === 'closed') {
+    return false
+  }
+
+  if (connection.connectionState === 'failed' || connection.connectionState === 'closed') {
+    return false
+  }
+
+  return connection.iceConnectionState !== 'failed' && connection.iceConnectionState !== 'closed'
+}
+
 function toTrackKind(value: string | undefined): 'audio' | 'video' | null {
   if (value === 'audio' || value === 'video') {
     return value
@@ -283,32 +549,13 @@ function toTrackKind(value: string | undefined): 'audio' | 'video' | null {
   return null
 }
 
-function resetIntegratedTurnServers(client: MembraneClient, mediaEvent: string): void {
-  const internalClient = client as unknown as {
-    rtcConfig?: RTCConfiguration
-    __baseIceServers?: RTCIceServer[]
-  }
+export function normalizeIntegratedTurnServers(
+  _client: MembraneClient,
+  mediaEvent: string
+): string {
+  return mediaEvent
+}
 
-  if (!internalClient.rtcConfig) {
-    return
-  }
-
-  try {
-    const parsed = JSON.parse(mediaEvent) as {
-      data?: {
-        data?: {
-          integratedTurnServers?: unknown
-        }
-      }
-      type?: string
-    }
-
-    if (!Array.isArray(parsed.data?.data?.integratedTurnServers)) {
-      return
-    }
-
-    internalClient.rtcConfig.iceServers = [...(internalClient.__baseIceServers ?? [])]
-  } catch {
-    // Ignore malformed events and let the Membrane client handle them.
-  }
+export function filterOutgoingMembraneCandidateEvent(mediaEvent: string): string | null {
+  return mediaEvent
 }

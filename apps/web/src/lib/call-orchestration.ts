@@ -1,5 +1,4 @@
 import type {
-  CallKeyDistribution,
   CallParticipant,
   CallRoomState,
   CallSession,
@@ -8,7 +7,6 @@ import type {
 } from './api.ts'
 import type { StoredDevice } from '../types.ts'
 import type { CallJoinPayload } from './call-media.ts'
-import { selectLatestCallKey } from './call-media.ts'
 
 type MembraneConnectMetadata = {
   call_id: string
@@ -27,9 +25,7 @@ export type BootstrapActiveCallTransportOptions<ClientType> = {
   fetchTurnCredentials: (token: string, params: { ttl_seconds: number }) => Promise<{ turn: TurnCredentials }>
   callParticipants: CallParticipant[]
   isParticipantJoined: (participants: CallParticipant[], deviceId: string) => boolean
-  latestCallKey: CallKeyDistribution | null
-  rotateGroupCallKeysFor: (call: CallSession, opts?: { quiet?: boolean }) => Promise<CallKeyDistribution[] | null>
-  buildJoinPayload: (call: CallSession, latestCallKey: CallKeyDistribution | null) => CallJoinPayload
+  buildJoinPayload: (call: CallSession, latestCallKey: null) => CallJoinPayload
   joinCallSession: (token: string, callId: string, payload: CallJoinPayload) => Promise<{
     participants: CallParticipant[]
     room: CallRoomState | null
@@ -67,8 +63,6 @@ export async function bootstrapActiveCallTransport<ClientType>(
     fetchTurnCredentials,
     callParticipants,
     isParticipantJoined,
-    latestCallKey,
-    rotateGroupCallKeysFor,
     buildJoinPayload,
     joinCallSession,
     currentEndpoint,
@@ -93,20 +87,7 @@ export async function bootstrapActiveCallTransport<ClientType>(
   const joined = isParticipantJoined(callParticipants, currentDevice.deviceId)
 
   if (!joined) {
-    let nextLatestCallKey = currentCall.mode === 'group' ? latestCallKey : null
-
-    if (currentCall.mode === 'group') {
-      if (!nextLatestCallKey && currentDevice.deviceId === currentCall.started_by_device_id) {
-        const rotated = await rotateGroupCallKeysFor(currentCall, { quiet: true })
-        nextLatestCallKey = rotated ? selectLatestCallKey(rotated) : null
-      }
-
-      if (!nextLatestCallKey) {
-        throw new Error('Group media encryption is not ready for this device yet.')
-      }
-    }
-
-    const joinPayload = buildJoinPayload(currentCall, nextLatestCallKey)
+    const joinPayload = buildJoinPayload(currentCall, null)
     const joinResponse = await joinCallSession(currentSessionToken, currentCall.id, joinPayload)
     nextParticipants = joinResponse.participants
     nextRoom = joinResponse.room

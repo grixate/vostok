@@ -42,19 +42,13 @@ export function computeNextCallKeyEpoch(callKeys: CallKeyDistribution[]): number
 
 export function buildJoinPayload(
   call: CallSession,
-  latestCallKey: CallKeyDistribution | null
+  _latestCallKey: CallKeyDistribution | null
 ): CallJoinPayload {
-  const payload: CallJoinPayload = {
-    track_kind: preferredTrackKind(call)
+  return {
+    track_kind: preferredTrackKind(call),
+    e2ee_capable: true,
+    e2ee_algorithm: 'signal-v1'
   }
-
-  if (call.mode === 'group' && latestCallKey) {
-    payload.e2ee_capable = true
-    payload.e2ee_algorithm = latestCallKey.algorithm
-    payload.e2ee_key_epoch = latestCallKey.key_epoch
-  }
-
-  return payload
 }
 
 export function parseMediaSignal(payload: string): ParsedMediaSignal | null {

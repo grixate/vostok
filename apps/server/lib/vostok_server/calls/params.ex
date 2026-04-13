@@ -57,27 +57,38 @@ defmodule VostokServer.Calls.Params do
   end
 
   def normalize_join_e2ee(
-        %CallSession{mode: "group"} = call,
+        %CallSession{} = call,
         attrs,
         current_device_id,
         ensure_fun
       )
-      when is_map(attrs) and is_binary(current_device_id) and is_function(ensure_fun, 3) do
-    with {:ok, true} <- fetch_required_boolean(attrs, "e2ee_capable"),
-         {:ok, algorithm} <- fetch_required_string(attrs, "e2ee_algorithm"),
-         {:ok, key_epoch} <- fetch_required_non_negative_integer(attrs, "e2ee_key_epoch"),
-         :ok <- ensure_fun.(call.id, current_device_id, key_epoch) do
+      when is_map(attrs) do
+    e2ee_capable = Map.get(attrs, "e2ee_capable", false) == true
+    e2ee_algorithm =
+      attrs
+      |> Map.get("e2ee_algorithm")
+      |> normalize_string()
+      |> default_join_e2ee_algorithm(e2ee_capable)
+
+    e2ee_key_epoch = parse_non_negative_integer(Map.get(attrs, "e2ee_key_epoch"))
+
+    with :ok <-
+           maybe_validate_join_e2ee(
+             call,
+             call.id,
+             current_device_id,
+             e2ee_capable,
+             e2ee_algorithm,
+             e2ee_key_epoch,
+             ensure_fun
+           ) do
       {:ok,
        %{
-         e2ee_capable: true,
-         e2ee_algorithm: algorithm,
-         e2ee_key_epoch: key_epoch
+         e2ee_capable: e2ee_capable,
+         e2ee_algorithm: if(e2ee_capable, do: e2ee_algorithm, else: nil),
+         e2ee_key_epoch: if(e2ee_algorithm == "signal-v1", do: nil, else: e2ee_key_epoch)
        }}
     end
-  end
-
-  def normalize_join_e2ee(%CallSession{}, _attrs, _current_device_id, _ensure_fun) do
-    {:ok, %{e2ee_capable: false, e2ee_algorithm: nil, e2ee_key_epoch: nil}}
   end
 
   def normalize_signal_attrs(call_id, current_device_id, attrs) do
@@ -223,6 +234,67 @@ defmodule VostokServer.Calls.Params do
 
   def normalize_user_id_list(_value), do: []
 
+  defp default_join_e2ee_algorithm(nil, true), do: "signal-v1"
+  defp default_join_e2ee_algorithm(algorithm, _e2ee_capable), do: algorithm
+
+  defp maybe_validate_join_e2ee(
+         _call,
+         _call_id,
+         _current_device_id,
+         false,
+         _e2ee_algorithm,
+         _e2ee_key_epoch,
+         _ensure_fun
+       ),
+       do: :ok
+
+  defp maybe_validate_join_e2ee(
+         _call,
+         _call_id,
+         _current_device_id,
+         true,
+         "signal-v1",
+         _e2ee_key_epoch,
+         _ensure_fun
+       ),
+       do: :ok
+
+  defp maybe_validate_join_e2ee(
+         %CallSession{mode: "group"},
+         _call_id,
+         _current_device_id,
+         true,
+         _e2ee_algorithm,
+         nil,
+         _ensure_fun
+       ) do
+    {:error, {:validation, "e2ee_key_epoch must be a non-negative integer when e2ee_capable is true."}}
+  end
+
+  defp maybe_validate_join_e2ee(
+         %CallSession{mode: "group"},
+         call_id,
+         current_device_id,
+         true,
+         _e2ee_algorithm,
+         e2ee_key_epoch,
+         ensure_fun
+       ) do
+    ensure_fun.(call_id, current_device_id, e2ee_key_epoch)
+  end
+
+  defp maybe_validate_join_e2ee(
+         %CallSession{},
+         _call_id,
+         _current_device_id,
+         true,
+         _e2ee_algorithm,
+         _e2ee_key_epoch,
+         _ensure_fun
+       ) do
+    {:error, {:validation, "Only signal-v1 media encryption is supported for non-group calls."}}
+  end
+
   defp decode_wrapped_keys_map(map) when is_map(map) do
     map
     |> Enum.reduce_while({:ok, %{}}, fn
@@ -239,34 +311,6 @@ defmodule VostokServer.Calls.Params do
       _entry, _acc ->
         {:halt, {:error, {:validation, "wrapped_keys must map device ids to base64 strings."}}}
     end)
-  end
-
-  defp fetch_required_boolean(attrs, field) when is_map(attrs) and is_binary(field) do
-    case Map.get(attrs, field) do
-      true -> {:ok, true}
-      "true" -> {:ok, true}
-      "1" -> {:ok, true}
-      1 -> {:ok, true}
-      false -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
-      "false" -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
-      nil -> {:error, {:validation, "#{field} is required for group call E2EE."}}
-      _ -> {:error, {:validation, "#{field} must be true for group call E2EE."}}
-    end
-  end
-
-  defp fetch_required_string(attrs, field) when is_map(attrs) and is_binary(field) do
-    case attrs |> Map.get(field) |> normalize_string() do
-      nil -> {:error, {:validation, "#{field} is required."}}
-      value -> {:ok, value}
-    end
-  end
-
-  defp fetch_required_non_negative_integer(attrs, field)
-       when is_map(attrs) and is_binary(field) do
-    case parse_non_negative_integer(Map.get(attrs, field)) do
-      nil -> {:error, {:validation, "#{field} must be a non-negative integer."}}
-      value -> {:ok, value}
-    end
   end
 
   defp parse_non_negative_integer(value) when is_integer(value) and value >= 0, do: value

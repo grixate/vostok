@@ -817,7 +817,7 @@ defmodule VostokServer.Messaging do
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
          {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
          :ok <-
-           ensure_group_message_transport(
+           ensure_message_transport(
              chat,
              sender_device_id,
              normalized,
@@ -909,7 +909,7 @@ defmodule VostokServer.Messaging do
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
          {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
          :ok <-
-           ensure_group_message_transport(
+           ensure_message_transport(
              chat,
              sender_device_id,
              normalized,
@@ -974,7 +974,7 @@ defmodule VostokServer.Messaging do
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
          {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
          :ok <-
-           ensure_group_message_transport(
+           ensure_message_transport(
              chat,
              sender_device_id,
              normalized,
@@ -1666,13 +1666,15 @@ defmodule VostokServer.Messaging do
          {:ok, recipient_envelopes} <- fetch_optional_recipient_envelopes(attrs),
          {:ok, established_session_ids} <-
            fetch_optional_id_list(attrs, "established_session_ids") do
+      resolved_crypto_scheme = default_crypto_scheme(crypto_scheme, recipient_envelopes)
+
       {:ok,
        %{
          client_id: client_id,
          ciphertext: ciphertext,
          header: header,
          message_kind: message_kind,
-         crypto_scheme: crypto_scheme,
+         crypto_scheme: resolved_crypto_scheme,
          sender_key_id: sender_key_id,
          sender_key_epoch: sender_key_epoch,
          group_transport_fallback: group_transport_fallback,
@@ -1714,17 +1716,27 @@ defmodule VostokServer.Messaging do
     {:ok, ids}
   end
 
-  defp ensure_group_message_transport(
+  defp default_crypto_scheme(nil, recipient_envelopes) when is_map(recipient_envelopes) and map_size(recipient_envelopes) > 0,
+    do: "signal-v1"
+
+  defp default_crypto_scheme(crypto_scheme, _recipient_envelopes), do: crypto_scheme
+
+  defp ensure_message_transport(
          %Chat{type: "group", id: chat_id},
          sender_device_id,
          normalized,
          recipient_device_ids
        )
        when is_map(normalized) and is_list(recipient_device_ids) do
-    fallback? = Map.get(normalized, :group_transport_fallback, false)
     crypto_scheme = normalize_string(Map.get(normalized, :crypto_scheme))
 
     cond do
+      crypto_scheme == "signal-v1" ->
+        with :ok <- ensure_present_recipient_envelopes(Map.get(normalized, :recipient_envelopes)),
+             :ok <- ensure_absent_sender_key_metadata(normalized) do
+          :ok
+        end
+
       crypto_scheme == "group_sender_key_v1" ->
         with {:ok, sender_key_id} <-
                require_present_string(Map.get(normalized, :sender_key_id), "sender_key_id"),
@@ -1745,23 +1757,32 @@ defmodule VostokServer.Messaging do
           :ok
         end
 
-      fallback? ->
-        :ok
-
       true ->
         {:error,
          {:validation,
-          "Group messages must use crypto_scheme=group_sender_key_v1 unless group_transport_fallback=true."}}
+          "Group messages must use crypto_scheme=signal-v1. Legacy group_sender_key_v1 is accepted only for backwards compatibility."}}
     end
   end
 
-  defp ensure_group_message_transport(
+  defp ensure_message_transport(
          %Chat{},
          _sender_device_id,
-         _normalized,
+         normalized,
          _recipient_device_ids
-       ),
-       do: :ok
+       ) do
+    crypto_scheme = normalize_string(Map.get(normalized, :crypto_scheme))
+
+    cond do
+      crypto_scheme == "signal-v1" ->
+        with :ok <- ensure_present_recipient_envelopes(Map.get(normalized, :recipient_envelopes)),
+             :ok <- ensure_absent_sender_key_metadata(normalized) do
+          :ok
+        end
+
+      true ->
+        {:error, {:validation, "Direct messages must use crypto_scheme=signal-v1."}}
+    end
+  end
 
   defp ensure_sender_key_distribution_coverage(
          chat_id,
@@ -1829,6 +1850,27 @@ defmodule VostokServer.Messaging do
     {:error,
      {:validation,
       "recipient_envelopes is not supported for group sender-key encrypted messages."}}
+  end
+
+  defp ensure_present_recipient_envelopes(map) when is_map(map) and map_size(map) > 0, do: :ok
+
+  defp ensure_present_recipient_envelopes(_value) do
+    {:error,
+     {:validation,
+      "Signal-encrypted messages must include recipient_envelopes for every active recipient device."}}
+  end
+
+  defp ensure_absent_sender_key_metadata(normalized) do
+    sender_key_id = normalize_string(Map.get(normalized, :sender_key_id))
+    sender_key_epoch = Map.get(normalized, :sender_key_epoch)
+
+    if is_nil(sender_key_id) and is_nil(sender_key_epoch) do
+      :ok
+    else
+      {:error,
+       {:validation,
+        "sender_key_id and sender_key_epoch are only supported for legacy group_sender_key_v1 messages."}}
+    end
   end
 
   defp insert_recipient_envelopes(_repo, _message, [], _ciphertext, _recipient_envelopes),

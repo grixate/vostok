@@ -11,6 +11,7 @@ defmodule VostokServer.Identity.OneTimePrekey do
 
   schema "one_time_prekeys" do
     field :public_key, :binary
+    field :key_id, :integer
     field :used_at, :utc_datetime_usec
 
     belongs_to :device, VostokServer.Identity.Device
@@ -20,7 +21,7 @@ defmodule VostokServer.Identity.OneTimePrekey do
 
   def changeset(prekey, attrs) do
     prekey
-    |> cast(attrs, [:public_key, :used_at])
+    |> cast(attrs, [:public_key, :key_id, :used_at])
     |> validate_required([:public_key])
   end
 end

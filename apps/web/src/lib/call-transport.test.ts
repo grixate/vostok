@@ -101,6 +101,16 @@ describe('call-transport', () => {
       hasLocalMediaStream: true,
       localTrackIdsAttached: false
     })).toBe(true)
+
+    expect(shouldAttachLocalTracks({
+      activeCall: buildCall(),
+      sessionToken: 'token',
+      view: 'chat',
+      membraneClientConnected: false,
+      hasMembraneClient: true,
+      hasLocalMediaStream: true,
+      localTrackIdsAttached: false
+    })).toBe(false)
   })
 
   it('classifies direct-media sync readiness', () => {

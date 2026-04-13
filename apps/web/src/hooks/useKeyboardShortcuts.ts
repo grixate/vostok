@@ -263,11 +263,6 @@ export function useKeyboardShortcuts({
         void call.handleStartCall('voice')
         return
       }
-
-      if (event.key.toLowerCase() === 'v') {
-        event.preventDefault()
-        void call.handleStartCall('video')
-      }
     }
   })
 
