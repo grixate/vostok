@@ -64,6 +64,11 @@ function highlightText(text: string, query: string): React.ReactNode {
   )
 }
 
+function formatMessageMetaTimestamp(sentAt: string | null | undefined, editedAt?: string): string {
+  const time = formatRelativeTime(sentAt ?? null)
+  return editedAt ? `edited · ${time}` : time
+}
+
 export function MessageThread({ messages, media, downloadManager, activeChat, chatType, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
   const { storedDevice } = useAppContext()
   const { setContextMenuMessage, draftInputRef } = useUIContext()
@@ -603,7 +608,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
                             ? { status: 'ready', playbackUrl: allPlaybackUrls[message.attachment.uploadId] }
                             : downloadManager.getState(message.attachment.uploadId)}
                           side={message.side as 'incoming' | 'outgoing'}
-                          timestamp={`${formatRelativeTime(message.sentAt)}${message.editedAt ? ' edited' : ''}`}
+                          timestamp={formatMessageMetaTimestamp(message.sentAt, message.editedAt)}
                           onDownload={downloadManager.download}
                           onCancel={downloadManager.cancel}
                         />
@@ -626,7 +631,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
                   /* ── Regular message bubble (including voice messages) ── */
                   <MessageBubble
               side={message.side}
-              timestamp={`${formatRelativeTime(message.sentAt)}${message.editedAt ? ' edited' : ''}`}
+              timestamp={formatMessageMetaTimestamp(message.sentAt, message.editedAt)}
             >
               {message.replyToMessageId ? (
                 <span
@@ -723,7 +728,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
             ) : (
               <MessageBubble
                 side={message.side}
-                timestamp={formatRelativeTime(message.sentAt)}
+                timestamp={formatMessageMetaTimestamp(message.sentAt, message.editedAt)}
               >
                 <span>{searchQuery ? highlightText(message.text, searchQuery) : message.text}</span>
               </MessageBubble>

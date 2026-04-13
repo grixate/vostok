@@ -6,6 +6,7 @@ import {
   createMessage,
   deleteMessage,
   fetchMediaLinkMetadata,
+  fetchUserPrekeys,
   listMessages,
   listRecipientDevices,
   markChatRead,
@@ -21,17 +22,42 @@ import {
   markOutboxRetry,
   queueOutboxMessage
 } from '../lib/outbox-queue.ts'
-import { encryptMessageWithSessions } from '../lib/chat-session-vault.ts'
-import { encryptMessageWithGroupSenderKey, getActiveGroupSenderKey } from '../lib/message-vault.ts'
+import { encryptMessage as signalEncryptMessage } from '../lib/signal-sessions.ts'
+import { getSignalStore, initSignalStore } from '../lib/signal-store.ts'
+import type { VostokPrekeyBundle } from '../lib/signal-sessions.ts'
+import { hasSession, buildSession } from '../lib/signal-sessions.ts'
 import { outboxRetryDelayMs } from '@vostok/crypto-core'
 import { subscribeToChatStream, subscribeToReconnect } from '../lib/realtime.ts'
 import { getRawChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import { projectMessage, cacheSentPlaintext, seedDecryptedCacheFromPersisted } from '../utils/message-helpers.ts'
-import { mergeMessageThread } from '../utils/message-helpers.ts'
+import { mergeMessageThread, mergeSyncedMessageThread } from '../utils/message-helpers.ts'
 import { syncChatSummary, compareMessageOrder } from '../utils/chat-helpers.ts'
 import { extractFirstHttpUrl } from '../utils/format.ts'
-import { canUseChatSessions, shouldQueueOutboxSendFailure, isOutboxDuplicateClientIdError } from '../utils/crypto-helpers.ts'
+import { shouldQueueOutboxSendFailure, isOutboxDuplicateClientIdError } from '../utils/crypto-helpers.ts'
 import type { AuthView } from '../types.ts'
+
+const chatProjectionQueues = new Map<string, Promise<void>>()
+
+function runExclusiveChatProjection<T>(chatId: string, task: () => Promise<T>): Promise<T> {
+  const previous = chatProjectionQueues.get(chatId) ?? Promise.resolve()
+  let releaseCurrent!: () => void
+  const current = new Promise<void>((resolve) => {
+    releaseCurrent = resolve
+  })
+  const nextQueue = previous.catch(() => undefined).then(() => current)
+  chatProjectionQueues.set(chatId, nextQueue)
+
+  return previous
+    .catch(() => undefined)
+    .then(task)
+    .finally(() => {
+      releaseCurrent()
+
+      if (chatProjectionQueues.get(chatId) === nextQueue) {
+        chatProjectionQueues.delete(chatId)
+      }
+    })
+}
 
 export function useMessages(
   view: AuthView,
@@ -46,6 +72,7 @@ export function useMessages(
   chatSessions: ChatDeviceSession[],
   currentUsername?: string | null
 ) {
+  type MessageDeliveryMode = 'group_sender_key' | 'session'
   const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   // Use the device ID as a stable dependency for the message-loading effect.
   // The full storedDevice object changes when prekeys are consumed during
@@ -70,6 +97,21 @@ export function useMessages(
   useEffect(() => {
     messageItemsRef.current = messageItems
   }, [messageItems])
+
+  // Ensure Signal store is initialized before any decryption/encryption paths
+  // run. On reload, storedDevice may be available from persisted app state
+  // before the server bootstrap hook finishes its own init path.
+  useEffect(() => {
+    if (!storedDevice?.identityKeyPairJson) {
+      return
+    }
+
+    try {
+      initSignalStore(storedDevice.identityKeyPairJson, storedDevice.registrationId)
+    } catch (error) {
+      console.warn('[useMessages] Failed to initialize Signal store from stored device:', error)
+    }
+  }, [storedDevice?.identityKeyPairJson, storedDevice?.registrationId])
 
   function formatPreviewText(msg: CachedMessage): string {
     const t = msg.text
@@ -100,17 +142,48 @@ export function useMessages(
     }
   }
 
+  function preserveExistingDecryptedProjection(
+    existingMessages: CachedMessage[],
+    projected: CachedMessage
+  ): CachedMessage {
+    if (projected.decryptable) {
+      return projected
+    }
+
+    const existing = existingMessages.find(
+      (message) =>
+        message.id === projected.id ||
+        (!!projected.clientId && !!message.clientId && message.clientId === projected.clientId)
+    )
+
+    if (!existing || !existing.decryptable || !existing.text) {
+      return projected
+    }
+
+    return {
+      ...projected,
+      text: existing.text,
+      decryptable: true,
+      attachment: existing.attachment
+    }
+  }
+
   async function ingestMessageIntoActiveThread(message: ChatMessage, chatId: string) {
     if (activeChatIdRef.current !== chatId) {
       return
     }
 
-    const projected = await projectMessage(
-      message,
-      chatId,
-      storedDevice?.deviceId ?? '',
-      storedDevice?.encryptionPrivateKeyPkcs8Base64,
-      currentUsername ?? undefined
+    const projected = preserveExistingDecryptedProjection(
+      messageItemsRef.current,
+      await runExclusiveChatProjection(chatId, async () =>
+        projectMessage(
+          message,
+          chatId,
+          storedDevice?.deviceId ?? '',
+          undefined,
+          currentUsername ?? undefined
+        )
+      )
     )
 
     if (activeChatIdRef.current !== chatId) {
@@ -133,8 +206,10 @@ export function useMessages(
       await syncInFlightRef.current.catch(() => {})
     }
 
-    const run = async () => {
-      if (!sessionToken || activeChatIdRef.current !== chatId) {
+    const threadAtSyncStart = [...messageItemsRef.current]
+
+    const run = async () => runExclusiveChatProjection(chatId, async () => {
+      if (!sessionToken || activeChatIdRef.current !== chatId || !storedDevice?.deviceId) {
         return
       }
 
@@ -156,16 +231,19 @@ export function useMessages(
       const projected: Awaited<ReturnType<typeof projectMessage>>[] = []
 
       const deviceId = storedDevice?.deviceId ?? ''
-      const encryptionKey = storedDevice?.encryptionPrivateKeyPkcs8Base64
+      const encryptionKey = undefined
 
       for (const message of response.messages) {
         projected.push(
-          await projectMessage(
-            message,
-            chatId,
-            deviceId,
-            encryptionKey,
-            currentUsername ?? undefined
+          preserveExistingDecryptedProjection(
+            [...messageItemsRef.current, ...projected],
+            await projectMessage(
+              message,
+              chatId,
+              deviceId,
+              encryptionKey,
+              currentUsername ?? undefined
+            )
           )
         )
       }
@@ -181,13 +259,11 @@ export function useMessages(
       // round-trips.  Once ingestMessageIntoActiveThread replaces the
       // optimistic entry with the server-confirmed version, it drops out of
       // future sync passes automatically.
-      const optimistic = messageItemsRef.current.filter(
-        (m) => m.id.startsWith('optimistic-') && !projected.some((p) => p.clientId === m.clientId)
+      const merged = mergeSyncedMessageThread(
+        threadAtSyncStart,
+        messageItemsRef.current,
+        projected
       )
-
-      const merged = optimistic.length > 0
-        ? [...projected, ...optimistic].sort(compareMessageOrder)
-        : projected
 
       replaceActiveMessages(chatId, merged, true)
 
@@ -206,7 +282,7 @@ export function useMessages(
       if (readReceiptsEnabled) {
         void markChatRead(sessionToken, rawChatId, validLastId).catch(() => {})
       }
-    }
+    })
 
     const promise = run()
     syncInFlightRef.current = promise
@@ -227,12 +303,9 @@ export function useMessages(
 
   const handleRealtimeMessage = useEffectEvent((messageId: string, chatId: string) => {
     const thread = messageItemsRef.current
-
-    // If the server-confirmed message is already in the thread, skip the sync.
-    if (thread.some((m) => m.id === messageId)) {
-      console.log('[realtime] message already in thread, skipping:', messageId)
-      return
-    }
+    // Do not short-circuit when a message id is already present locally.
+    // Realtime activity for edits/reactions/pins reuses the same message id,
+    // and we must re-sync to pick up updated ciphertext/metadata.
 
     // If we have a recent pending optimistic outgoing message, the realtime
     // event is most likely the server echo of our own just-sent message.  The
@@ -249,7 +322,6 @@ export function useMessages(
       return (now - sentAt) < OPTIMISTIC_GRACE_MS
     })
     if (hasRecentOptimistic) {
-      console.log('[realtime] deferred sync (has optimistic) for', chatId, 'messageId:', messageId)
       // Schedule a deferred sync to catch attachment messages where ingestion
       // takes longer or fails silently (voice notes, round videos, file uploads).
       if (deferredSyncTimerRef.current) {
@@ -267,7 +339,6 @@ export function useMessages(
       return
     }
 
-    console.log('[realtime] syncing messages for chat', chatId, 'messageId:', messageId)
     void syncMessagesFromServer(chatId)
   })
 
@@ -280,7 +351,7 @@ export function useMessages(
 
   // Load messages on chat change
   useEffect(() => {
-    if (!sessionToken || !deferredActiveChatId || view !== 'chat') {
+    if (!sessionToken || !deferredActiveChatId || view !== 'chat' || !storedDevice?.deviceId) {
       setChatSessions_noop()
       setEditingMessageId(null)
       setReplyTargetMessageId(null)
@@ -363,7 +434,7 @@ export function useMessages(
     return () => {
       cancelled = true
     }
-  }, [deferredActiveChatId, sessionToken, setBanner, view])
+  }, [deferredActiveChatId, sessionToken, setBanner, storedDevice?.deviceId, view])
 
   // Clear link metadata on chat change
   useEffect(() => {
@@ -437,19 +508,32 @@ export function useMessages(
     const chatId = deferredActiveChatId
 
     return subscribeToReconnect(() => {
-      console.log('[reconnect] syncing messages for', chatId)
       void syncMessagesFromServer(chatId)
     })
   }, [deferredActiveChatId, sessionToken, view])
 
-  // Build encrypted message payload
+  // Build encrypted message payload using Signal protocol
   async function buildEncryptedMessagePayload(
     plainText: string,
     chatId: string,
     clientId: string,
     messageKind: 'text' | 'attachment',
     replyToMessageId?: string | null
-  ) {
+  ): Promise<{
+    payload: {
+      client_id: string
+      ciphertext: string
+      message_kind: 'text' | 'attachment'
+      header?: string
+      crypto_scheme?: string
+      sender_key_id?: string
+      sender_key_epoch?: number
+      reply_to_message_id?: string
+      recipient_envelopes?: Record<string, string>
+      established_session_ids?: string[]
+    }
+    deliveryMode: MessageDeliveryMode
+  }> {
     const device = storedDevice
     if (!device) {
       throw new Error(
@@ -457,67 +541,100 @@ export function useMessages(
       )
     }
 
-    const targetChat = chatItems.find((chat) => chat.id === chatId) ?? null
-    const rawChatId = getRawChatId(chatId)
-
-    if (targetChat?.type === 'group') {
-      const activeSenderKey =
-        getActiveGroupSenderKey(chatId) ??
-        (rawChatId ? getActiveGroupSenderKey(rawChatId) : null)
-
-      if (!activeSenderKey) {
-        throw new Error(
-          'No active Sender Key is available for this group chat. Rotate a Sender Key before sending.'
-        )
-      }
-
-      const payload = {
-        client_id: clientId,
-        message_kind: messageKind,
-        ...(await encryptMessageWithGroupSenderKey(
-          plainText,
-          chatId,
-          activeSenderKey.key_id,
-          activeSenderKey.epoch,
-          rawChatId ?? chatId
-        ))
-      }
-
-      return {
-        payload: replyToMessageId ? { ...payload, reply_to_message_id: replyToMessageId } : payload,
-        deliveryMode: 'group_sender_key'
-      } as const
-    }
-
     if (!sessionToken) {
       throw new Error('No session token is available.')
     }
 
+    const rawChatId = getRawChatId(chatId)
     if (!rawChatId) {
       throw new Error('The selected chat is unavailable.')
     }
 
+    const store = getSignalStore()
+
+    // Get all recipient devices for this chat
     const recipientDeviceResponse = await listRecipientDevices(sessionToken, rawChatId)
     const recipientDevices = recipientDeviceResponse.recipient_devices
-    const sessions = await syncChatSessionsFromServer(chatId, recipientDevices)
-    const canUseSessionEncryption = canUseChatSessions(device, sessions, recipientDevices)
 
-    if (!canUseSessionEncryption) {
-      throw new Error(
-        'Encryption is not yet available for this chat. Please wait a moment and try again.'
-      )
+    // Build Signal sessions for devices that don't have one yet
+    const devicesNeedingSession: string[] = []
+    for (const rd of recipientDevices) {
+      if (!(await hasSession(store, rd.device_id))) {
+        devicesNeedingSession.push(rd.device_id)
+      }
     }
+
+    // Fetch prekey bundles for devices without sessions
+    const prekeyBundlesByDeviceId = new Map<string, VostokPrekeyBundle>()
+    if (devicesNeedingSession.length > 0) {
+      // Map user_id → username from the chat summary's parallel arrays
+      const targetChat = chatItems.find((chat) => chat.id === chatId) ?? null
+      const userIdToUsername = new Map<string, string>()
+      if (targetChat) {
+        for (let i = 0; i < targetChat.participant_user_ids.length; i++) {
+          userIdToUsername.set(targetChat.participant_user_ids[i], targetChat.participant_usernames[i])
+        }
+      }
+
+      // Group devices by username to minimize API calls
+      const usernameDeviceMap = new Map<string, string[]>()
+      for (const rd of recipientDevices) {
+        if (devicesNeedingSession.includes(rd.device_id)) {
+          // Resolve username from chat participants, fall back to current user's
+          // username for self-chats where participant arrays may be sparse
+          const username = userIdToUsername.get(rd.user_id) ?? device.username
+          const existing = usernameDeviceMap.get(username) ?? []
+          existing.push(rd.device_id)
+          usernameDeviceMap.set(username, existing)
+        }
+      }
+
+      for (const [username, deviceIds] of usernameDeviceMap) {
+        try {
+          const response = await fetchUserPrekeys(sessionToken, username)
+          for (const bundle of response.devices) {
+            if (deviceIds.includes(bundle.device_id) && bundle.signed_prekey && bundle.signed_prekey_signature && bundle.registration_id != null && bundle.signed_prekey_id != null) {
+              prekeyBundlesByDeviceId.set(bundle.device_id, {
+                device_id: bundle.device_id,
+                identity_public_key: bundle.identity_public_key,
+                registration_id: bundle.registration_id,
+                signed_prekey_id: bundle.signed_prekey_id,
+                signed_prekey_public: bundle.signed_prekey,
+                signed_prekey_signature: bundle.signed_prekey_signature,
+                one_time_prekey_id: bundle.one_time_prekey_id ?? undefined,
+                one_time_prekey_public: bundle.one_time_prekey ?? undefined
+              })
+            }
+          }
+        } catch (error) {
+          console.warn(`[useMessages] Failed to fetch prekeys for user ${username}:`, error)
+        }
+      }
+    }
+
+    // Encrypt for all recipient devices using Signal sessions
+    const signalRecipients = recipientDevices.map((rd) => ({
+      deviceId: rd.device_id,
+      prekeyBundle: prekeyBundlesByDeviceId.get(rd.device_id)
+    }))
+
+    const envelope = await signalEncryptMessage(
+      store,
+      device.deviceId,
+      signalRecipients,
+      plainText
+    )
 
     const payload = {
       client_id: clientId,
       message_kind: messageKind,
-      ...(await encryptMessageWithSessions(plainText, device.deviceId, sessions))
+      ...envelope
     }
 
     return {
       payload: replyToMessageId ? { ...payload, reply_to_message_id: replyToMessageId } : payload,
       deliveryMode: 'session'
-    } as const
+    }
   }
 
   async function queueMessageForOutbox(
@@ -660,6 +777,12 @@ export function useMessages(
           payload
         )
 
+        cacheSentPlaintext(
+          response.message.client_id,
+          plainText,
+          undefined,
+          response.message.edited_at
+        )
         await ingestMessageIntoActiveThread(response.message, activeChatId)
         setBanner({
           tone: 'success',
@@ -925,7 +1048,7 @@ export function useMessages(
   async function updateNonActiveChatPreview(chatId: string) {
     const rawChatId = getRawChatId(chatId)
 
-    if (!sessionToken || activeChatIdRef.current === chatId) {
+    if (!sessionToken || !storedDevice?.deviceId || activeChatIdRef.current === chatId) {
       return
     }
 
@@ -939,7 +1062,7 @@ export function useMessages(
         await syncChatSessionsFromServer(chatId)
       }
 
-      const response = await listMessages(sessionToken, rawChatId)
+      const response = await listMessages(sessionToken, rawChatId, { limit: 1 })
 
       if (response.messages.length === 0) {
         return
@@ -947,12 +1070,17 @@ export function useMessages(
 
       // Only decrypt the last message — enough for the sidebar preview.
       const lastServerMessage = response.messages[response.messages.length - 1]
-      const projected = await projectMessage(
-        lastServerMessage,
-        chatId,
-        storedDevice?.deviceId ?? '',
-        storedDevice?.encryptionPrivateKeyPkcs8Base64,
-        currentUsername ?? undefined
+      const projected = preserveExistingDecryptedProjection(
+        messageItemsRef.current,
+        await runExclusiveChatProjection(chatId, async () =>
+          projectMessage(
+            lastServerMessage,
+            chatId,
+            storedDevice?.deviceId ?? '',
+            undefined,
+            currentUsername ?? undefined
+          )
+        )
       )
 
       if (projected.decryptable && projected.text && projected.side !== 'system') {
@@ -993,20 +1121,27 @@ export function useMessages(
       }
 
       const deviceId = storedDevice?.deviceId ?? ''
-      const encryptionKey = storedDevice?.encryptionPrivateKeyPkcs8Base64
+      const encryptionKey = undefined
 
-      const projected: Awaited<ReturnType<typeof projectMessage>>[] = []
-      for (const message of response.messages) {
-        projected.push(
-          await projectMessage(
-            message,
-            chatId,
-            deviceId,
-            encryptionKey,
-            currentUsername ?? undefined
+      const projected = await runExclusiveChatProjection(chatId, async () => {
+        const nextProjected: Awaited<ReturnType<typeof projectMessage>>[] = []
+        for (const message of response.messages) {
+          nextProjected.push(
+            preserveExistingDecryptedProjection(
+              [...messageItemsRef.current, ...nextProjected],
+              await projectMessage(
+                message,
+                chatId,
+                deviceId,
+                encryptionKey,
+                currentUsername ?? undefined
+              )
+            )
           )
-        )
-      }
+        }
+
+        return nextProjected
+      })
 
       if (activeChatIdRef.current !== chatId) {
         return

@@ -9,13 +9,22 @@ import { compareMessageOrder } from './chat-helpers.ts'
 // messages even when the E2E envelope is not decryptable on the same device.
 // Persisted to localStorage so the cache survives page reloads.
 const SENT_PLAINTEXT_STORAGE_KEY = 'vostok.sent-plaintext'
-const sentPlaintextByClientId = new Map<string, { text: string; attachment?: CachedMessage['attachment'] }>()
+const DECRYPTED_PLAINTEXT_STORAGE_KEY = 'vostok.decrypted-plaintext'
+const MAX_DECRYPTED_CACHE_ENTRIES = 500
+const loggedExpectedDecryptMisses = new Set<string>()
+type PlaintextCacheEntry = {
+  text: string
+  attachment?: CachedMessage['attachment']
+  editedAt?: string | null
+}
+
+const sentPlaintextByClientId = new Map<string, PlaintextCacheEntry>()
 
 // Rehydrate from localStorage on module load.
 try {
   const raw = window.localStorage.getItem(SENT_PLAINTEXT_STORAGE_KEY)
   if (raw) {
-    const parsed = JSON.parse(raw) as Record<string, { text: string; attachment?: CachedMessage['attachment'] }>
+    const parsed = JSON.parse(raw) as Record<string, PlaintextCacheEntry>
     for (const [key, value] of Object.entries(parsed)) {
       if (value && typeof value.text === 'string') {
         sentPlaintextByClientId.set(key, value)
@@ -31,19 +40,72 @@ try {
 // (the chain counter advances after decryption).  When syncMessagesFromServerNow
 // re-fetches all messages from the server, previously-decrypted messages must
 // use the cached plaintext instead of re-decrypting through the ratchet.
-const decryptedPlaintextByMessageId = new Map<string, { text: string; attachment?: CachedMessage['attachment'] }>()
+const decryptedPlaintextByMessageId = new Map<string, PlaintextCacheEntry>()
+
+// Rehydrate decrypted inbound message plaintext as well. This survives cases
+// where a follow-up sync would otherwise try to ratchet the same message again
+// after it has already been displayed once.
+try {
+  const raw = window.localStorage.getItem(DECRYPTED_PLAINTEXT_STORAGE_KEY)
+  if (raw) {
+    const parsed = JSON.parse(raw) as Record<string, PlaintextCacheEntry>
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value && typeof value.text === 'string') {
+        decryptedPlaintextByMessageId.set(key, value)
+      }
+    }
+  }
+} catch {
+  // Ignore storage errors on load.
+}
 
 function getScopedMessageCacheKey(chatScopeId: string, messageId: string): string {
   return `${chatScopeId}::${messageId}`
+}
+
+function normalizeEditedAt(value?: string | null): string | null {
+  return value ?? null
+}
+
+function trimDecryptedPlaintextCache() {
+  if (decryptedPlaintextByMessageId.size <= MAX_DECRYPTED_CACHE_ENTRIES) {
+    return
+  }
+
+  const keysToRemove = Array.from(decryptedPlaintextByMessageId.keys()).slice(
+    0,
+    decryptedPlaintextByMessageId.size - MAX_DECRYPTED_CACHE_ENTRIES
+  )
+
+  for (const key of keysToRemove) {
+    decryptedPlaintextByMessageId.delete(key)
+  }
 }
 
 function cacheDecryptedPlaintext(
   chatScopeId: string,
   messageId: string,
   text: string,
-  attachment?: CachedMessage['attachment']
+  attachment?: CachedMessage['attachment'],
+  editedAt?: string | null
 ) {
-  decryptedPlaintextByMessageId.set(getScopedMessageCacheKey(chatScopeId, messageId), { text, attachment })
+  decryptedPlaintextByMessageId.set(getScopedMessageCacheKey(chatScopeId, messageId), {
+    text,
+    attachment,
+    editedAt: normalizeEditedAt(editedAt)
+  })
+
+  try {
+    trimDecryptedPlaintextCache()
+
+    const persisted: Record<string, PlaintextCacheEntry> = {}
+    for (const [key, value] of decryptedPlaintextByMessageId) {
+      persisted[key] = value
+    }
+    window.localStorage.setItem(DECRYPTED_PLAINTEXT_STORAGE_KEY, JSON.stringify(persisted))
+  } catch {
+    // Storage full or unavailable — no-op.
+  }
 }
 
 /**
@@ -65,19 +127,47 @@ export function seedDecryptedCacheFromPersisted(chatScopeId: string, messages: C
     }
     const cacheKey = getScopedMessageCacheKey(chatScopeId, msg.id)
     if (!decryptedPlaintextByMessageId.has(cacheKey)) {
-      decryptedPlaintextByMessageId.set(cacheKey, { text: msg.text, attachment: msg.attachment })
+      decryptedPlaintextByMessageId.set(cacheKey, {
+        text: msg.text,
+        attachment: msg.attachment,
+        editedAt: normalizeEditedAt(msg.editedAt)
+      })
     }
   }
+
+  trimDecryptedPlaintextCache()
 }
 
-function lookupDecryptedPlaintext(chatScopeId: string, messageId: string | undefined) {
-  return messageId
-    ? decryptedPlaintextByMessageId.get(getScopedMessageCacheKey(chatScopeId, messageId)) ?? null
-    : null
+function lookupDecryptedPlaintext(chatScopeId: string, messageId: string | undefined, editedAt?: string | null) {
+  if (!messageId) {
+    return null
+  }
+
+  const cacheKey = getScopedMessageCacheKey(chatScopeId, messageId)
+  const cached = decryptedPlaintextByMessageId.get(cacheKey) ?? null
+  if (!cached) {
+    return null
+  }
+
+  if (normalizeEditedAt(cached.editedAt) !== normalizeEditedAt(editedAt)) {
+    decryptedPlaintextByMessageId.delete(cacheKey)
+    return null
+  }
+
+  return cached
 }
 
-export function cacheSentPlaintext(clientId: string, text: string, attachment?: CachedMessage['attachment']) {
-  sentPlaintextByClientId.set(clientId, { text, attachment })
+export function cacheSentPlaintext(
+  clientId: string,
+  text: string,
+  attachment?: CachedMessage['attachment'],
+  editedAt?: string | null
+) {
+  sentPlaintextByClientId.set(clientId, {
+    text,
+    attachment,
+    editedAt: normalizeEditedAt(editedAt)
+  })
 
   // Persist to localStorage so the cache survives page reloads.
   // Cap at 200 entries to avoid unbounded growth.
@@ -88,7 +178,7 @@ export function cacheSentPlaintext(clientId: string, text: string, attachment?: 
         sentPlaintextByClientId.delete(key)
       }
     }
-    const obj: Record<string, { text: string; attachment?: CachedMessage['attachment'] }> = {}
+    const obj: Record<string, PlaintextCacheEntry> = {}
     for (const [k, v] of sentPlaintextByClientId) {
       obj[k] = v
     }
@@ -98,8 +188,36 @@ export function cacheSentPlaintext(clientId: string, text: string, attachment?: 
   }
 }
 
-function lookupSentPlaintext(clientId: string | undefined) {
-  return clientId ? sentPlaintextByClientId.get(clientId) ?? null : null
+function lookupSentPlaintext(clientId: string | undefined, editedAt?: string | null) {
+  if (!clientId) {
+    return null
+  }
+
+  const cached = sentPlaintextByClientId.get(clientId) ?? null
+  if (!cached) {
+    return null
+  }
+
+  if (normalizeEditedAt(cached.editedAt) !== normalizeEditedAt(editedAt)) {
+    return null
+  }
+
+  return cached
+}
+
+function isSignalStoreNotInitializedError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('Signal store not initialized. Call initSignalStore() first.')
+  )
+}
+
+function isMissingSignalSessionError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('No record for device ')
+}
+
+function getMessageRevisionKey(chatScopeId: string, messageId: string, editedAt?: string | null): string {
+  return `${chatScopeId}::${messageId}::${normalizeEditedAt(editedAt) ?? ''}`
 }
 
 export function parseDecryptedPayload(plaintext: string): {
@@ -173,6 +291,53 @@ export function mergeMessageThread(current: CachedMessage[], next: CachedMessage
   return [...filtered, merged].sort(compareMessageOrder)
 }
 
+export function mergeSyncedMessageThread(
+  threadAtSyncStart: CachedMessage[],
+  currentThread: CachedMessage[],
+  projected: CachedMessage[]
+): CachedMessage[] {
+  const projectedIds = new Set(projected.map((message) => message.id))
+  const projectedClientIds = new Set(
+    projected
+      .map((message) => message.clientId)
+      .filter((clientId): clientId is string => typeof clientId === 'string' && clientId.length > 0)
+  )
+  const baselineIds = new Set(
+    threadAtSyncStart
+      .filter((message) => !message.id.startsWith('optimistic-'))
+      .map((message) => message.id)
+  )
+
+  const optimistic = currentThread.filter((message) => {
+    if (!message.id.startsWith('optimistic-')) {
+      return false
+    }
+
+    return !projectedClientIds.has(message.clientId ?? '')
+  })
+
+  const lateArrivals = currentThread.filter((message) => {
+    if (message.id.startsWith('optimistic-')) {
+      return false
+    }
+
+    if (projectedIds.has(message.id)) {
+      return false
+    }
+
+    if (message.clientId && projectedClientIds.has(message.clientId)) {
+      return false
+    }
+
+    // Preserve confirmed messages that landed while the sync request was
+    // already in flight. This prevents a stale empty response from wiping out
+    // the very first message in a thread.
+    return !baselineIds.has(message.id)
+  })
+
+  return [...projected, ...lateArrivals, ...optimistic].sort(compareMessageOrder)
+}
+
 export function decodeSystemMessageText(payloadBase64: string): string {
   try {
     return new TextDecoder().decode(base64ToBytes(payloadBase64))
@@ -239,7 +404,7 @@ export async function projectMessage(
   // — each message key can only be derived once (the chain counter advances).
   // When syncMessagesFromServerNow re-fetches all messages, previously-decrypted
   // messages must use the cache rather than re-running the ratchet.
-  const previouslyDecrypted = lookupDecryptedPlaintext(chatScopeId, message.id)
+  const previouslyDecrypted = lookupDecryptedPlaintext(chatScopeId, message.id, message.edited_at)
 
   if (previouslyDecrypted) {
     return {
@@ -274,7 +439,13 @@ export async function projectMessage(
 
     // Cache the successful decryption so subsequent syncs don't re-run the
     // ratchet (which would fail because the chain counter already advanced).
-    cacheDecryptedPlaintext(chatScopeId, message.id, parsedPayload.text, parsedPayload.attachment)
+    cacheDecryptedPlaintext(
+      chatScopeId,
+      message.id,
+      parsedPayload.text,
+      parsedPayload.attachment,
+      message.edited_at
+    )
 
     return {
       id: message.id,
@@ -297,23 +468,44 @@ export async function projectMessage(
       }))
     }
   } catch (decryptionError) {
-    const cached = isOwnMessage ? lookupSentPlaintext(message.client_id) : null
+    const cached = isOwnMessage ? lookupSentPlaintext(message.client_id, message.edited_at) : null
 
     // Own outbound messages can't be decrypted via the session (the Double
     // Ratchet encrypts for the recipient, not the sender).  The sent-plaintext
     // cache handles this — only log an error if the cache miss is unexpected.
     if (!cached) {
-      console.error(
-        `[projectMessage] Decryption failed for message ${message.id} (kind=${message.message_kind}, scheme=${message.crypto_scheme}):`,
-        decryptionError
-      )
+      const expectedTransientMiss =
+        isSignalStoreNotInitializedError(decryptionError) ||
+        isMissingSignalSessionError(decryptionError)
+
+      if (!expectedTransientMiss) {
+        console.error(
+          `[projectMessage] Decryption failed for message ${message.id} (kind=${message.message_kind}, scheme=${message.crypto_scheme}):`,
+          decryptionError
+        )
+      } else {
+        const revisionKey = getMessageRevisionKey(chatScopeId, message.id, message.edited_at)
+        if (!loggedExpectedDecryptMisses.has(revisionKey)) {
+          loggedExpectedDecryptMisses.add(revisionKey)
+          console.debug(
+            `[projectMessage] Expected decrypt miss for message ${message.id} (kind=${message.message_kind}, scheme=${message.crypto_scheme}):`,
+            decryptionError
+          )
+        }
+      }
     }
 
     // If we resolved the plaintext from the sent-message cache, also persist it
     // in the decrypted-plaintext cache so subsequent re-projections (and the
     // IndexedDB write) use the correct text instead of the error placeholder.
     if (cached) {
-      cacheDecryptedPlaintext(chatScopeId, message.id, cached.text, cached.attachment)
+      cacheDecryptedPlaintext(
+        chatScopeId,
+        message.id,
+        cached.text,
+        cached.attachment,
+        message.edited_at
+      )
     }
 
     return {
