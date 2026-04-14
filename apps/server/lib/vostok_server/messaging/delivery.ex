@@ -53,6 +53,7 @@ defmodule VostokServer.Messaging.Delivery do
       :header,
       :ciphertext,
       :reply_to_message_id,
+      :seq,
       :recipient_envelopes,
       :reactions
     ])

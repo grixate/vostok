@@ -26,6 +26,7 @@ import { useCallTimer } from '../../hooks/useCallTimer.ts'
 import { useMediaDevices } from '../../hooks/useMediaDevices.ts'
 import { buildDirectCallStatusLabel } from '../../lib/call-runtime.ts'
 import { getRawChatId } from '../../lib/multi-server.ts'
+import { pickPreferredDirectRemoteMedia } from '../../utils/call-helpers.ts'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { useCall } from '../../hooks/useCall.ts'
 import type { useMessages } from '../../hooks/useMessages.ts'
@@ -55,39 +56,6 @@ type ConversationPaneProps = {
 }
 
 type MembraneRemoteTrack = ReturnType<typeof useCall>['membraneRemoteTracks'][number]
-
-function buildPreferredDirectRemoteTracks(tracks: MembraneRemoteTrack[]): MediaStreamTrack[] {
-  const preferredByKind = new Map<'audio' | 'video', MembraneRemoteTrack>()
-
-  for (const track of tracks) {
-    if (!track.ready || !track.mediaTrack || (track.kind !== 'audio' && track.kind !== 'video')) {
-      continue
-    }
-
-    if (track.kind === 'video' && track.source === 'placeholder') {
-      continue
-    }
-
-    const existing = preferredByKind.get(track.kind)
-
-    if (!existing) {
-      preferredByKind.set(track.kind, track)
-      continue
-    }
-
-    const existingScore = existing.source === 'browser' ? 1 : 0
-    const nextScore = track.source === 'browser' ? 1 : 0
-
-    if (nextScore > existingScore || (nextScore === existingScore && track.id > existing.id)) {
-      preferredByKind.set(track.kind, track)
-    }
-  }
-
-  return ['audio', 'video'].flatMap((kind) => {
-    const track = preferredByKind.get(kind as 'audio' | 'video')
-    return track?.mediaTrack ? [track.mediaTrack] : []
-  })
-}
 
 export function ConversationPane({
   activeChat,
@@ -397,7 +365,26 @@ export function ConversationPane({
         .map((track) => track.mediaTrack!)
     }
 
-    return buildPreferredDirectRemoteTracks(readyTracks)
+    const preferred = pickPreferredDirectRemoteMedia(readyTracks)
+
+    return [preferred.audioTrack?.mediaTrack, preferred.videoTrack?.mediaTrack].filter(
+      (track): track is MediaStreamTrack => track != null
+    )
+  }, [call.activeCall?.mode, call.membraneRemoteTracks])
+
+  const remoteScreenShareStream = useMemo(() => {
+    if (call.activeCall?.mode === 'group') {
+      return null
+    }
+
+    const readyTracks = call.membraneRemoteTracks.filter((track) => track.ready && track.mediaTrack)
+    const preferred = pickPreferredDirectRemoteMedia(readyTracks)
+
+    if (!preferred.screenShareTrack?.mediaTrack) {
+      return null
+    }
+
+    return new MediaStream([preferred.screenShareTrack.mediaTrack])
   }, [call.activeCall?.mode, call.membraneRemoteTracks])
 
   const remoteStream = useMemo(() => {
@@ -520,10 +507,10 @@ export function ConversationPane({
     void call._handleSwitchDevice(deviceId, kind)
   }, [call])
 
-  // Auto-dismiss call ended screen
+  // Auto-dismiss call ended dialog (X button dismisses immediately)
   useEffect(() => {
     if (callEnded) {
-      const timer = setTimeout(() => setCallEnded(null), 2500)
+      const timer = setTimeout(() => setCallEnded(null), 1800)
       return () => clearTimeout(timer)
     }
   }, [callEnded])
@@ -735,19 +722,8 @@ export function ConversationPane({
     )
   }
 
-  // ─── Call ended screen (brief 2.5s summary) ────────────────────────────
-  if (callEnded) {
-    return (
-      <main className="conversation-pane">
-        <CallEndedScreen
-          contactName={activeCallDisplayTitle}
-          contactInitial={activeCallInitial}
-          endReason={callEnded.reason}
-          duration={callEnded.duration}
-        />
-      </main>
-    )
-  }
+  // Call-ended dialog is rendered near the bottom of the normal return (via portal),
+  // so the chat stays visible behind it.
 
   // ─── Incoming call — receiver sees accept/decline ────────────────────
   // Incoming call UI is now handled by the global IncomingCallOverlay.
@@ -780,8 +756,10 @@ export function ConversationPane({
           remoteCameraOn={remoteCameraOn}
           muted={callMuted}
           cameraOn={callCameraOn}
-          screenSharing={callScreenSharing}
-          screenShareStream={screenShareStreamRef.current}
+          screenSharing={callScreenSharing || Boolean(remoteScreenShareStream)}
+          screenShareStream={screenShareStreamRef.current ?? remoteScreenShareStream}
+          screenShareIsSelf={callScreenSharing}
+          screenSharePresenterName={callScreenSharing ? 'You' : activeCallDisplayTitle}
           statusLabel={
             capabilityStatusLabel ??
             (call.activeCall.status === 'ringing' ? 'Group call ringing…' : mediaEncryptionLabel)
@@ -824,8 +802,10 @@ export function ConversationPane({
           remoteCameraOn={remoteCameraOn}
           muted={callMuted}
           cameraOn={callCameraOn}
-          screenSharing={callScreenSharing}
-          screenShareStream={screenShareStreamRef.current}
+          screenSharing={callScreenSharing || Boolean(remoteScreenShareStream)}
+          screenShareStream={screenShareStreamRef.current ?? remoteScreenShareStream}
+          screenShareIsSelf={callScreenSharing}
+          screenSharePresenterName={callScreenSharing ? 'You' : activeCallDisplayTitle}
           statusLabel={activeScreenStatusLabel}
           showCameraControls={true}
           showScreenControls={true}
@@ -974,6 +954,15 @@ export function ConversationPane({
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {callEnded && (
+        <CallEndedScreen
+          contactName={activeCallDisplayTitle}
+          contactInitial={activeCallInitial}
+          endReason={callEnded.reason}
+          duration={callEnded.duration}
+          onClose={() => setCallEnded(null)}
+        />
+      )}
     </main>
   )
 }

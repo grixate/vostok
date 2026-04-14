@@ -734,19 +734,59 @@
   transform: scaleX(-1);
 }
 
-/* ─── Call Ended Screen ────────────────────────────────────────────────── */
+/* ─── Call Ended Dialog ────────────────────────────────────────────────── */
 
-.call-ended-screen {
+.call-ended-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.call-ended-dialog__card {
+  position: relative;
+  max-width: 320px;
+  width: 100%;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  padding: 32px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: var(--bg-app);
   gap: 8px;
 }
 
-.call-ended-screen__avatar {
+.call-ended-dialog__close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.call-ended-dialog__close-btn:hover {
+  background: var(--bg-surface-1);
+  color: var(--text-primary);
+}
+
+.call-ended-dialog__close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.call-ended-dialog__avatar {
   width: 80px;
   height: 80px;
   border-radius: 50%;
@@ -759,19 +799,19 @@
   font-weight: 700;
 }
 
-.call-ended-screen__name {
+.call-ended-dialog__name {
   font-size: 18px;
   font-weight: 510;
   color: var(--text-primary);
   margin-top: 8px;
 }
 
-.call-ended-screen__reason {
+.call-ended-dialog__reason {
   font-size: 14px;
   color: var(--text-secondary);
 }
 
-.call-ended-screen__duration {
+.call-ended-dialog__duration {
   font-size: 14px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;

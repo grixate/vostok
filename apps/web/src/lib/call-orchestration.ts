@@ -86,6 +86,7 @@ export async function bootstrapActiveCallTransport<ClientType>(
   let nextRoom = currentRoom
   const joined = isParticipantJoined(callParticipants, currentDevice.deviceId)
 
+  console.log('[call-orch] bootstrap', { callId: currentCall.id, joined, mode: currentCall.mode })
   if (!joined) {
     const joinPayload = buildJoinPayload(currentCall, null)
     const joinResponse = await joinCallSession(currentSessionToken, currentCall.id, joinPayload)
@@ -93,10 +94,12 @@ export async function bootstrapActiveCallTransport<ClientType>(
     nextRoom = joinResponse.room
   }
 
+  console.log('[call-orch] about to provision endpoint', { currentEndpointExists: currentEndpoint?.exists, joined })
   const endpointResponse =
     currentEndpoint?.exists
       ? { endpoint: currentEndpoint, room: nextRoom }
       : await provisionCallWebRtcEndpoint(currentSessionToken, currentCall.id)
+  console.log('[call-orch] endpoint provisioned', { exists: endpointResponse.endpoint?.exists })
 
   const client = ensureMembraneClient()
   configureMembraneTurnServers(client, nextTurnCredentials)

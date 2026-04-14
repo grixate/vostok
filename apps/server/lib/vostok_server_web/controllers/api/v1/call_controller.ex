@@ -124,6 +124,7 @@ defmodule VostokServerWeb.Api.V1.CallController do
   end
 
   def provision_webrtc_endpoint(conn, %{"call_id" => call_id}) do
+    File.write("/tmp/vostok-membrane.log", "[#{DateTime.utc_now()}] PROVISION_ENDPOINT called for call #{call_id}\n", [:append])
     case Calls.provision_webrtc_endpoint(
            call_id,
            conn.assigns.current_user.id,
@@ -152,6 +153,7 @@ defmodule VostokServerWeb.Api.V1.CallController do
   end
 
   def push_webrtc_media_event(conn, %{"call_id" => call_id} = params) do
+    File.write("/tmp/vostok-membrane.log", "[#{DateTime.utc_now()}] PUSH_MEDIA_EVENT for call #{call_id} event: #{String.slice(inspect(params["event"]), 0, 100)}\n", [:append])
     case Calls.push_webrtc_media_event(
            call_id,
            conn.assigns.current_user.id,

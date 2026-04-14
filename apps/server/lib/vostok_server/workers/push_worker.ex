@@ -63,28 +63,37 @@ defmodule VostokServer.Workers.PushWorker do
   defp send_push("web_push", token, notification_type, payload, device) do
     vapid_public = Application.get_env(:vostok_server, :vapid_public_key)
     vapid_private = Application.get_env(:vostok_server, :vapid_private_key)
-    _vapid_subject = Application.get_env(:vostok_server, :vapid_subject, "mailto:admin@localhost")
+    vapid_subject = Application.get_env(:vostok_server, :vapid_subject, "mailto:admin@localhost")
 
     if vapid_public && vapid_private do
       notification_body = build_notification_body(notification_type, payload, device)
+      json_payload = Jason.encode!(notification_body)
 
-      # Web Push subscription info is stored as JSON in push_token
       case Jason.decode(token) do
         {:ok, subscription} ->
-          Logger.info("[PushWorker] Sending Web Push to device #{device.id}")
+          case VostokServer.Push.WebPush.send_notification(
+                 subscription,
+                 json_payload,
+                 vapid_public,
+                 vapid_private,
+                 vapid_subject
+               ) do
+            :ok ->
+              Logger.info("[PushWorker] Web Push sent to device #{device.id}")
+              :ok
 
-          # Use Req to send the push (Web Push API is just an HTTP POST)
-          endpoint = subscription["endpoint"]
-          _keys = subscription["keys"]
+            {:error, :subscription_expired} ->
+              Logger.info("[PushWorker] Subscription expired for device #{device.id}, clearing token")
+              clear_push_token(device)
+              :ok
 
-          if endpoint do
-            # For now, send a simple notification trigger.
-            # Full VAPID + encrypted payload requires web_push library.
-            Logger.info("[PushWorker] Web Push endpoint: #{endpoint}, body: #{inspect(notification_body)}")
-            :ok
-          else
-            Logger.warning("[PushWorker] Web Push subscription missing endpoint")
-            :ok
+            {:error, :rate_limited} ->
+              Logger.warning("[PushWorker] Rate limited by push service for device #{device.id}")
+              {:error, "Rate limited by push service"}
+
+            {:error, reason} ->
+              Logger.warning("[PushWorker] Web Push failed for device #{device.id}: #{inspect(reason)}")
+              {:error, inspect(reason)}
           end
 
         {:error, _} ->
@@ -134,5 +143,11 @@ defmodule VostokServer.Workers.PushWorker do
 
   defp build_notification_body(type, payload, _device) do
     %{type: type, data: payload}
+  end
+
+  defp clear_push_token(device) do
+    device
+    |> Ecto.Changeset.change(%{push_provider: nil, push_token: nil})
+    |> Repo.update()
   end
 end

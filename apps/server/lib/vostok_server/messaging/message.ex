@@ -21,6 +21,7 @@ defmodule VostokServer.Messaging.Message do
     field :edited_at, :utc_datetime_usec
     field :deleted_at, :utc_datetime_usec
     field :expires_at, :utc_datetime_usec
+    field :seq, :integer
 
     belongs_to :chat, VostokServer.Messaging.Chat
     belongs_to :sender_device, VostokServer.Identity.Device

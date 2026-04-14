@@ -1,6 +1,12 @@
 import type { CallSignal } from '../lib/api.ts'
 import type { MembraneRemoteTrackSnapshot } from '../lib/membrane-native.ts'
 
+export type PreferredDirectRemoteMedia = {
+  audioTrack: MembraneRemoteTrackSnapshot | null
+  videoTrack: MembraneRemoteTrackSnapshot | null
+  screenShareTrack: MembraneRemoteTrackSnapshot | null
+}
+
 export function mergeCallSignals(current: CallSignal[], nextSignal: CallSignal): CallSignal[] {
   return [...current.filter((signal) => signal.id !== nextSignal.id), nextSignal]
     .sort((left, right) => left.inserted_at.localeCompare(right.inserted_at))
@@ -96,4 +102,66 @@ export function pickFeaturedRemoteTrack(
   }
 
   return tracks.find((track) => track.ready) ?? null
+}
+
+export function pickPreferredDirectRemoteMedia(
+  tracks: MembraneRemoteTrackSnapshot[]
+): PreferredDirectRemoteMedia {
+  let audioTrack: MembraneRemoteTrackSnapshot | null = null
+  let videoTrack: MembraneRemoteTrackSnapshot | null = null
+  let screenShareTrack: MembraneRemoteTrackSnapshot | null = null
+
+  const scoreTrack = (track: MembraneRemoteTrackSnapshot): number => {
+    let score = 0
+
+    if (track.source === 'browser') {
+      score += 20
+    }
+
+    if (track.source === 'screenshare') {
+      score += 10
+    }
+
+    score += track.id.charCodeAt(track.id.length - 1) ?? 0
+    return score
+  }
+
+  for (const track of tracks) {
+    if (!track.ready || !track.mediaTrack || (track.kind !== 'audio' && track.kind !== 'video')) {
+      continue
+    }
+
+    if (track.kind === 'audio') {
+      if (!audioTrack || scoreTrack(track) >= scoreTrack(audioTrack)) {
+        audioTrack = track
+      }
+      continue
+    }
+
+    if (track.source === 'placeholder') {
+      continue
+    }
+
+    if (track.source === 'screenshare') {
+      if (!screenShareTrack || scoreTrack(track) >= scoreTrack(screenShareTrack)) {
+        screenShareTrack = track
+      }
+      continue
+    }
+
+    if (!videoTrack || scoreTrack(track) >= scoreTrack(videoTrack)) {
+      videoTrack = track
+    }
+  }
+
+  if (!videoTrack && screenShareTrack) {
+    videoTrack = screenShareTrack
+    screenShareTrack = null
+  }
+
+  return {
+    audioTrack,
+    videoTrack,
+    screenShareTrack
+  }
 }

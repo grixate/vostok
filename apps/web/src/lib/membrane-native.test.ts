@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   configureMembraneTurnServers,
   filterOutgoingMembraneCandidateEvent,
+  installSafeOnTrackHandler,
   normalizeIntegratedTurnServers,
   shouldSkipStaleMembraneMediaEvent
 } from './membrane-native.ts'
@@ -164,5 +165,57 @@ describe('membrane-native', () => {
     })
 
     expect(shouldSkipStaleMembraneMediaEvent(client as never, mediaEvent)).toBe(false)
+  })
+
+  it('keeps multiple pending ontrack events alive until mids are assigned', () => {
+    const emit = vi.fn()
+    const transceiverA = { mid: null as string | null }
+    const transceiverB = { mid: null as string | null }
+    const trackA = { id: 'media-a', kind: 'video' } as MediaStreamTrack
+    const trackB = { id: 'media-b', kind: 'video' } as MediaStreamTrack
+    const streamA = { id: 'stream-a' } as MediaStream
+    const streamB = { id: 'stream-b' } as MediaStream
+    const trackContextA = { stream: null, track: null }
+    const trackContextB = { stream: null, track: null }
+
+    const client = {
+      emit,
+      onTrack() {
+        return () => undefined
+      },
+      midToTrackId: new Map<string | null, string>(),
+      trackIdToTrack: new Map([
+        ['remote-track-a', trackContextA],
+        ['remote-track-b', trackContextB]
+      ]),
+      localEndpoint: { id: 'local' },
+      checkIfTrackBelongToEndpoint: () => false
+    }
+
+    installSafeOnTrackHandler(client as never)
+
+    const onTrack = client.onTrack() as (event: RTCTrackEvent) => void
+    onTrack({
+      streams: [streamA],
+      track: trackA,
+      transceiver: transceiverA as unknown as RTCRtpTransceiver
+    } as unknown as RTCTrackEvent)
+    onTrack({
+      streams: [streamB],
+      track: trackB,
+      transceiver: transceiverB as unknown as RTCRtpTransceiver
+    } as unknown as RTCTrackEvent)
+
+    transceiverA.mid = '0'
+    transceiverB.mid = '1'
+    client.midToTrackId.set('0', 'remote-track-a')
+    client.midToTrackId.set('1', 'remote-track-b')
+
+    ;(client as { __vostokApplyPendingOnTrack?: () => void }).__vostokApplyPendingOnTrack?.()
+
+    expect(trackContextA).toEqual({ stream: streamA, track: trackA })
+    expect(trackContextB).toEqual({ stream: streamB, track: trackB })
+    expect(emit).toHaveBeenNthCalledWith(1, 'trackReady', trackContextA)
+    expect(emit).toHaveBeenNthCalledWith(2, 'trackReady', trackContextB)
   })
 })

@@ -36,6 +36,8 @@ type ActiveCallScreenProps = {
   cameraOn: boolean
   screenSharing: boolean
   screenShareStream?: MediaStream | null
+  screenShareIsSelf?: boolean
+  screenSharePresenterName?: string
   statusLabel?: string
   showCameraControls?: boolean
   showScreenControls?: boolean
@@ -64,6 +66,8 @@ export function ActiveCallScreen({
   cameraOn,
   screenSharing,
   screenShareStream,
+  screenShareIsSelf = false,
+  screenSharePresenterName = contactName,
   statusLabel,
   showCameraControls,
   showScreenControls = false,
@@ -265,9 +269,9 @@ export function ActiveCallScreen({
   const screenShareArea = screenSharing && screenShareStream ? (
     <ScreenShareView
       stream={screenShareStream}
-      presenterName="You"
-      isSelf={true}
-      onStopSharing={onToggleScreen}
+      presenterName={screenSharePresenterName}
+      isSelf={screenShareIsSelf}
+      onStopSharing={screenShareIsSelf ? onToggleScreen : undefined}
     />
   ) : null
 

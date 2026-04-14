@@ -475,20 +475,33 @@ defmodule VostokServerWeb.Api.V1.ChatController do
   end
 
   def create_message(conn, %{"chat_id" => chat_id} = params) do
-    case Messaging.create_message(
-           chat_id,
-           device_id(conn),
-           conn.assigns.current_user.id,
-           params,
-           device_id(conn)
-         ) do
-      {:ok, message} ->
-        conn
-        |> put_status(:created)
-        |> json(%{message: message})
+    user_id = conn.assigns.current_user.id
 
-      {:error, {kind, message}} ->
-        render_error(conn, kind, message)
+    case VostokServer.Messaging.RateLimiter.check_rate(user_id) do
+      {:error, retry_after} ->
+        conn
+        |> put_resp_header("retry-after", to_string(retry_after))
+        |> put_status(:too_many_requests)
+        |> json(%{error: "Rate limit exceeded. Try again in #{retry_after}s."})
+
+      :ok ->
+        case Messaging.create_message(
+               chat_id,
+               device_id(conn),
+               user_id,
+               params,
+               device_id(conn)
+             ) do
+          {:ok, message} ->
+            VostokServer.Messaging.RateLimiter.record_send(user_id)
+
+            conn
+            |> put_status(:created)
+            |> json(%{message: message})
+
+          {:error, {kind, message}} ->
+            render_error(conn, kind, message)
+        end
     end
   end
 

@@ -12,6 +12,7 @@ defmodule VostokServerWeb.Router do
   pipeline :api_authenticated do
     plug :accepts, ["json"]
     plug VostokServerWeb.Plugs.Authenticate
+    plug VostokServerWeb.Plugs.RequestContext
   end
 
   pipeline :api_admin do

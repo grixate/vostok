@@ -223,6 +223,15 @@ export function useChatList(
     return isDirectChatOnline(chat, currentUserId, servers.isUserOnline)
   }, [servers])
 
+  const isMemberOnline = useCallback((userId: string) => {
+    const serverId = servers.activeServerId
+    return serverId ? servers.isUserOnline(serverId, userId) : false
+  }, [servers])
+
+  const currentUserId = useMemo(() => {
+    return servers.servers.find((server) => server.id === servers.activeServerId)?.auth?.user.id ?? null
+  }, [servers.servers, servers.activeServerId])
+
   return {
     chatItems,
     setChatItems,
@@ -245,6 +254,8 @@ export function useChatList(
     activeServerUrl: servers.activeServer?.url ?? null,
     resolveServerScope: servers.resolveServerForChat,
     isChatOnline,
+    isMemberOnline,
+    currentUserId,
     startDirectChatWith,
     handleCreateDirectChat
   }

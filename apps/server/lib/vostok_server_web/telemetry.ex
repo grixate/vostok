@@ -6,17 +6,43 @@ defmodule VostokServerWeb.Telemetry do
     Supervisor.start_link(__MODULE__, arg, name: __MODULE__)
   end
 
+  require Logger
+
   @impl true
   def init(_arg) do
+    # Attach Oban job telemetry for structured logging of background work
+    :telemetry.attach(
+      "oban-job-stop",
+      [:oban, :job, :stop],
+      &__MODULE__.handle_oban_event/4,
+      nil
+    )
+
+    :telemetry.attach(
+      "oban-job-exception",
+      [:oban, :job, :exception],
+      &__MODULE__.handle_oban_event/4,
+      nil
+    )
+
     children = [
-      # Telemetry poller will execute the given period measurements
-      # every 10_000ms. Learn more here: https://hexdocs.pm/telemetry_metrics
       {:telemetry_poller, measurements: periodic_measurements(), period: 10_000}
-      # Add reporters as children of your supervision tree.
-      # {Telemetry.Metrics.ConsoleReporter, metrics: metrics()}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def handle_oban_event([:oban, :job, :stop], measure, meta, _config) do
+    duration_ms = System.convert_time_unit(measure.duration, :native, :millisecond)
+    Logger.info("[Oban] #{meta.worker} completed in #{duration_ms}ms (queue: #{meta.queue})")
+  end
+
+  def handle_oban_event([:oban, :job, :exception], measure, meta, _config) do
+    duration_ms = System.convert_time_unit(measure.duration, :native, :millisecond)
+
+    Logger.error(
+      "[Oban] #{meta.worker} FAILED in #{duration_ms}ms (queue: #{meta.queue}, attempt: #{meta.attempt}): #{inspect(meta.reason)}"
+    )
   end
 
   def metrics do

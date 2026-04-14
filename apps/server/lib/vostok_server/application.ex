@@ -13,6 +13,7 @@ defmodule VostokServer.Application do
       {Oban, Application.fetch_env!(:vostok_server, Oban)},
       VostokServer.Auth.ChallengeStore,
       VostokServer.Auth.RateLimiter,
+      VostokServer.Messaging.RateLimiter,
       {Registry, keys: :unique, name: VostokServer.Calls.RoomRegistry},
       VostokServer.Calls.RoomSupervisor,
       VostokServer.Relay.DeviceRegistry,

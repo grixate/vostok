@@ -59,7 +59,20 @@ defmodule VostokServer.Identity do
     User
     |> order_by([u], asc: u.username)
     |> Repo.all()
-    |> Enum.map(fn user -> %{id: user.id, username: user.username, last_seen_at: user.last_seen_at, has_photo: is_binary(user.profile_photo_path) and user.profile_photo_path != ""} end)
+    |> Enum.map(&present_user/1)
+  end
+
+  defp present_user(%User{} = user) do
+    %{
+      id: user.id,
+      username: user.username,
+      display_name: user.display_name,
+      bio: user.bio,
+      role: user.role,
+      joined_at: user.inserted_at,
+      last_seen_at: user.last_seen_at,
+      has_photo: is_binary(user.profile_photo_path) and user.profile_photo_path != ""
+    }
   end
 
   def update_user_profile(user, attrs) when is_map(attrs) do

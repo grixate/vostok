@@ -904,6 +904,7 @@ export function useCall(
     }
 
     return (
+      /^0\./.test(address) ||
       /^198\.(18|19)\./.test(address) ||
       /^169\.254\./.test(address) ||
       /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(address)

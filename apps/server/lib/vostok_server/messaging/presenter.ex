@@ -176,6 +176,7 @@ defmodule VostokServer.Messaging.Presenter do
       reply_to_message_id: message.reply_to_message_id,
       edited_at: iso_or_nil(message.edited_at),
       deleted_at: iso_or_nil(message.deleted_at),
+      seq: message.seq,
       recipient_device_ids: Enum.map(message.recipient_envelopes, & &1.device_id),
       reactions: summarize_reactions(Map.get(message, :reactions, []), current_user_id),
       recipient_envelope:

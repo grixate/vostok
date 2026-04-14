@@ -79,18 +79,49 @@ type InternalMembraneClient = {
   checkIfTrackBelongToEndpoint?: (trackId: string, endpoint?: unknown) => boolean
 }
 
-function installSafeOnTrackHandler(client: MembraneClient): void {
-  const internalClient = client as unknown as InternalMembraneClient
-  const pendingTracksByMid = new Map<string | null, { stream: MediaStream | null; track: MediaStreamTrack }>()
+type PendingTrackEntry = {
+  stream: MediaStream | null
+  track: MediaStreamTrack
+  transceiver: RTCTrackEvent['transceiver'] | null | undefined
+}
 
-  const applyPendingTracks = () => {
-    if (pendingTracksByMid.size === 0) {
+export function installSafeOnTrackHandler(client: MembraneClient): void {
+  const internalClient = client as unknown as InternalMembraneClient
+  const pendingTracks: PendingTrackEntry[] = []
+
+  const enqueuePendingTrack = (entry: PendingTrackEntry) => {
+    const existingIndex = pendingTracks.findIndex((pending) => pending.track === entry.track)
+
+    if (existingIndex >= 0) {
+      pendingTracks[existingIndex] = entry
       return
     }
 
-    for (const [mid, pending] of pendingTracksByMid) {
+    pendingTracks.push(entry)
+  }
+
+  const applyPendingTracks = () => {
+    if (pendingTracks.length === 0) {
+      return
+    }
+
+    const assignedTrackIds = new Set<string>()
+
+    for (let index = 0; index < pendingTracks.length; index += 1) {
+      const pending = pendingTracks[index]
+      const mid = pending.transceiver?.mid ?? null
       const trackId = internalClient.midToTrackId?.get(mid)
       if (!trackId) {
+        continue
+      }
+
+      if (assignedTrackIds.has(trackId)) {
+        continue
+      }
+
+      if (internalClient.checkIfTrackBelongToEndpoint?.(trackId, internalClient.localEndpoint)) {
+        pendingTracks.splice(index, 1)
+        index -= 1
         continue
       }
 
@@ -99,10 +130,12 @@ function installSafeOnTrackHandler(client: MembraneClient): void {
         continue
       }
 
+      assignedTrackIds.add(trackId)
       trackContext.stream = pending.stream
       trackContext.track = pending.track
       client.emit('trackReady', trackContext as never)
-      pendingTracksByMid.delete(mid)
+      pendingTracks.splice(index, 1)
+      index -= 1
     }
   }
 
@@ -117,7 +150,11 @@ function installSafeOnTrackHandler(client: MembraneClient): void {
     const trackId = internalClient.midToTrackId?.get(mid)
 
     if (!trackId) {
-      pendingTracksByMid.set(mid, { stream: stream ?? null, track: event.track })
+      enqueuePendingTrack({
+        stream: stream ?? null,
+        track: event.track,
+        transceiver: event.transceiver
+      })
       return
     }
 
@@ -127,7 +164,11 @@ function installSafeOnTrackHandler(client: MembraneClient): void {
 
     const trackContext = internalClient.trackIdToTrack?.get(trackId)
     if (!trackContext) {
-      pendingTracksByMid.set(mid, { stream: stream ?? null, track: event.track })
+      enqueuePendingTrack({
+        stream: stream ?? null,
+        track: event.track,
+        transceiver: event.transceiver
+      })
       return
     }
 

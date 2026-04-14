@@ -528,8 +528,19 @@ export async function listDevices(token: string): Promise<{ devices: DeviceInfo[
   })
 }
 
-export async function listUsers(token: string): Promise<{ users: { id: string; username: string; has_photo?: boolean }[] }> {
-  return apiRequest<{ users: { id: string; username: string; has_photo?: boolean }[] }>('/users', {
+export type DirectoryUser = {
+  id: string
+  username: string
+  display_name: string | null
+  bio: string | null
+  role: 'admin' | 'member'
+  joined_at: string | null
+  last_seen_at: string | null
+  has_photo: boolean
+}
+
+export async function listUsers(token: string): Promise<{ users: DirectoryUser[] }> {
+  return apiRequest<{ users: DirectoryUser[] }>('/users', {
     method: 'GET',
     headers: authHeader(token)
   })
