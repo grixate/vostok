@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import type { CachedMessage } from '../../lib/message-cache.ts'
 import {
@@ -101,17 +102,17 @@ export function ChatSearchBar({ messageItems, onSearchHighlightChange }: ChatSea
 
   return (
     <div className="chat-search-bar">
-      <button className="chat-search-bar__nav" type="button" aria-label="Previous result" onClick={handlePrevious} disabled={matches.length === 0}>
+      <button className="chat-search-bar__nav" type="button" aria-label={t('previous_result')} onClick={handlePrevious} disabled={matches.length === 0}>
         <ChevronUpSmallIcon />
       </button>
-      <button className="chat-search-bar__nav" type="button" aria-label="Next result" onClick={handleNext} disabled={matches.length === 0}>
+      <button className="chat-search-bar__nav" type="button" aria-label={t('next_result')} onClick={handleNext} disabled={matches.length === 0}>
         <ChevronDownSmallIcon />
       </button>
       <div className="chat-search-bar__field">
         <SearchSmallIcon />
         <input
           className="chat-search-bar__input"
-          placeholder="Search"
+          placeholder={t('search')}
           ref={chatSearchInputRef}
           value={chatSearchQuery}
           onChange={(e) => setChatSearchQuery(e.target.value)}
@@ -121,15 +122,15 @@ export function ChatSearchBar({ messageItems, onSearchHighlightChange }: ChatSea
         {chatSearchQuery ? (
           <>
             <span className="chat-search-bar__count">
-              {matches.length > 0 ? `${safeIndex} of ${matches.length}` : 'No results'}
+              {matches.length > 0 ? `${safeIndex} of ${matches.length}` : t('no_results')}
             </span>
-            <button className="chat-search-bar__clear" type="button" onClick={() => setChatSearchQuery('')} aria-label="Clear">
+            <button className="chat-search-bar__clear" type="button" onClick={() => setChatSearchQuery('')} aria-label={t('clear_search')}>
               <ClearCircleIcon width={14} height={14} />
             </button>
           </>
         ) : null}
       </div>
-      <button className="chat-search-bar__close" type="button" onClick={handleClose} aria-label="Close search">
+      <button className="chat-search-bar__close" type="button" onClick={handleClose} aria-label={t('close_search')}>
         <CloseSmallIcon />
       </button>
     </div>

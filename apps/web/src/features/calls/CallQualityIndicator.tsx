@@ -3,6 +3,7 @@ import type {
   CallQualityProfile,
   CallTransportStatus
 } from '../../lib/call-quality-policy.ts'
+import { t } from '../../lib/i18n.ts'
 
 type CallQualityIndicatorProps = {
   transportStatus: CallTransportStatus
@@ -10,40 +11,40 @@ type CallQualityIndicatorProps = {
   profile?: CallQualityProfile
 }
 
-const PROFILE_LABELS: Record<CallQualityProfile, string> = {
-  high: 'High quality',
-  medium: 'Balanced quality',
-  low: 'Low-bandwidth video',
-  audio_fallback: 'Audio-priority mode'
+const PROFILE_LABEL_KEYS: Record<CallQualityProfile, string> = {
+  high: 'high_quality',
+  medium: 'balanced_quality',
+  low: 'low_bandwidth_video',
+  audio_fallback: 'audio_priority_mode',
 }
 
 function transportStatusLabel(status: CallTransportStatus): string {
   switch (status) {
     case 'connected':
-      return 'Transport: Connected'
+      return t('transport_connected')
     case 'reconnecting':
-      return 'Transport: Reconnecting'
+      return t('transport_reconnecting')
     case 'disconnected':
-      return 'Transport: Disconnected'
+      return t('transport_disconnected')
     default:
-      return 'Transport: Unknown'
+      return t('transport_unknown')
   }
 }
 
 function qualityStatusLabel(quality: CallQuality, profile?: CallQualityProfile): string {
-  const profileLabel = profile ? ` (${PROFILE_LABELS[profile]})` : ''
+  const profileLabel = profile ? ` (${t(PROFILE_LABEL_KEYS[profile])})` : ''
 
   switch (quality) {
     case 'good':
-      return `Media quality: Good${profileLabel}`
+      return `${t('media_quality_good')}${profileLabel}`
     case 'fair':
-      return `Media quality: Constrained${profileLabel}`
+      return `${t('media_quality_constrained')}${profileLabel}`
     case 'poor':
       return profile === 'audio_fallback'
-        ? 'Media quality: Poor (Audio-priority mode active)'
-        : `Media quality: Poor${profileLabel}`
+        ? `${t('media_quality_poor')} (${t('audio_priority')})`
+        : `${t('media_quality_poor')}${profileLabel}`
     default:
-      return 'Media quality: Unavailable'
+      return t('media_quality_unavailable')
   }
 }
 

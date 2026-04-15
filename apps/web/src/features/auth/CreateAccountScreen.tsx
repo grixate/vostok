@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { ArrowLeft, User, PenLine, Lock, CircleCheck, CircleX, Eye, EyeOff } from 'lucide-react'
 import { PasswordStrengthBar } from './PasswordStrengthBar.tsx'
 import type { AuthView, ServerInfo } from '../../types.ts'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   inviteCode: string | null
@@ -89,7 +90,7 @@ export function CreateAccountScreen({
     <div className="auth-shell">
       {isDevMode && (
         <div className="auth-dev-banner">
-          <span>⚠ DEV MODE — Open registration enabled. Do not use in production.</span>
+          <span>⚠ {t('dev_mode_banner')}</span>
         </div>
       )}
       <div className="auth-card">
@@ -99,15 +100,15 @@ export function CreateAccountScreen({
           onClick={() => onNavigate(backTarget)}
         >
           <ArrowLeft size={18} color="var(--text-muted)" strokeWidth={1.75} />
-          <span>Back</span>
+          <span>{t('back')}</span>
         </button>
 
         <div className="auth-card__header">
           <h1 className="auth-card__title auth-card__title--left">
-            {isDevMode ? 'Create Dev Account' : 'Create Your Account'}
+            {isDevMode ? t('create_dev_account') : t('create_your_account')}
           </h1>
           <p className="auth-card__subtitle auth-card__subtitle--left">
-            Joining {serverDisplay}
+            {t('joining_server', serverDisplay)}
           </p>
         </div>
 
@@ -116,7 +117,7 @@ export function CreateAccountScreen({
             <User size={18} color="var(--text-muted)" strokeWidth={1.75} />
             <input
               className="auth-input"
-              placeholder="Username"
+              placeholder={t('username')}
               required
               value={username}
               onChange={(e) => {
@@ -135,7 +136,7 @@ export function CreateAccountScreen({
                 }}
                 tabIndex={-1}
               >
-                Random
+                {t('random')}
               </button>
             )}
             {!isDevMode && usernameAvailable === true && <CircleCheck size={18} color="#22C55E" />}
@@ -146,7 +147,7 @@ export function CreateAccountScreen({
             <PenLine size={18} color="var(--text-muted)" strokeWidth={1.75} />
             <input
               className="auth-input"
-              placeholder="Display Name"
+              placeholder={t('display_name')}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               disabled={loading}
@@ -159,7 +160,7 @@ export function CreateAccountScreen({
               <input
                 className="auth-input"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Password"
+                placeholder={t('password')}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -182,7 +183,7 @@ export function CreateAccountScreen({
             <input
               className="auth-input"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Confirm Password"
+              placeholder={t('confirm_password')}
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -194,7 +195,7 @@ export function CreateAccountScreen({
           {error && <p className="auth-error">{error}</p>}
 
           <button className="auth-btn-primary" type="submit" disabled={!canSubmit}>
-            {loading ? <span className="auth-spinner" /> : (isDevMode ? 'Create Dev Account' : 'Create Account')}
+            {loading ? <span className="auth-spinner" /> : (isDevMode ? t('create_dev_account') : t('create_account'))}
           </button>
         </form>
       </div>

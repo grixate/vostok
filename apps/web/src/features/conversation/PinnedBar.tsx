@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { resolvePinnedPreview } from '../../utils/format.ts'
 import {
   PinSmallIcon,
@@ -60,17 +61,17 @@ export function PinnedBar({ messageItems, onScrollToMessage }: PinnedBarProps) {
       <div className="pinned-bar__content">
         {pinnedMessages.length > 1 ? (
           <span className="pinned-bar__counter">
-            Pinned Message {safeIndex + 1} of {pinnedMessages.length}
+            {t('pinned_of', safeIndex + 1, pinnedMessages.length)}
           </span>
         ) : null}
         <span className="pinned-bar__text">{resolvePinnedPreview(currentPinned)}</span>
       </div>
       {pinnedMessages.length > 1 ? (
         <div className="pinned-bar__nav">
-          <button type="button" aria-label="Previous pinned" onClick={(e) => { e.stopPropagation(); handlePrevious() }}>
+          <button type="button" aria-label={t('previous_pinned')} onClick={(e) => { e.stopPropagation(); handlePrevious() }}>
             <ChevronUpSmallIcon />
           </button>
-          <button type="button" aria-label="Next pinned" onClick={(e) => { e.stopPropagation(); handleNext() }}>
+          <button type="button" aria-label={t('next_pinned')} onClick={(e) => { e.stopPropagation(); handleNext() }}>
             <ChevronDownSmallIcon />
           </button>
         </div>
@@ -78,7 +79,7 @@ export function PinnedBar({ messageItems, onScrollToMessage }: PinnedBarProps) {
       <button
         className="pinned-bar__close"
         type="button"
-        aria-label="Dismiss pinned"
+        aria-label={t('dismiss_pinned')}
         onClick={(e) => { e.stopPropagation(); setDismissed(true) }}
       >
         <CloseSmallIcon />

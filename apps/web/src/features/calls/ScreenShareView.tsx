@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import { t } from '../../lib/i18n.ts'
 
 type ScreenShareViewProps = {
   stream: MediaStream
@@ -25,11 +26,11 @@ export function ScreenShareView({ stream, presenterName, isSelf, onStopSharing }
         playsInline
       />
       <span className="screen-share-view__label">
-        {isSelf ? "You're sharing your screen" : `Presenting: ${presenterName}`}
+        {isSelf ? t('sharing_screen') : t('presenting', presenterName)}
       </span>
       {isSelf && onStopSharing && (
         <button type="button" className="screen-share-view__stop" onClick={onStopSharing}>
-          Stop sharing
+          {t('stop_sharing')}
         </button>
       )}
     </div>

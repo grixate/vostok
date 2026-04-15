@@ -1,23 +1,24 @@
 import { useEffect, useState } from 'react'
 import { useConnectionStatus } from '../../hooks/useConnectionStatus.ts'
+import { t } from '../../lib/i18n.ts'
 
 export function ConnectionStatusBar() {
   const status = useConnectionStatus()
   const [visible, setVisible] = useState(false)
-  const [label, setLabel] = useState('')
+  const [labelKey, setLabelKey] = useState('')
 
   useEffect(() => {
     if (status === 'connecting') {
-      setLabel('Connecting...')
+      setLabelKey('connection_connecting')
       setVisible(true)
     } else if (status === 'disconnected') {
-      setLabel('Waiting for network...')
+      setLabelKey('connection_waiting')
       setVisible(true)
     } else if (status === 'error') {
-      setLabel('Connection error')
+      setLabelKey('connection_error')
       setVisible(true)
     } else if (status === 'connected') {
-      setLabel('Connected')
+      setLabelKey('connected')
       setVisible(true)
       const timer = setTimeout(() => setVisible(false), 2000)
       return () => clearTimeout(timer)
@@ -35,7 +36,7 @@ export function ConnectionStatusBar() {
 
   return (
     <div className={`connection-status-bar ${modifier}`}>
-      {label}
+      {t(labelKey)}
     </div>
   )
 }

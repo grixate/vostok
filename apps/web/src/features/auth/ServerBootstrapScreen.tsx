@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { Zap, User, PenLine, Lock, CircleCheck, CircleX, Eye, EyeOff } from 'lucide-react'
 import { PasswordStrengthBar } from './PasswordStrengthBar.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   serverUrl?: string
@@ -69,9 +70,9 @@ export function ServerBootstrapScreen({
         <div className="auth-card__logo">
           <Zap size={48} color="var(--accent)" strokeWidth={1.75} />
         </div>
-        <h1 className="auth-card__title" style={{ fontSize: 20, fontWeight: 600 }}>Set Up Your Server</h1>
+        <h1 className="auth-card__title" style={{ fontSize: 20, fontWeight: 600 }}>{t('set_up_server')}</h1>
         <p className="auth-card__subtitle">
-          Create the administrator account to get started on {serverName ?? serverUrl ?? window.location.host}.
+          {t('set_up_server_subtitle', serverName ?? serverUrl ?? window.location.host)}
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -79,7 +80,7 @@ export function ServerBootstrapScreen({
             <PenLine size={18} color="var(--text-muted)" strokeWidth={1.75} />
             <input
               className="auth-input"
-              placeholder="Display Name"
+              placeholder={t('display_name')}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               disabled={loading}
@@ -90,7 +91,7 @@ export function ServerBootstrapScreen({
             <User size={18} color="var(--text-muted)" strokeWidth={1.75} />
             <input
               className="auth-input"
-              placeholder="Username"
+              placeholder={t('username')}
               required
               value={username}
               onChange={(e) => {
@@ -109,7 +110,7 @@ export function ServerBootstrapScreen({
               <input
                 className="auth-input"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Password"
+                placeholder={t('password')}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -132,7 +133,7 @@ export function ServerBootstrapScreen({
             <input
               className="auth-input"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Confirm Password"
+              placeholder={t('confirm_password')}
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -143,7 +144,7 @@ export function ServerBootstrapScreen({
           {error && <p className="auth-error">{error}</p>}
 
           <button className="auth-btn-primary" type="submit" disabled={!canSubmit}>
-            {loading ? <span className="auth-spinner" /> : 'Create Admin Account'}
+            {loading ? <span className="auth-spinner" /> : t('create_admin_account')}
           </button>
         </form>
       </div>

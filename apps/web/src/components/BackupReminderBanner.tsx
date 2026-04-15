@@ -1,5 +1,6 @@
 import { useBackupState } from '../hooks/useBackupState.ts'
 import { useUIContext } from '../contexts/UIContext.tsx'
+import { t } from '../lib/i18n.ts'
 
 export function BackupReminderBanner() {
   const { reminderText, dismissReminder } = useBackupState()
@@ -16,7 +17,7 @@ export function BackupReminderBanner() {
           className="backup-reminder-banner__btn"
           onClick={dismissReminder}
         >
-          Dismiss
+          {t('dismiss')}
         </button>
         <button
           type="button"
@@ -26,7 +27,7 @@ export function BackupReminderBanner() {
             setSettingsOverlayOpen(true)
           }}
         >
-          Export Now
+          {t('export_now')}
         </button>
       </div>
     </div>

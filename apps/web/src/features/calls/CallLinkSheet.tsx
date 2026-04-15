@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CloseIcon, LinkChainIcon, CopyIcon } from '../../icons/index.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type CallLinkSheetProps = {
   callLink: string | null
@@ -40,7 +41,7 @@ export function CallLinkSheet({ callLink, onGenerateLink, onClose }: CallLinkShe
       <div className="incoming-call-overlay__card" style={{ maxWidth: 380, padding: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', gap: 12, borderBottom: '1px solid var(--border-subtle)', width: '100%' }}>
           <LinkChainIcon width={20} height={20} />
-          <span style={{ fontSize: 17, fontWeight: 510, flex: 1 }}>Call Link</span>
+          <span style={{ fontSize: 17, fontWeight: 510, flex: 1 }}>{t('call_link')}</span>
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}>
             <CloseIcon width={20} height={20} />
           </button>
@@ -50,7 +51,7 @@ export function CallLinkSheet({ callLink, onGenerateLink, onClose }: CallLinkShe
           {link ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
-                Share this link to invite people to a group call:
+                {t('call_link_subtitle')}
               </p>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
@@ -72,19 +73,19 @@ export function CallLinkSheet({ callLink, onGenerateLink, onClose }: CallLinkShe
                     width: 40, height: 40, borderRadius: 10, border: 'none',
                     background: 'var(--accent)', color: 'white', cursor: 'pointer',
                   }}
-                  aria-label="Copy link"
+                  aria-label={t('copy_link')}
                 >
                   <CopyIcon width={18} height={18} />
                 </button>
               </div>
               {copied && (
-                <span style={{ fontSize: 13, color: 'var(--accent)' }}>Copied to clipboard</span>
+                <span style={{ fontSize: 13, color: 'var(--accent)' }}>{t('copied_to_clipboard')}</span>
               )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-                Generate a link that anyone can use to join a group call.
+                {t('generate_link_subtitle')}
               </p>
               <button
                 type="button"
@@ -97,7 +98,7 @@ export function CallLinkSheet({ callLink, onGenerateLink, onClose }: CallLinkShe
                   fontSize: 14, fontWeight: 510, opacity: generating ? 0.6 : 1,
                 }}
               >
-                {generating ? 'Generating...' : 'Generate Link'}
+                {generating ? t('generating') : t('generate_link')}
               </button>
             </div>
           )}

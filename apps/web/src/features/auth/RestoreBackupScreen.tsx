@@ -7,6 +7,7 @@ import { importBackupFile, validateBackupMagic, type BackupPayload, type BackupS
 import { createServerApiClient } from '../../lib/server-api.ts'
 import { normalizeServerUrl } from '../../lib/multi-server.ts'
 import { useBackupState } from '../../hooks/useBackupState.ts'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   servers: ReturnType<typeof useServers>
@@ -51,7 +52,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
     reader.onload = () => {
       const bytes = new Uint8Array(reader.result as ArrayBuffer)
       if (!validateBackupMagic(bytes)) {
-        setError('This file is not a valid Vostok backup.')
+        setError(t('invalid_backup_file'))
         setFileBytes(null)
         return
       }
@@ -71,7 +72,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
     try {
       payload = await importBackupFile(fileBytes, passphrase)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to decrypt backup.')
+      setError(err instanceof Error ? err.message : t('failed_decrypt_backup'))
       setDecrypting(false)
       return
     }
@@ -106,7 +107,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
     const { backup } = entry
     const url = normalizeServerUrl(backup.url)
     if (!url) {
-      updateEntry(index, { state: 'failed', message: 'Invalid server URL' })
+      updateEntry(index, { state: 'failed', message: t('invalid_server_url') })
       return
     }
 
@@ -218,7 +219,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
         updateEntry(index, { state: 'needs_password', username: entry.backup.username })
         setEntries((prev) => {
           const next = [...prev]
-          next[index] = { ...next[index], loginError: err instanceof Error ? err.message : 'Login failed' }
+          next[index] = { ...next[index], loginError: err instanceof Error ? err.message : t('login_failed') }
           return next
         })
       }
@@ -234,7 +235,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
-          <h1 className="auth-card__title auth-card__title--left">Restoring Servers</h1>
+          <h1 className="auth-card__title auth-card__title--left">{t('restoring_servers')}</h1>
 
           <div className="auth-restore-list">
             {entries.map((entry, index) => (
@@ -252,12 +253,12 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
                       {entry.backup.label}
                     </span>
                     <span className="auth-restore-item__meta">
-                      {entry.status.state === 'connected' && `Connected as ${entry.status.username}`}
-                      {entry.status.state === 'restoring' && 'Connecting...'}
-                      {entry.status.state === 'unreachable' && 'Server unreachable'}
+                      {entry.status.state === 'connected' && t('connected_as', entry.status.username)}
+                      {entry.status.state === 'restoring' && t('connecting')}
+                      {entry.status.state === 'unreachable' && t('server_unreachable_short')}
                       {entry.status.state === 'failed' && entry.status.message}
-                      {entry.status.state === 'needs_password' && 'Session expired'}
-                      {entry.status.state === 'pending' && 'Waiting...'}
+                      {entry.status.state === 'needs_password' && t('session_expired')}
+                      {entry.status.state === 'pending' && t('waiting')}
                     </span>
                   </span>
                 </div>
@@ -269,7 +270,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
                       <input
                         className="auth-input"
                         type="password"
-                        placeholder="Enter password"
+                        placeholder={t('enter_password')}
                         value={entry.passwordInput}
                         onChange={(e) => {
                           const val = e.target.value
@@ -287,7 +288,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
                       type="button"
                       onClick={() => handleManualLogin(index)}
                     >
-                      Sign In
+                      {t('login')}
                     </button>
                   </div>
                 )}
@@ -298,7 +299,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
           {!stillWorking && (
             <>
               <p className="auth-card__subtitle">
-                {connectedCount} of {entries.length} server{entries.length === 1 ? '' : 's'} connected
+                {t('servers_connected', connectedCount, entries.length)}
               </p>
               <button
                 className="auth-btn-primary"
@@ -306,7 +307,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
                 disabled={connectedCount === 0}
                 onClick={() => onNavigate('chat')}
               >
-                Continue to Chats
+                {t('continue_to_chats')}
               </button>
             </>
           )}
@@ -316,7 +317,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
             type="button"
             onClick={() => onNavigate('welcome')}
           >
-            Back
+            {t('back')}
           </button>
         </div>
       </div>
@@ -329,8 +330,8 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
         <div className="auth-card__logo">
           <Zap size={40} color="var(--accent)" strokeWidth={1.75} />
         </div>
-        <h1 className="auth-card__title">Restore from Backup</h1>
-        <p className="auth-card__subtitle">Select a .vostok backup file and enter your backup password.</p>
+        <h1 className="auth-card__title">{t('restore_title')}</h1>
+        <p className="auth-card__subtitle">{t('restore_subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleDecrypt}>
           <input
@@ -346,7 +347,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload size={16} strokeWidth={1.75} />
-            <span>{fileName ?? 'Select .vostok file'}</span>
+            <span>{fileName ?? t('select_file')}</span>
           </button>
 
           <div className={`auth-input-row${error ? ' auth-input-row--error' : ''}`}>
@@ -354,7 +355,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
             <input
               className="auth-input"
               type={showPassphrase ? 'text' : 'password'}
-              placeholder="Backup password"
+              placeholder={t('backup_password')}
               value={passphrase}
               onChange={(e) => setPassphrase(e.target.value)}
               disabled={decrypting}
@@ -378,7 +379,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
             type="submit"
             disabled={!fileBytes || !passphrase || decrypting}
           >
-            {decrypting ? <span className="auth-spinner" /> : 'Restore'}
+            {decrypting ? <span className="auth-spinner" /> : t('restore')}
           </button>
         </form>
 
@@ -387,7 +388,7 @@ export function RestoreBackupScreen({ servers, onNavigate }: Props) {
           type="button"
           onClick={() => onNavigate('welcome')}
         >
-          Back
+          {t('back')}
         </button>
       </div>
     </div>

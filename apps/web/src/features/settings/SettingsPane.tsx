@@ -19,7 +19,6 @@ import { getCallCapability } from '../../lib/media-e2ee.ts'
 import { ThemePicker } from './ThemePicker.tsx'
 import { ServerManagementSection } from './ServerManagementSection.tsx'
 import {
-  Toggle,
   ToggleRow,
   ChevronRow,
   RadioRow,
@@ -34,10 +33,8 @@ import {
   BackIcon,
   SearchIcon,
   ChevronRightIcon,
-  SettingsIcon,
   ShieldIcon,
   LockIcon,
-  MonitorIcon,
 } from '../../icons/index.tsx'
 import {
   Bell,
@@ -45,7 +42,15 @@ import {
   Paintbrush,
   Cloud,
   Camera,
+  Keyboard,
+  Copy,
+  Check,
 } from 'lucide-react'
+import { VOSTOK_CLIENT_VERSION } from '../../constants.ts'
+import { changePassword } from '../../lib/api.ts'
+import { t } from '../../lib/i18n.ts'
+import { useLocale } from '../../contexts/LocaleContext.tsx'
+import { getAvailableLocales } from '../../lib/i18n.ts'
 
 const settingsSlideVariants = {
   enter: (d: number) => ({ x: d < 0 ? '-100%' : '100%' }),
@@ -57,14 +62,12 @@ const settingsSlideVariants = {
 
 type Section =
   | 'servers'
-  | 'general'
   | 'my-profile'
   | 'notifications'
   | 'privacy'
   | 'data-storage'
-  | 'active-sessions'
   | 'appearance'
-  | 'encryption'
+  | 'about-debug'
 
 type SettingsPaneProps = {
   auth: ReturnType<typeof useAuth>
@@ -77,16 +80,16 @@ type SettingsPaneProps = {
 
 // ─── Section title mapping ──────────────────────────────────────────────────────
 
-const SECTION_TITLES: Record<Section, string> = {
-  'servers': 'Servers',
-  'general': 'General',
-  'my-profile': 'My Profile',
-  'notifications': 'Notifications and Sounds',
-  'privacy': 'Privacy and Security',
-  'data-storage': 'Data and Storage',
-  'active-sessions': 'Active Sessions',
-  'appearance': 'Appearance',
-  'encryption': 'Encryption',
+function sectionTitle(s: Section): string {
+  switch (s) {
+    case 'servers': return t('servers')
+    case 'my-profile': return t('my_profile')
+    case 'notifications': return t('notifications_and_sounds')
+    case 'privacy': return t('privacy_and_security')
+    case 'data-storage': return t('data_and_storage')
+    case 'appearance': return t('appearance')
+    case 'about-debug': return t('about_and_debug')
+  }
 }
 
 // ─── Nav item config ────────────────────────────────────────────────────────────
@@ -95,19 +98,26 @@ type NavEntry = { id: Section; label: string; icon: ReactNode; badge?: string; s
 
 const LI = 20 // lucide icon size
 
-const NAV_ITEMS: NavEntry[] = [
-  { id: 'servers', label: 'Servers', icon: <Cloud size={LI} strokeWidth={1.75} /> },
-  { id: 'general', label: 'General', icon: <SettingsIcon /> },
-  { id: 'notifications', label: 'Notifications and Sounds', icon: <Bell size={LI} strokeWidth={1.75} /> },
-  { id: 'privacy', label: 'Privacy and Security', icon: <LockIcon /> },
-  { id: 'data-storage', label: 'Data and Storage', icon: <Database size={LI} strokeWidth={1.75} /> },
-  { id: 'active-sessions', label: 'Active Sessions', icon: <MonitorIcon /> },
-  { id: 'appearance', label: 'Appearance', icon: <Paintbrush size={LI} strokeWidth={1.75} /> },
-]
+const NAV_ICONS: Record<Section, ReactNode> = {
+  'servers': <Cloud size={LI} strokeWidth={1.75} />,
+  'notifications': <Bell size={LI} strokeWidth={1.75} />,
+  'privacy': <LockIcon />,
+  'data-storage': <Database size={LI} strokeWidth={1.75} />,
+  'appearance': <Paintbrush size={LI} strokeWidth={1.75} />,
+  'about-debug': <ShieldIcon />,
+  'my-profile': null,
+}
 
-const NAV_ITEMS_BOTTOM: NavEntry[] = [
-  { id: 'encryption', label: 'Encryption', icon: <ShieldIcon /> },
-]
+const NAV_ITEM_IDS: Section[] = ['servers', 'notifications', 'privacy', 'data-storage', 'appearance']
+const NAV_ITEM_BOTTOM_IDS: Section[] = ['about-debug']
+
+function navItems(): NavEntry[] {
+  return NAV_ITEM_IDS.map((id) => ({ id, label: sectionTitle(id), icon: NAV_ICONS[id] }))
+}
+
+function navItemsBottom(): NavEntry[] {
+  return NAV_ITEM_BOTTOM_IDS.map((id) => ({ id, label: sectionTitle(id), icon: NAV_ICONS[id] }))
+}
 
 // ─── Settings hook result type ──────────────────────────────────────────────────
 
@@ -122,12 +132,13 @@ type SettingsHook = {
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHook, onClose }: SettingsPaneProps) {
-  const { setSidebarTab, setSettingsOverlayOpen, initialSettingsSection, setInitialSettingsSection } = useUIContext()
+  const { setSidebarTab, setSettingsOverlayOpen, setShortcutsOpen, initialSettingsSection, setInitialSettingsSection } = useUIContext()
   const [activeSection, setActiveSection] = useState<Section>(() => {
-    if (initialSettingsSection && initialSettingsSection in SECTION_TITLES) {
+    const validSections: Section[] = ['servers', 'my-profile', 'notifications', 'privacy', 'data-storage', 'appearance', 'about-debug']
+    if (initialSettingsSection && validSections.includes(initialSettingsSection as Section)) {
       return initialSettingsSection as Section
     }
-    return 'general'
+    return 'my-profile'
   })
   const [mobileShowDetail, setMobileShowDetailRaw] = useState(false)
   const settingsDirRef = useRef<1 | -1>(1)
@@ -136,15 +147,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
     setMobileShowDetailRaw(show)
   }
   const [searchQuery, setSearchQuery] = useState('')
-  const [deviceCount, setDeviceCount] = useState<number | null>(null)
   const token = servers.activeServerScope?.token ?? auth.authSession?.accessToken ?? null
-
-  useEffect(() => {
-    if (!token) return
-    listDevices(token)
-      .then((resp) => setDeviceCount(resp.devices.filter((d) => !d.revoked_at).length))
-      .catch(() => {})
-  }, [token])
 
   // Clear the initial section after it's consumed
   useEffect(() => {
@@ -190,7 +193,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
       height: '100%',
     }}>
       <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 12, flexShrink: 0 }}>
-        <span style={{ fontSize: 22, fontWeight: 700, flex: 1 }}>Settings</span>
+        <span style={{ fontSize: 22, fontWeight: 700, flex: 1 }}>{t('settings')}</span>
       </div>
 
       <div style={{ padding: '0 16px 12px' }}>
@@ -198,7 +201,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
           <SearchIcon />
           <input
             type="text"
-            placeholder="Search"
+            placeholder={t('search')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ border: 'none', background: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--label)' }}
@@ -226,12 +229,10 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
           <ChevronRightIcon />
         </button>
 
-        {NAV_ITEMS.map((item) => (
+        {navItems().map((item) => (
           <NavButton
             key={item.id}
-            item={item.id === 'active-sessions' && deviceCount != null
-              ? { ...item, badge: String(deviceCount) }
-              : item}
+            item={item}
             active={activeSection === item.id}
             onClick={() => handleSelectSection(item.id)}
           />
@@ -239,22 +240,30 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
 
         <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 8px' }} />
 
-        {NAV_ITEMS_BOTTOM.map((item) => (
+        {navItemsBottom().map((item) => (
           <NavButton
             key={item.id}
-            item={item.id === 'servers'
-              ? {
-                  ...item,
-                  secondary:
-                    servers.servers.length > 1
-                      ? `${servers.servers.length} servers connected`
-                      : servers.activeServer?.label ?? 'No servers'
-                }
-              : item}
+            item={item}
             active={activeSection === item.id}
             onClick={() => handleSelectSection(item.id)}
           />
         ))}
+
+        {!isMobile && (
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '0 16px', height: 44, borderRadius: 12, border: 'none',
+              background: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+              fontSize: 13, marginTop: 4,
+            }}
+          >
+            <Keyboard size={18} strokeWidth={1.75} />
+            <span>{t('keyboard_shortcuts')}</span>
+          </button>
+        )}
       </div>
 
       <BottomTabBar
@@ -264,6 +273,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
           setSettingsOverlayOpen(false)
           setSidebarTab(tab)
         }}
+        chatUnreadCount={chatList.chatItems.reduce((sum, c) => sum + (c.is_self_chat ? 0 : (c.message_count ?? 0)), 0)}
       />
     </aside>
   )
@@ -288,7 +298,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
             <BackIcon width={20} height={20} />
           </button>
         )}
-        <span style={{ fontSize: 17, fontWeight: 600, flex: 1, textAlign: isMobile ? 'left' : 'center' }}>{SECTION_TITLES[activeSection]}</span>
+        <span style={{ fontSize: 17, fontWeight: 600, flex: 1, textAlign: isMobile ? 'left' : 'center' }}>{sectionTitle(activeSection)}</span>
       </div>
 
       <div key={activeSection} className="settings-pane__body--animate" style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 32px' }}>
@@ -378,7 +388,6 @@ function NavButton({ item, active, onClick }: { item: NavEntry; active: boolean;
 function SectionContent({ section, auth, chatSessions, chatList, servers, onClose, settingsHook, token }: { section: Section; settingsHook: SettingsHook; token: string | null } & SettingsPaneProps) {
   const s = settingsHook
   switch (section) {
-    case 'general': return <GeneralSection s={s} />
     case 'my-profile': return (
       <MyProfileSection
         token={token}
@@ -390,37 +399,10 @@ function SectionContent({ section, auth, chatSessions, chatList, servers, onClos
     case 'notifications': return <NotificationsSection s={s} />
     case 'privacy': return <PrivacySection s={s} chatSessions={chatSessions} chatList={chatList} />
     case 'data-storage': return <DataStorageSection s={s} serverUrl={servers.activeServer?.url ?? null} />
-    case 'active-sessions': return <ActiveSessionsSection token={token} />
     case 'appearance': return <AppearanceSection s={s} />
     case 'servers': return <ServerManagementSection servers={servers} />
-    case 'encryption': return <EncryptionSection />
+    case 'about-debug': return <AboutDebugSection serverUrl={servers.activeServer?.url ?? null} />
   }
-}
-
-// ─── General ────────────────────────────────────────────────────────────────────
-
-function GeneralSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle, updateSetting } = s
-  const { setShortcutsOpen } = useUIContext()
-
-  return (
-    <>
-      <SectionLabel>Emoji</SectionLabel>
-      <GroupCard>
-        <ToggleRow label="Replace Emoji Codes" on={settings.general_replace_emoji} onToggle={() => toggle('general_replace_emoji')} />
-        <ToggleRow label="Large Emoji" on={settings.general_large_emoji} onToggle={() => toggle('general_large_emoji')} last />
-      </GroupCard>
-      <SectionLabel>Send Key</SectionLabel>
-      <GroupCard>
-        <RadioRow label="Enter" active={settings.general_send_key === 'enter'} onSelect={() => updateSetting('general_send_key', 'enter')} />
-        <RadioRow label="Ctrl + Enter" active={settings.general_send_key === 'ctrl-enter'} onSelect={() => updateSetting('general_send_key', 'ctrl-enter')} last />
-      </GroupCard>
-      <SectionLabel>Shortcuts</SectionLabel>
-      <GroupCard>
-        <ButtonRow label="View Keyboard Shortcuts" color="accent" onClick={() => setShortcutsOpen(true)} last />
-      </GroupCard>
-    </>
-  )
 }
 
 // ─── My Profile ─────────────────────────────────────────────────────────────────
@@ -443,6 +425,20 @@ function MyProfileSection({
   const [photoModalOpen, setPhotoModalOpen] = useState(false)
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null)
 
+  // ── Change Password state ──
+  const [pwExpanded, setPwExpanded] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwStatus, setPwStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'mismatch'>('idle')
+  const pwTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Active Sessions state ──
+  const [devices, setDevices] = useState<DeviceInfo[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [revoking, setRevoking] = useState<string | null>(null)
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null)
+  const [nowTs, setNowTs] = useState(() => Date.now())
+
   // Check if profile photo exists (public URL, no auth needed)
   useEffect(() => {
     if (!userId) return
@@ -453,19 +449,30 @@ function MyProfileSection({
   }, [serverUrl, userId])
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load profile from /me on mount
+  // Load profile and devices on mount
   useEffect(() => {
     if (!token) return
-    fetchMe(token).then((data) => {
-      setDisplayName(data.user.display_name ?? '')
-      setBio(data.user.bio ?? '')
-      setUname(data.user.username ?? '')
+    Promise.all([
+      fetchMe(token),
+      listDevices(token),
+    ]).then(([me, devsResp]) => {
+      setDisplayName(me.user.display_name ?? '')
+      setBio(me.user.bio ?? '')
+      setUname(me.user.username ?? '')
+      setDevices(devsResp.devices.filter((d) => !d.revoked_at))
+      setCurrentDeviceId(me.device?.id ?? null)
+      setSessionsLoading(false)
     }).catch(() => {
-      // Fall back to what we have locally
       setDisplayName(profileUsername ?? '')
       setUname(profileUsername ?? '')
+      setSessionsLoading(false)
     })
   }, [profileUsername, token, userId])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTs(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const debouncedSave = useCallback((fields: { display_name?: string; bio?: string; username?: string }) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -491,7 +498,57 @@ function MyProfileSection({
     debouncedSave({ display_name: displayName, bio, username: val })
   }
 
+  const handleChangePassword = async () => {
+    if (!token || !newPassword.trim()) return
+    if (newPassword !== confirmPassword) {
+      setPwStatus('mismatch')
+      return
+    }
+    setPwStatus('saving')
+    try {
+      await changePassword(token, newPassword)
+      setPwStatus('saved')
+      setNewPassword('')
+      setConfirmPassword('')
+      if (pwTimerRef.current) clearTimeout(pwTimerRef.current)
+      pwTimerRef.current = setTimeout(() => { setPwExpanded(false); setPwStatus('idle') }, 1500)
+    } catch {
+      setPwStatus('error')
+    }
+  }
+
+  const handleRevoke = async (deviceId: string) => {
+    if (!token) return
+    setRevoking(deviceId)
+    try {
+      await revokeDevice(token, deviceId)
+      setDevices((prev) => prev.filter((d) => d.id !== deviceId))
+    } catch { /* failed */ }
+    setRevoking(null)
+  }
+
+  const handleRevokeAll = async () => {
+    if (!token) return
+    const others = devices.filter((d) => d.id !== currentDeviceId)
+    for (const d of others) {
+      try { await revokeDevice(token, d.id) } catch { /* skip */ }
+    }
+    setDevices((prev) => prev.filter((d) => d.id === currentDeviceId))
+  }
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return 'Unknown'
+    const d = new Date(iso)
+    const diff = nowTs - d.getTime()
+    if (diff < 60_000) return 'Just now'
+    if (diff < 3600_000) return `${Math.floor(diff / 60_000)} min ago`
+    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} hours ago`
+    return `${Math.floor(diff / 86400_000)} days ago`
+  }
+
   const initial = (displayName || uname)?.[0]?.toUpperCase() ?? '?'
+  const currentDevice = devices.find((d) => d.id === currentDeviceId)
+  const otherDevices = devices.filter((d) => d.id !== currentDeviceId)
 
   const inputStyle: CSSProperties = {
     width: '100%', height: 44, border: 'none', borderBottom: '1px solid var(--border-subtle)',
@@ -500,7 +557,7 @@ function MyProfileSection({
 
   return (
     <>
-      <SectionLabel>Profile Photo</SectionLabel>
+      <SectionLabel>{t('profile_photo')}</SectionLabel>
       <GroupCard>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20 }}>
           {profilePhotoUrl ? (
@@ -522,33 +579,124 @@ function MyProfileSection({
             borderRadius: 8, padding: '8px 16px', cursor: 'pointer', color: 'var(--accent)', fontSize: 13, fontWeight: 600,
           }}>
             <Camera size={16} strokeWidth={1.75} />
-            Change Photo
+            {t('change_photo')}
           </button>
         </div>
       </GroupCard>
       {saveStatus !== 'idle' && (
         <div style={{ fontSize: 12, padding: '4px 20px', color: saveStatus === 'error' ? 'var(--status-error)' : saveStatus === 'saving' ? 'var(--text-secondary)' : 'var(--green, #34C759)' }}>
-          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Error saving profile'}
+          {saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : t('error_saving_profile')}
         </div>
       )}
-      <SectionLabel>Display Name</SectionLabel>
+      <SectionLabel>{t('display_name')}</SectionLabel>
       <GroupCard>
-        <input placeholder="Display Name" value={displayName} onChange={(e) => handleDisplayNameChange(e.target.value)} style={{ ...inputStyle, borderBottom: 'none' }} />
+        <input placeholder={t('display_name')} value={displayName} onChange={(e) => handleDisplayNameChange(e.target.value)} style={{ ...inputStyle, borderBottom: 'none' }} />
       </GroupCard>
-      <SectionLabel>Bio</SectionLabel>
+      <SectionLabel>{t('bio')}</SectionLabel>
       <GroupCard>
         <textarea
-          placeholder="Write something about yourself..."
+          placeholder={t('bio_placeholder')}
           value={bio}
           onChange={(e) => handleBioChange(e.target.value)}
           maxLength={256}
           style={{ ...inputStyle, height: 80, resize: 'none', paddingTop: 12, borderBottom: 'none', fontFamily: 'inherit' }}
         />
       </GroupCard>
-      <SectionLabel>Username</SectionLabel>
+      <SectionLabel>{t('username')}</SectionLabel>
       <GroupCard>
-        <input placeholder="Username" value={uname} onChange={(e) => handleUsernameChange(e.target.value)} style={{ ...inputStyle, borderBottom: 'none' }} />
+        <input placeholder={t('username')} value={uname} onChange={(e) => handleUsernameChange(e.target.value)} style={{ ...inputStyle, borderBottom: 'none' }} />
       </GroupCard>
+
+      {/* ── Account ── */}
+      <SectionLabel>{t('account')}</SectionLabel>
+      <GroupCard>
+        {!pwExpanded ? (
+          <ChevronRow label={t('change_password')} onClick={() => setPwExpanded(true)} last />
+        ) : (
+          <div style={{ padding: '12px 20px' }}>
+            <input
+              type="password"
+              placeholder={t('new_password')}
+              value={newPassword}
+              onChange={(e) => { setNewPassword(e.target.value); if (pwStatus === 'mismatch') setPwStatus('idle') }}
+              style={{ ...inputStyle, padding: '0', marginBottom: 8 }}
+            />
+            <input
+              type="password"
+              placeholder={t('confirm_password')}
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); if (pwStatus === 'mismatch') setPwStatus('idle') }}
+              style={{ ...inputStyle, padding: '0', marginBottom: 12 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                disabled={pwStatus === 'saving' || !newPassword.trim() || !confirmPassword.trim()}
+                style={{
+                  background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8,
+                  padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  opacity: pwStatus === 'saving' || !newPassword.trim() || !confirmPassword.trim() ? 0.5 : 1,
+                }}
+              >
+                {pwStatus === 'saving' ? t('saving') : t('save')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (pwTimerRef.current) clearTimeout(pwTimerRef.current); setPwExpanded(false); setNewPassword(''); setConfirmPassword(''); setPwStatus('idle') }}
+                style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--label)' }}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+            {pwStatus === 'mismatch' && <div style={{ fontSize: 12, color: 'var(--status-error)', marginTop: 8 }}>{t('passwords_mismatch')}</div>}
+            {pwStatus === 'saved' && <div style={{ fontSize: 12, color: 'var(--green, #34C759)', marginTop: 8 }}>{t('password_changed')}</div>}
+            {pwStatus === 'error' && <div style={{ fontSize: 12, color: 'var(--status-error)', marginTop: 8 }}>{t('password_change_failed')}</div>}
+          </div>
+        )}
+      </GroupCard>
+
+      {/* ── Active Sessions ── */}
+      <SectionLabel>{t('active_sessions')}</SectionLabel>
+      <GroupCard>
+        {sessionsLoading ? (
+          <div style={{ padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>{t('loading')}</div>
+        ) : currentDevice ? (
+          <div style={{ ...rowStyle, height: 'auto', padding: '12px 20px', gap: 8 }}>
+            <span style={{ color: 'var(--green, #34C759)', fontSize: 10, lineHeight: 1 }}>{'\u25CF'}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{currentDevice.device_name || t('this_device')}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{t('last_active_now')}</div>
+            </div>
+          </div>
+        ) : null}
+        {otherDevices.map((d, i) => (
+          <div key={d.id} style={{ ...rowStyle, ...(i === otherDevices.length - 1 && otherDevices.length > 0 ? lastRowMod : {}), height: 'auto', padding: '12px 20px', gap: 8 }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: 10, lineHeight: 1 }}>{'\u25CB'}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500, fontSize: 14 }}>{d.device_name || t('unknown_device')}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{t('last_active', formatTime(d.last_active_at))}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleRevoke(d.id)}
+              disabled={revoking === d.id}
+              style={{ background: 'none', border: '1px solid var(--status-error)', borderRadius: 6, padding: '4px 10px', color: 'var(--status-error)', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: revoking === d.id ? 0.5 : 1 }}
+            >
+              {revoking === d.id ? t('revoking') : t('revoke')}
+            </button>
+          </div>
+        ))}
+        {!sessionsLoading && otherDevices.length === 0 && (
+          <div style={{ ...rowStyle, ...lastRowMod, color: 'var(--text-secondary)', fontSize: 13 }}>{t('no_other_sessions')}</div>
+        )}
+      </GroupCard>
+      {otherDevices.length > 0 && (
+        <GroupCard>
+          <ButtonRow label={t('terminate_all_sessions')} color="danger" onClick={handleRevokeAll} last />
+        </GroupCard>
+      )}
+
       {photoModalOpen && (
         <ProfilePhotoModal
           initial={initial}
@@ -574,12 +722,12 @@ function NotificationsSection({ s }: { s: SettingsHook }) {
 
   return (
     <>
-      <SectionLabel>Notifications</SectionLabel>
+      <SectionLabel>{t('notifications')}</SectionLabel>
       <GroupCard>
-        <ToggleRow label="Notifications" on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
-        <ToggleRow label="Sound" on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
-        <ToggleRow label="Badge Count" on={settings.notif_badge} onToggle={() => toggle('notif_badge')} />
-        <ToggleRow label="Message Preview" on={settings.notif_preview} onToggle={() => toggle('notif_preview')} last />
+        <ToggleRow label={t('notifications')} on={settings.notif_desktop} onToggle={() => toggle('notif_desktop')} />
+        <ToggleRow label={t('sound')} on={settings.notif_sound} onToggle={() => toggle('notif_sound')} />
+        <ToggleRow label={t('badge_count')} on={settings.notif_badge} onToggle={() => toggle('notif_badge')} />
+        <ToggleRow label={t('message_preview')} on={settings.notif_preview} onToggle={() => toggle('notif_preview')} last />
       </GroupCard>
     </>
   )
@@ -595,15 +743,15 @@ function PrivacySection(
 
   return (
     <>
-      <SectionLabel>Privacy</SectionLabel>
+      <SectionLabel>{t('privacy')}</SectionLabel>
       <GroupCard>
-        <ToggleRow label="Last Seen" on={settings.privacy_last_seen} onToggle={() => toggle('privacy_last_seen')} />
-        <ToggleRow label="Read Receipts" on={settings.privacy_read_receipts} onToggle={() => toggle('privacy_read_receipts')} />
-        <ToggleRow label="Typing Indicators" on={settings.privacy_typing_indicators} onToggle={() => toggle('privacy_typing_indicators')} last />
+        <ToggleRow label={t('last_seen')} on={settings.privacy_last_seen} onToggle={() => toggle('privacy_last_seen')} />
+        <ToggleRow label={t('read_receipts')} on={settings.privacy_read_receipts} onToggle={() => toggle('privacy_read_receipts')} />
+        <ToggleRow label={t('typing_indicators')} on={settings.privacy_typing_indicators} onToggle={() => toggle('privacy_typing_indicators')} last />
       </GroupCard>
       {chatSessions.safetyNumbers.length > 0 && (
         <>
-          <SectionLabel>Safety Numbers</SectionLabel>
+          <SectionLabel>{t('safety_numbers')}</SectionLabel>
           <GroupCard>
             {chatSessions.safetyNumbers.map((entry, i) => (
               <div key={entry.peerDeviceId} style={{ ...rowStyle, height: 'auto', padding: '12px 20px', flexDirection: 'column', alignItems: 'stretch', gap: 4, ...(i === chatSessions.safetyNumbers.length - 1 ? lastRowMod : {}) }}>
@@ -620,10 +768,10 @@ function PrivacySection(
                         void chatSessions.handleVerifyPeerSafetyNumber(entry.peerDeviceId, chatList.activeChatId)
                       }}
                     >
-                      Verify
+                      {t('verify')}
                     </button>
                   ) : (
-                    <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>Verified</span>
+                    <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>{t('verified')}</span>
                   )}
                 </div>
               </div>
@@ -663,7 +811,7 @@ function ServerStorageBar({ serverUrl }: { serverUrl: string | null }) {
   return (
     <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--label)', marginBottom: 6 }}>
-        <span>Server Storage</span>
+        <span>{t('server_storage')}</span>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{usedGB} GB / {maxGB} GB</span>
       </div>
       <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-surface-3)', overflow: 'hidden' }}>
@@ -675,28 +823,32 @@ function ServerStorageBar({ serverUrl }: { serverUrl: string | null }) {
 
 // ─── Auto-Download Settings Group ───────────────────────────────────────────────
 
-const SIZE_PRESETS = [
-  { label: 'Off', bytes: 0 },
-  { label: '5 MB', bytes: 5 * 1024 * 1024 },
-  { label: '15 MB', bytes: 15 * 1024 * 1024 },
-  { label: '50 MB', bytes: 50 * 1024 * 1024 },
-  { label: '100 MB', bytes: 100 * 1024 * 1024 },
-  { label: 'No limit', bytes: Number.MAX_SAFE_INTEGER },
-]
-
-function sizePresetLabel(bytes: number): string {
-  if (bytes === 0) return 'Off'
-  if (bytes >= Number.MAX_SAFE_INTEGER) return 'No limit'
-  const mb = bytes / (1024 * 1024)
-  return `Up to ${mb} MB`
+function sizePresets() {
+  return [
+    { label: t('off'), bytes: 0 },
+    { label: '5 MB', bytes: 5 * 1024 * 1024 },
+    { label: '15 MB', bytes: 15 * 1024 * 1024 },
+    { label: '50 MB', bytes: 50 * 1024 * 1024 },
+    { label: '100 MB', bytes: 100 * 1024 * 1024 },
+    { label: t('no_limit'), bytes: Number.MAX_SAFE_INTEGER },
+  ]
 }
 
-const MEDIA_KIND_LABELS: Record<string, string> = {
-  photos: 'Photos',
-  videos: 'Videos',
-  files: 'Files',
-  voice_messages: 'Voice Messages',
-  round_videos: 'Round Videos',
+function sizePresetLabel(bytes: number): string {
+  if (bytes === 0) return t('off')
+  if (bytes >= Number.MAX_SAFE_INTEGER) return t('no_limit')
+  const mb = bytes / (1024 * 1024)
+  return t('up_to', `${mb} MB`)
+}
+
+function mediaKindLabels(): Record<string, string> {
+  return {
+    photos: t('photos'),
+    videos: t('videos'),
+    files: t('files'),
+    voice_messages: t('voice_messages'),
+    round_videos: t('round_videos'),
+  }
 }
 
 const MEDIA_KINDS = ['photos', 'videos', 'files', 'voice_messages', 'round_videos'] as const
@@ -739,13 +891,13 @@ function AutoDownloadGroup({
           return (
             <div key={kind}>
               <ChevronRow
-                label={MEDIA_KIND_LABELS[kind]}
+                label={mediaKindLabels()[kind]}
                 secondary={sizePresetLabel(config.max_size_bytes)}
                 onClick={() => setExpandedKind(isExpanded ? null : kind)}
               />
               {isExpanded && (
                 <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {SIZE_PRESETS.map((preset) => (
+                  {sizePresets().map((preset) => (
                     <RadioRow
                       key={preset.label}
                       label={preset.label}
@@ -818,11 +970,11 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
 
   return (
     <>
-      <SectionLabel>Storage</SectionLabel>
+      <SectionLabel>{t('storage')}</SectionLabel>
       <GroupCard>
         <ServerStorageBar serverUrl={serverUrl} />
         <ChevronRow
-          label="Keep Media"
+          label={t('keep_media')}
           secondary={keepMediaLabel(settings.data_keep_media_seconds)}
           onClick={() => setExpandedSetting(expandedSetting === 'keep' ? null : 'keep')}
         />
@@ -839,7 +991,7 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
           </div>
         )}
         <ChevronRow
-          label="Cache Limit"
+          label={t('cache_limit')}
           secondary={cacheLimitLabel(settings.data_cache_limit_bytes)}
           onClick={() => setExpandedSetting(expandedSetting === 'limit' ? null : 'limit')}
         />
@@ -858,18 +1010,18 @@ function DataStorageSection({ s, serverUrl }: { s: SettingsHook; serverUrl: stri
         {clearConfirm ? (
           <>
             <div style={{ padding: '12px 20px', fontSize: 13, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
-              This will remove all cached messages, downloaded media, and local settings. E2EE device keys will also be cleared. You will NOT be logged out.
+              {t('clear_confirm_body')}
             </div>
-            <ButtonRow label="Cancel" color="accent" onClick={() => setClearConfirm(false)} />
-            <ButtonRow label={clearing ? 'Clearing...' : 'Clear Everything'} color="danger" onClick={handleClearAll} />
+            <ButtonRow label={t('cancel')} color="accent" onClick={() => setClearConfirm(false)} />
+            <ButtonRow label={clearing ? t('loading') : t('clear_everything')} color="danger" onClick={handleClearAll} />
           </>
         ) : (
-          <ButtonRow label="Clear All Local Data" color="danger" onClick={() => setClearConfirm(true)} />
+          <ButtonRow label={t('clear_all_local_data')} color="danger" onClick={() => setClearConfirm(true)} />
         )}
       </GroupCard>
 
-      <AutoDownloadGroup label="Auto-Download — Private Chats" chatKey="private_chats" settings={settings} updateSetting={s.updateSetting} />
-      <AutoDownloadGroup label="Auto-Download — Group Chats" chatKey="group_chats" settings={settings} updateSetting={s.updateSetting} />
+      <AutoDownloadGroup label={t('auto_download_private')} chatKey="private_chats" settings={settings} updateSetting={s.updateSetting} />
+      <AutoDownloadGroup label={t('auto_download_group')} chatKey="group_chats" settings={settings} updateSetting={s.updateSetting} />
       <ServerStorageAdmin serverUrl={serverUrl} />
     </>
   )
@@ -933,13 +1085,13 @@ function ServerStorageAdmin({ serverUrl }: { serverUrl: string | null }) {
 
   return (
     <>
-      <SectionLabel>Server Storage (Admin)</SectionLabel>
+      <SectionLabel>{t('storage_admin')}</SectionLabel>
       <GroupCard>
-        <InfoRow label="Hot Cache" value={`${usageMB} MB / ${maxGB} GB (${pct}%)`} />
-        <InfoRow label="Object Storage" value={status.object_store?.enabled ? 'Enabled' : 'Disabled'} />
-        <InfoRow label="Alert Level" value={status.monitor?.alert_level ?? 'normal'} last />
+        <InfoRow label={t('hot_cache')} value={`${usageMB} MB / ${maxGB} GB (${pct}%)`} />
+        <InfoRow label={t('object_storage')} value={status.object_store?.enabled ? t('enabled') : t('disabled')} />
+        <InfoRow label={t('alert_level')} value={status.monitor?.alert_level ?? t('normal')} last />
       </GroupCard>
-      <SectionLabel>Retention Profile</SectionLabel>
+      <SectionLabel>{t('retention_profile')}</SectionLabel>
       <GroupCard>
         {(Object.keys(STORAGE_PROFILES) as ProfileKey[]).map((key, i, arr) => (
           <button
@@ -981,7 +1133,7 @@ function ServerStorageAdmin({ serverUrl }: { serverUrl: string | null }) {
       <SectionLabel>Actions</SectionLabel>
       <GroupCard>
         <ButtonRow
-          label={evicting ? 'Running...' : 'Run Eviction Now'}
+          label={evicting ? t('loading') : t('run_eviction')}
           color="accent"
           onClick={() => {
             if (!sessionToken || evicting) return
@@ -1000,194 +1152,156 @@ function ServerStorageAdmin({ serverUrl }: { serverUrl: string | null }) {
   )
 }
 
-// ─── Active Sessions ────────────────────────────────────────────────────────────
-
-function ActiveSessionsSection({ token }: { token: string | null }) {
-  const [devices, setDevices] = useState<DeviceInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [revoking, setRevoking] = useState<string | null>(null)
-  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null)
-  const [nowTs, setNowTs] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!token) return
-    // Fetch both device list and current device id in parallel
-    Promise.all([
-      listDevices(token),
-      fetchMe(token),
-    ]).then(([devsResp, me]) => {
-      setDevices(devsResp.devices.filter((d) => !d.revoked_at))
-      setCurrentDeviceId(me.device?.id ?? null)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [token])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowTs(Date.now())
-    }, 60_000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const handleRevoke = async (deviceId: string) => {
-    if (!token) return
-    setRevoking(deviceId)
-    try {
-      await revokeDevice(token, deviceId)
-      setDevices((prev) => prev.filter((d) => d.id !== deviceId))
-    } catch {
-      // failed
-    }
-    setRevoking(null)
-  }
-
-  const handleRevokeAll = async () => {
-    if (!token) return
-    const others = devices.filter((d) => d.id !== currentDeviceId)
-    for (const d of others) {
-      try { await revokeDevice(token, d.id) } catch { /* skip */ }
-    }
-    setDevices((prev) => prev.filter((d) => d.id === currentDeviceId))
-  }
-
-  const formatTime = (iso: string | null) => {
-    if (!iso) return 'Unknown'
-    const d = new Date(iso)
-    const diff = nowTs - d.getTime()
-    if (diff < 60_000) return 'Just now'
-    if (diff < 3600_000) return `${Math.floor(diff / 60_000)} min ago`
-    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} hours ago`
-    return `${Math.floor(diff / 86400_000)} days ago`
-  }
-
-  const currentDevice = devices.find((d) => d.id === currentDeviceId)
-  const otherDevices = devices.filter((d) => d.id !== currentDeviceId)
-
-  return (
-    <>
-      <SectionLabel>Current Session</SectionLabel>
-      <GroupCard>
-        {loading ? (
-          <div style={{ padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>Loading...</div>
-        ) : currentDevice ? (
-          <div style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{currentDevice.device_name || 'This Device'}</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Last active: Just now</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Registered: {currentDevice.inserted_at ? new Date(currentDevice.inserted_at).toLocaleDateString() : 'Unknown'}</div>
-          </div>
-        ) : (
-          <div style={{ padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>Current device not found</div>
-        )}
-      </GroupCard>
-      <SectionLabel>Other Sessions ({otherDevices.length})</SectionLabel>
-      <GroupCard>
-        {otherDevices.length === 0 ? (
-          <div style={{ ...rowStyle, ...lastRowMod, color: 'var(--text-secondary)', fontSize: 13 }}>No other sessions</div>
-        ) : (
-          otherDevices.map((d, i) => (
-            <div key={d.id} style={{ ...rowStyle, ...(i === otherDevices.length - 1 ? lastRowMod : {}), height: 'auto', padding: '12px 20px' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{d.device_name || 'Unknown Device'}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Last active: {formatTime(d.last_active_at)}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleRevoke(d.id)}
-                disabled={revoking === d.id}
-                style={{ background: 'none', border: '1px solid var(--status-error)', borderRadius: 6, padding: '4px 10px', color: 'var(--status-error)', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: revoking === d.id ? 0.5 : 1 }}
-              >
-                {revoking === d.id ? 'Revoking...' : 'Terminate'}
-              </button>
-            </div>
-          ))
-        )}
-      </GroupCard>
-      {otherDevices.length > 0 && (
-        <GroupCard>
-          <ButtonRow label="Terminate All Other Sessions" color="danger" onClick={handleRevokeAll} last />
-        </GroupCard>
-      )}
-    </>
-  )
-}
 
 // ─── Appearance ─────────────────────────────────────────────────────────────────
 
 function AppearanceSection({ s }: { s: SettingsHook }) {
-  const { settings, toggle } = s
+  const { locale, setLocale } = useLocale()
 
   return (
     <>
       <div style={{ marginBottom: 8 }}>
         <ThemePicker />
       </div>
+      <SectionLabel>{t('language')}</SectionLabel>
+      <GroupCard>
+        {getAvailableLocales().map((loc, i, arr) => (
+          <RadioRow
+            key={loc.code}
+            label={loc.label}
+            active={locale === loc.code}
+            onSelect={() => setLocale(loc.code)}
+            last={i === arr.length - 1}
+          />
+        ))}
+      </GroupCard>
     </>
   )
 }
 
-// ─── Language (removed — no i18n system) ────────────────────────────────────────
-
 // ─── Stickers and Emoji ─────────────────────────────────────────────────────────
 
-// ─── Encryption ─────────────────────────────────────────────────────────────────
+// ─── About & Debug ──────────────────────────────────────────────────────────────
 
-function EncryptionSection() {
+function AboutDebugSection({ serverUrl }: { serverUrl: string | null }) {
   const callCapability = getCallCapability()
   const mediaE2eeEnabled = callCapability.state === 'supported'
   const supportTone =
     callCapability.state === 'supported'
       ? 'var(--green, #34C759)'
       : 'var(--status-warning, #f0a030)'
-  const userAgent =
-    typeof navigator === 'undefined'
-      ? 'Unknown'
-      : navigator.userAgent
+  const userAgent = typeof navigator === 'undefined' ? 'Unknown' : navigator.userAgent
+  const [serverVersion, setServerVersion] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const resolvedServerUrl = serverUrl ?? window.location.origin
+
+  useEffect(() => {
+    fetch(`${resolvedServerUrl}/api/v1/server/info`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.version) setServerVersion(data.version) })
+      .catch(() => {})
+  }, [resolvedServerUrl])
+
+  const browserName = callCapability.browserName ?? 'Unknown'
+  const platform = typeof navigator !== 'undefined' ? navigator.platform : 'Unknown'
+  const serverHost = (() => { try { return new URL(resolvedServerUrl).host } catch { return resolvedServerUrl } })()
+
+  const handleCopyDebugInfo = () => {
+    const transportLabel =
+      callCapability.transport === 'standard' ? t('standard_transforms')
+        : callCapability.transport === 'legacy' ? t('legacy_streams')
+        : t('unsupported')
+    const text = [
+      'Vostok Debug Info',
+      String.fromCharCode(0x2500).repeat(17),
+      `Client: ${VOSTOK_CLIENT_VERSION}`,
+      `Server: ${serverVersion ?? 'Unknown'} (${serverHost})`,
+      `E2EE: Enabled (Signal protocol, Curve25519)`,
+      `Call: ${mediaE2eeEnabled ? 'Supported' : 'Unavailable'} (${transportLabel})`,
+      `Browser: ${browserName} (${platform})`,
+      `User Agent: ${userAgent}`,
+      `Timestamp: ${new Date().toISOString()}`,
+    ].join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
 
   return (
     <>
-      <SectionLabel>Encryption Status</SectionLabel>
+      <SectionLabel>{t('vostok')}</SectionLabel>
       <GroupCard>
-        <div style={{ ...rowStyle }}>
-          <span style={{ flex: 1 }}>End-to-End Encryption</span>
-          <span style={{ fontSize: 13, color: 'var(--green, #34C759)', fontWeight: 600 }}>Enabled</span>
-        </div>
-        <InfoRow label="Algorithm" value="Double Ratchet (X3DH)" last />
+        <InfoRow label={t('client_version')} value={VOSTOK_CLIENT_VERSION} />
+        <InfoRow label={t('server_version')} value={serverVersion ?? '...'} />
+        <InfoRow label={t('server_url_label')} value={serverHost} last />
       </GroupCard>
 
-      <SectionLabel>
-        Call Media Compatibility
-      </SectionLabel>
+      <SectionLabel>{t('encryption')}</SectionLabel>
       <GroupCard>
         <div style={{ ...rowStyle }}>
-          <span style={{ flex: 1 }}>Encrypted Calling</span>
+          <span style={{ flex: 1 }}>{t('end_to_end')}</span>
+          <span style={{ fontSize: 13, color: 'var(--green, #34C759)', fontWeight: 600 }}>{'\u25CF'} {t('e2ee_enabled')}</span>
+        </div>
+        <InfoRow label={t('protocol')} value={t('e2ee_protocol')} />
+        <InfoRow label={t('curve')} value="Curve25519" />
+        <InfoRow label={t('library')} value="libsignal-ts" last />
+      </GroupCard>
+
+      <SectionLabel>{t('call_compatibility')}</SectionLabel>
+      <GroupCard>
+        <div style={{ ...rowStyle }}>
+          <span style={{ flex: 1 }}>{t('encrypted_calling')}</span>
           <span style={{ fontSize: 13, color: supportTone, fontWeight: 600 }}>
-            {mediaE2eeEnabled ? 'Supported' : 'Unavailable'}
+            {mediaE2eeEnabled ? `\u25CF ${t('supported')}` : `\u25CB ${t('unavailable')}`}
           </span>
         </div>
-        <InfoRow label="Host" value={callCapability.hostKind === 'desktop' ? 'Desktop shell' : 'Browser'} />
-        <InfoRow label="Browser" value={callCapability.browserName} />
+        <InfoRow label={t('host')} value={callCapability.hostKind === 'desktop' ? t('desktop_shell') : t('browser')} />
         <InfoRow
-          label="Transport"
+          label={t('transport')}
           value={
             callCapability.transport === 'standard'
-              ? 'Standard encoded transforms'
+              ? t('standard_transforms')
               : callCapability.transport === 'legacy'
-                ? 'Legacy encoded streams'
-                : 'Unsupported'
+                ? t('legacy_streams')
+                : t('unsupported')
           }
         />
-        <div style={{ ...rowStyle, height: 'auto', minHeight: 56, alignItems: 'flex-start', padding: '12px 20px' }}>
-          <span style={{ flex: 1 }}>Status</span>
+        <div style={{ ...rowStyle, ...lastRowMod, height: 'auto', minHeight: 56, alignItems: 'flex-start', padding: '12px 20px' }}>
+          <span style={{ flex: 1 }}>{t('status')}</span>
           <span style={{ fontSize: 13, color: mediaE2eeEnabled ? 'var(--text-secondary)' : 'var(--status-warning, #f0a030)', textAlign: 'right', maxWidth: 280 }}>
-            {callCapability.reason ?? 'This browser can place and join encrypted calls.'}
+            {callCapability.reason ?? t('can_place_calls')}
           </span>
         </div>
+      </GroupCard>
+
+      <SectionLabel>{t('device')}</SectionLabel>
+      <GroupCard>
+        <InfoRow label={t('browser')} value={browserName} />
+        <InfoRow label={t('platform')} value={platform} />
         <div style={{ ...rowStyle, ...lastRowMod, height: 'auto', minHeight: 56, alignItems: 'flex-start', padding: '12px 20px' }}>
-          <span style={{ flex: 1 }}>User Agent</span>
+          <span style={{ flex: 1 }}>{t('user_agent')}</span>
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right', maxWidth: 280, wordBreak: 'break-word' }}>
             {userAgent}
           </span>
         </div>
+      </GroupCard>
+
+      <GroupCard>
+        <button
+          type="button"
+          onClick={handleCopyDebugInfo}
+          style={{
+            ...rowStyle, ...lastRowMod,
+            cursor: 'pointer', background: 'none', border: 'none',
+            color: copied ? 'var(--green, #34C759)' : 'var(--accent)',
+            fontWeight: 600, fontSize: 14, gap: 8, width: '100%', justifyContent: 'center',
+          }}
+        >
+          {copied ? <Check size={16} strokeWidth={2} /> : <Copy size={16} strokeWidth={1.75} />}
+          {copied ? t('copied') : t('copy_debug_info')}
+        </button>
       </GroupCard>
     </>
   )

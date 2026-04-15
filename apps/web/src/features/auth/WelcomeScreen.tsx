@@ -5,6 +5,7 @@ import type { useServers } from '../../hooks/useServers.ts'
 import { DEFAULT_MULTI_SERVER_COLOR } from '../../constants.ts'
 import { createServerApiClient } from '../../lib/server-api.ts'
 import { defaultServerLabel, normalizeServerUrl } from '../../lib/multi-server.ts'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   servers: ReturnType<typeof useServers>
@@ -22,7 +23,7 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
 
     const normalizedUrl = normalizeServerUrl(draftUrl)
     if (!normalizedUrl) {
-      setError('Enter a valid server URL.')
+      setError(t('enter_valid_url'))
       return
     }
 
@@ -52,7 +53,7 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
 
       onNavigate(info?.bootstrap ? 'server-bootstrap' : 'login')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reach server.')
+      setError(err instanceof Error ? err.message : t('could_not_reach_server'))
     } finally {
       setProbing(false)
     }
@@ -64,8 +65,8 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
         <div className="auth-card__logo">
           <Zap size={40} color="var(--accent)" strokeWidth={1.75} />
         </div>
-        <h1 className="auth-card__title">Welcome to Vostok</h1>
-        <p className="auth-card__subtitle">Private messaging, on your terms.</p>
+        <h1 className="auth-card__title">{t('welcome_title')}</h1>
+        <p className="auth-card__subtitle">{t('welcome_subtitle')}</p>
 
         {showUrlInput ? (
           <form className="auth-form" onSubmit={handleConnect}>
@@ -73,7 +74,7 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
               <Server size={18} color="var(--text-muted)" strokeWidth={1.75} />
               <input
                 className="auth-input"
-                placeholder="https://chat.example.com"
+                placeholder={t('server_url_placeholder')}
                 value={draftUrl}
                 onChange={(e) => setDraftUrl(e.target.value)}
                 disabled={probing}
@@ -82,14 +83,14 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
             </div>
             {error && <p className="auth-error">{error}</p>}
             <button className="auth-btn-primary" type="submit" disabled={probing}>
-              {probing ? <span className="auth-spinner" /> : 'Continue'}
+              {probing ? <span className="auth-spinner" /> : t('continue')}
             </button>
             <button
               className="auth-link auth-link--muted"
               type="button"
               onClick={() => { setShowUrlInput(false); setError(null) }}
             >
-              Back
+              {t('back')}
             </button>
           </form>
         ) : (
@@ -100,7 +101,7 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
               onClick={() => setShowUrlInput(true)}
             >
               <Server size={16} strokeWidth={1.75} />
-              <span>Connect to a Server</span>
+              <span>{t('connect_to_server')}</span>
             </button>
             <button
               className="auth-btn-secondary"
@@ -108,7 +109,7 @@ export function WelcomeScreen({ servers, onNavigate }: Props) {
               onClick={() => onNavigate('restore-backup')}
             >
               <Upload size={16} strokeWidth={1.75} />
-              <span>Restore from Backup</span>
+              <span>{t('restore_from_backup')}</span>
             </button>
           </div>
         )}

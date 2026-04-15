@@ -10,3 +10,4 @@ export const DESKTOP_DETAIL_RAIL_BREAKPOINT = 1200
 export const MOBILE_BREAKPOINT = 600
 export const SETTINGS_STORAGE_KEY = 'vostok.settings'
 export const DEFAULT_MULTI_SERVER_COLOR = '#008BFF'
+export const VOSTOK_CLIENT_VERSION = '0.1.0'

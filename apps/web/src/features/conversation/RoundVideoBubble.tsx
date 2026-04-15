@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { t } from '../../lib/i18n.ts'
 import type { AttachmentDescriptor } from '../../types.ts'
 import { VolumeOffIcon, VolumeOnIcon } from '../../icons/index.tsx'
 
@@ -199,7 +200,7 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
             type="button"
             className="round-video__play-overlay"
             onClick={togglePlay}
-            aria-label="Play video message"
+            aria-label={t('play_video')}
           >
             <svg viewBox="0 0 20 20" width="24" height="24" fill="white" aria-hidden="true">
               <path d="M5 3L17 10L5 17V3Z" />
@@ -227,7 +228,7 @@ export function RoundVideoBubble({ descriptor, playbackUrl, side, timestamp }: R
           type="button"
           className="round-video__mute-btn"
           onClick={toggleMute}
-          aria-label={muted ? 'Unmute' : 'Mute'}
+          aria-label={muted ? t('unmute') : t('mute')}
         >
           {muted
             ? <VolumeOffIcon width={14} height={14} />

@@ -686,6 +686,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -713,6 +714,24 @@
 
 .sidebar__tab-label {
   display: none;
+}
+
+.sidebar__tab-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--status-error, #FF3B30);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  pointer-events: none;
 }
 
 /* ─── Members Pane ────────────────────────────────────────────────────────── */

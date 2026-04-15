@@ -17,6 +17,7 @@ import {
   MoreVertIcon,
   VideoIcon,
 } from '../../icons/index.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type Participant = {
   id: string
@@ -196,7 +197,7 @@ export function ActiveCallScreen({
         {statusLabel ? <span className="ac__timer">{statusLabel}</span> : null}
       </div>
       <div className="ac__header-right">
-        <button type="button" className="ac__menu-btn" aria-label="More options">
+        <button type="button" className="ac__menu-btn" aria-label={t('more_options')}>
           <MoreVertIcon width={20} height={20} />
         </button>
       </div>
@@ -258,7 +259,7 @@ export function ActiveCallScreen({
     <div className="ac__remote-placeholder">
       <div className="ac__avatar ac__avatar--96">{contactInitial}</div>
       <span className="ac__name ac__name--20">{contactName}</span>
-      {showVideo && <span className="ac__placeholder-hint">Waiting for video…</span>}
+      {showVideo && <span className="ac__placeholder-hint">{t('waiting_for_video')}</span>}
     </div>
   )
 

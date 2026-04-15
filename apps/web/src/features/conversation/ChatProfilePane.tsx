@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { t } from '../../lib/i18n.ts'
 import type { useGroupChat } from '../../hooks/useGroupChat.ts'
 import type { ChatSummary } from '../../lib/api.ts'
 import { ChevronLeftIcon } from '../../icons/index.tsx'
@@ -27,10 +28,10 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
     : activeChat.title.slice(0, 1)
 
   const subtitle = activeChat.is_self_chat
-    ? 'Your saved messages'
+    ? t('your_saved_messages')
     : activeChat.type === 'group'
-      ? `${groupChat.groupMembers.length} members`
-      : 'last seen recently'
+      ? t('n_members', groupChat.groupMembers.length)
+      : t('last_seen_recently')
 
   return (
     <div className="chat-profile-pane">
@@ -39,11 +40,11 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
           type="button"
           className="vostok-icon-button"
           onClick={onClose}
-          aria-label="Back"
+          aria-label={t('back')}
         >
           <ChevronLeftIcon />
         </button>
-        <span className="chat-profile-pane__header-title">Info</span>
+        <span className="chat-profile-pane__header-title">{t('info')}</span>
       </div>
 
       <div className="chat-profile-pane__body">
@@ -61,7 +62,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
         {activeChat.type === 'group' && groupChat.groupMembers.length > 0 && (
           <div className="chat-profile-pane__section">
             <div className="chat-profile-pane__section-title">
-              {groupChat.groupMembers.length} members
+              {t('n_members', groupChat.groupMembers.length)}
             </div>
             {groupChat.groupMembers.map((member) => (
               <div key={member.username} className="chat-profile-pane__member">
@@ -73,7 +74,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
                 </div>
                 <span className="chat-profile-pane__member-name">{member.username}</span>
                 {member.role === 'admin' && (
-                  <span className="chat-profile-pane__member-role">admin</span>
+                  <span className="chat-profile-pane__member-role">{t('admin')}</span>
                 )}
               </div>
             ))}
@@ -83,7 +84,7 @@ export function ChatProfilePane({ activeChat, groupChat, onClose }: ChatProfileP
         {!activeChat.is_self_chat && activeChat.type !== 'group' && (
           <div className="chat-profile-pane__section">
             <div className="chat-profile-pane__info-row">
-              <span className="chat-profile-pane__info-label">Username</span>
+              <span className="chat-profile-pane__info-label">{t('username')}</span>
               <span className="chat-profile-pane__info-value">@{activeChat.title}</span>
             </div>
           </div>

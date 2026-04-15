@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Lock, ShieldAlert, Eye, EyeOff } from 'lucide-react'
 import { PasswordStrengthBar } from './PasswordStrengthBar.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   error: string | null
@@ -29,13 +30,13 @@ export function ForcePasswordChangeScreen({ error, loading, onChangePassword }: 
       <div className="auth-card">
         <div className="auth-lock-banner">
           <ShieldAlert size={16} />
-          <span>You must set a new password to continue.</span>
+          <span>{t('must_set_new_password')}</span>
         </div>
 
         <div className="auth-card__header">
-          <h1 className="auth-card__title auth-card__title--left">Set a New Password</h1>
+          <h1 className="auth-card__title auth-card__title--left">{t('set_new_password')}</h1>
           <p className="auth-card__subtitle auth-card__subtitle--left">
-            Your temporary password has expired. Please set a permanent one.
+            {t('set_new_password_subtitle')}
           </p>
         </div>
 
@@ -46,7 +47,7 @@ export function ForcePasswordChangeScreen({ error, loading, onChangePassword }: 
               <input
                 className="auth-input"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="New Password"
+                placeholder={t('new_password')}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -69,7 +70,7 @@ export function ForcePasswordChangeScreen({ error, loading, onChangePassword }: 
             <input
               className="auth-input"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Confirm New Password"
+              placeholder={t('confirm_new_password')}
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -80,7 +81,7 @@ export function ForcePasswordChangeScreen({ error, loading, onChangePassword }: 
           {error && <p className="auth-error">{error}</p>}
 
           <button className="auth-btn-primary" type="submit" disabled={!canSubmit}>
-            {loading ? <span className="auth-spinner" /> : 'Set Password'}
+            {loading ? <span className="auth-spinner" /> : t('set_password')}
           </button>
         </form>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { listUsers, type DirectoryUser } from '../../lib/api.ts'
@@ -99,10 +100,10 @@ function MemberProfile({ user, online, photoUrl, mutualGroups, onBack, onMessage
   return (
     <div className="member-profile">
       <div className="member-profile__header">
-        <button type="button" className="member-profile__back" onClick={onBack} aria-label="Back">
+        <button type="button" className="member-profile__back" onClick={onBack} aria-label={t('back')}>
           <BackIcon />
         </button>
-        <span className="member-profile__header-title">Profile</span>
+        <span className="member-profile__header-title">{t('profile')}</span>
       </div>
       <div className="member-profile__hero">
         <div
@@ -133,41 +134,41 @@ function MemberProfile({ user, online, photoUrl, mutualGroups, onBack, onMessage
             type="button"
             className="member-profile__copy"
             onClick={onCopyHandle}
-            aria-label="Copy handle"
+            aria-label={t('copy_handle')}
           >
             <CopyIcon />
           </button>
         </div>
         <div className={`member-profile__presence${online ? ' member-profile__presence--online' : ''}`}>
           <span className="member-profile__presence-dot" />
-          {online ? 'Online' : `Last seen ${formatLastSeen(user.last_seen_at)}`}
+          {online ? t('online_status') : `${t('last_seen')} ${formatLastSeen(user.last_seen_at)}`}
         </div>
       </div>
       <div className="member-profile__actions">
         <button type="button" className="member-profile__action-primary" onClick={onMessage}>
           <ChatsIcon />
-          Message
+          {t('message')}
         </button>
         <button type="button" className="member-profile__action-ghost" disabled>
           <PhoneIcon />
-          Call
+          {t('call')}
         </button>
       </div>
       <div className="member-profile__info">
         {user.bio && (
           <section className="member-profile__section">
-            <h3 className="member-profile__label">About</h3>
+            <h3 className="member-profile__label">{t('about')}</h3>
             <p className="member-profile__bio">{user.bio}</p>
           </section>
         )}
         <section className="member-profile__section">
-          <h3 className="member-profile__label">Member since</h3>
+          <h3 className="member-profile__label">{t('member_since')}</h3>
           <p className="member-profile__value">{formatJoinedAt(user.joined_at)}</p>
         </section>
         <section className="member-profile__section">
-          <h3 className="member-profile__label">Mutual groups</h3>
+          <h3 className="member-profile__label">{t('mutual_groups')}</h3>
           {mutualGroups.length === 0 ? (
-            <p className="member-profile__value member-profile__value--muted">None yet</p>
+            <p className="member-profile__value member-profile__value--muted">{t('none_yet')}</p>
           ) : (
             <ul className="member-profile__groups">
               {mutualGroups.map((g) => (
@@ -178,7 +179,7 @@ function MemberProfile({ user, online, photoUrl, mutualGroups, onBack, onMessage
                   >
                     {(g.title || '#').slice(0, 1).toUpperCase()}
                   </div>
-                  <span className="member-profile__group-name">{g.title || 'Untitled group'}</span>
+                  <span className="member-profile__group-name">{g.title || t('untitled_group')}</span>
                 </li>
               ))}
             </ul>
@@ -261,7 +262,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(handle).catch(() => {})
     }
-    showToast('Handle copied', 'success')
+    showToast(t('handle_copied'), 'success')
   }
 
   if (selectedUser) {
@@ -284,7 +285,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
         <input
           className="search-bar__input"
           type="search"
-          placeholder="Search members"
+          placeholder={t('search_members')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           autoComplete="off"
@@ -292,7 +293,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
       </div>
       <div className="members-pane__list">
         {online.length > 0 && (
-          <div className="members-pane__section-label">Online · {online.length}</div>
+          <div className="members-pane__section-label">{t('online_status')} · {online.length}</div>
         )}
         {online.map((user) => (
           <MemberRow
@@ -305,7 +306,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
           />
         ))}
         {offline.length > 0 && (
-          <div className="members-pane__section-label">Offline · {offline.length}</div>
+          <div className="members-pane__section-label">{t('offline')} · {offline.length}</div>
         )}
         {offline.map((user) => (
           <MemberRow
@@ -318,7 +319,7 @@ export function MembersPane({ chatList }: MembersPaneProps) {
           />
         ))}
         {filtered.length === 0 && (
-          <div className="members-pane__empty">No members found</div>
+          <div className="members-pane__empty">{t('no_members_found')}</div>
         )}
       </div>
     </div>

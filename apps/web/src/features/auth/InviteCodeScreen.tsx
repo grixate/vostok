@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ArrowLeft, Ticket, CircleCheck, CircleX, Loader2 } from 'lucide-react'
 import type { InviteValidation } from '../../lib/api.ts'
 import type { AuthView } from '../../types.ts'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   onValidateInvite: (code: string) => Promise<InviteValidation>
@@ -31,11 +32,11 @@ export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: P
         setServerName(result.server_name ?? '')
       } else {
         setValidation('invalid')
-        setErrorMessage(result.reason ?? 'Invalid invite code.')
+        setErrorMessage(result.reason ?? t('invalid_invite'))
       }
     } catch {
       setValidation('invalid')
-      setErrorMessage('Could not validate code.')
+      setErrorMessage(t('could_not_validate'))
     }
   }, [onValidateInvite])
 
@@ -53,13 +54,13 @@ export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: P
       <div className="auth-card">
         <button className="auth-back" type="button" onClick={() => onNavigate('login')}>
           <ArrowLeft size={18} color="var(--text-muted)" strokeWidth={1.75} />
-          <span>Back</span>
+          <span>{t('back')}</span>
         </button>
 
         <div className="auth-card__header">
-          <h1 className="auth-card__title auth-card__title--left">Enter Invite Code</h1>
+          <h1 className="auth-card__title auth-card__title--left">{t('enter_invite_code')}</h1>
           <p className="auth-card__subtitle auth-card__subtitle--left">
-            Enter the 16-character code you received from an existing member.
+            {t('enter_invite_subtitle')}
           </p>
         </div>
 
@@ -68,7 +69,7 @@ export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: P
             <Ticket size={18} color="var(--text-muted)" strokeWidth={1.75} />
             <input
               className="auth-input auth-input--mono"
-              placeholder="XXXX-XXXX-XXXX-XXXX"
+              placeholder={t('invite_placeholder')}
               maxLength={16}
               value={code}
               onChange={(e) => {
@@ -84,13 +85,13 @@ export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: P
           {validation === 'checking' && (
             <div className="auth-validation-status">
               <Loader2 size={16} className="auth-spinner-icon" />
-              <span>Checking…</span>
+              <span>{t('checking')}</span>
             </div>
           )}
           {validation === 'valid' && (
             <div className="auth-validation-status auth-validation-status--valid">
               <CircleCheck size={16} />
-              <span>Valid invite{serverName ? ` — ${serverName}` : ''}</span>
+              <span>{t('valid_invite')}{serverName ? ` — ${serverName}` : ''}</span>
             </div>
           )}
           {validation === 'invalid' && (
@@ -106,7 +107,7 @@ export function InviteCodeScreen({ onValidateInvite, onContinue, onNavigate }: P
             disabled={validation !== 'valid'}
             onClick={() => onContinue(code)}
           >
-            Continue
+            {t('continue')}
           </button>
         </div>
       </div>

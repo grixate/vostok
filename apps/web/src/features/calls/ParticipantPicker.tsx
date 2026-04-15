@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SearchIcon, CloseIcon, PhoneCallIcon } from '../../icons/index.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type Member = {
   userId: string
@@ -38,7 +39,7 @@ export function ParticipantPicker({ members, onStartCall, onClose }: Participant
     <div className="incoming-call-overlay">
       <div className="incoming-call-overlay__card" style={{ maxWidth: 400, padding: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', gap: 12, borderBottom: '1px solid var(--border-subtle)', width: '100%' }}>
-          <span style={{ fontSize: 17, fontWeight: 510, flex: 1 }}>Start Group Call</span>
+          <span style={{ fontSize: 17, fontWeight: 510, flex: 1 }}>{t('start_group_call')}</span>
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}>
             <CloseIcon width={20} height={20} />
           </button>
@@ -49,7 +50,7 @@ export function ParticipantPicker({ members, onStartCall, onClose }: Participant
             <SearchIcon width={16} height={16} />
             <input
               type="text"
-              placeholder="Search members..."
+              placeholder={t('search_members_placeholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ border: 'none', background: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)' }}
@@ -88,7 +89,7 @@ export function ParticipantPicker({ members, onStartCall, onClose }: Participant
           ))}
           {filtered.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
-              No members found
+              {t('no_members_found')}
             </div>
           )}
         </div>
@@ -105,7 +106,7 @@ export function ParticipantPicker({ members, onStartCall, onClose }: Participant
               }}
             >
               <PhoneCallIcon width={16} height={16} />
-              Call ({selected.size})
+              {t('call_with_count', selected.size)}
             </button>
           </div>
         )}

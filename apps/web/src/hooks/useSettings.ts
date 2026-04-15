@@ -4,10 +4,6 @@ import { fetchSettings, syncSettings } from '../lib/api.ts'
 import type { AutoDownloadSettings } from '../types.ts'
 
 export type UserSettings = {
-  // General
-  general_replace_emoji: boolean
-  general_large_emoji: boolean
-  general_send_key: 'enter' | 'ctrl-enter'
   // Appearance
   appearance_timestamps: boolean
   // Notifications
@@ -19,13 +15,6 @@ export type UserSettings = {
   privacy_last_seen: boolean
   privacy_read_receipts: boolean
   privacy_typing_indicators: boolean
-  // Data & Storage
-  data_auto_photos: boolean
-  data_auto_videos: boolean
-  data_auto_documents: boolean
-  data_auto_voice: boolean
-  // Chat Folders
-  folders_show_tabs: boolean
   // Sessions
   sessions_confirm_new: boolean
   sessions_auto_terminate: boolean
@@ -37,10 +26,6 @@ export type UserSettings = {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  // General
-  general_replace_emoji: true,
-  general_large_emoji: true,
-  general_send_key: 'enter',
   // Appearance
   appearance_timestamps: true,
   // Notifications
@@ -52,13 +37,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   privacy_last_seen: true,
   privacy_read_receipts: true,
   privacy_typing_indicators: true,
-  // Data & Storage
-  data_auto_photos: true,
-  data_auto_videos: false,
-  data_auto_documents: false,
-  data_auto_voice: false,
-  // Chat Folders
-  folders_show_tabs: true,
   // Sessions
   sessions_confirm_new: false,
   sessions_auto_terminate: false,

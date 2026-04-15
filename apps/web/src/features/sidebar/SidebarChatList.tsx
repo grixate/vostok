@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { LayoutGroup, motion } from 'motion/react'
 import { ChatListItem } from '@vostok/ui-chat'
 import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
@@ -66,7 +67,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
     chatList.setChatItems((prev) =>
       prev.map((c) => c.id === chatContextMenu.chatId ? { ...c, message_count: 0 } : c)
     )
-    showToast('Marked as read')
+    showToast(t('marked_as_read'))
     closeChatContextMenu()
   }, [chatContextMenu, chatList, showToast, closeChatContextMenu])
 
@@ -93,7 +94,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
             >
               <ChatListItem
                 title={chat.title}
-                preview={chat.is_self_chat ? 'Saved Messages' : chat.type === 'group' ? 'Group' : 'Direct message'}
+                preview={chat.is_self_chat ? t('saved_messages') : chat.type === 'group' ? t('group') : t('direct_message')}
                 timestamp=""
                 avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
                 avatarInitial={chat.is_self_chat ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : chat.title.slice(0, 1)}
@@ -115,7 +116,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
               <strong style={{ fontSize: 15 }}>{chatList.newChatUsername.trim()}</strong>
-              <span style={{ fontSize: 13, color: 'var(--label2)' }}>Start new chat</span>
+              <span style={{ fontSize: 13, color: 'var(--label2)' }}>{t('start_new_chat')}</span>
             </div>
           </button>
         ) : null}
@@ -145,10 +146,10 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               preview={
                 (() => {
                   const rawPreview = chat.is_self_chat
-                    ? (readChatPreview(chat.id) ? `You: ${readChatPreview(chat.id)?.slice(0, 40) ?? ''}` : 'Your Cloud Storage')
+                    ? (readChatPreview(chat.id) ? `You: ${readChatPreview(chat.id)?.slice(0, 40) ?? ''}` : t('your_cloud_storage'))
                     : draftChatIds.has(chat.id)
                       ? `Draft: ${draftChatIds.get(chat.id)!.slice(0, 40)}`
-                      : readChatPreview(chat.id) ?? (chat.latest_message_at ? 'New message' : 'No messages yet')
+                      : readChatPreview(chat.id) ?? (chat.latest_message_at ? t('new_message') : t('no_messages'))
 
                   return chatList.hasMultipleServers ? `${chat.serverLabel} · ${rawPreview}` : rawPreview
                 })()
@@ -180,14 +181,14 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>
             </svg>
           </div>
-          <p className="empty-state__title">Welcome to Vostok</p>
-          <p className="empty-state__body">Start a conversation or join a group to get started.</p>
+          <p className="empty-state__title">{t('welcome_title')}</p>
+          <p className="empty-state__body">{t('no_conversations_subtitle')}</p>
           <button
             className="primary-action empty-state__action"
             type="button"
             onClick={() => chatList.setNewMessageMode(true)}
           >
-            New Message
+            {t('new_message')}
           </button>
         </div>
       )}
@@ -208,38 +209,38 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
             >
               <button type="button" onClick={() => { chatList.setActiveChatId(chatContextMenu.chatId); closeChatContextMenu() }}>
                 {isGroup ? <UsersSmallIcon style={{ color: '#888' }} /> : <UserSmallIcon style={{ color: '#888' }} />}
-                {isGroup ? 'View Group Info' : 'View Profile'}
+                {isGroup ? t('view_group_info') : t('view_profile')}
               </button>
               <button type="button" onClick={handleMarkAsRead}>
                 <CheckCheckSmallIcon style={{ color: '#888' }} />
-                Mark as Read
+                {t('mark_as_read')}
               </button>
               <button type="button" disabled>
                 <MuteSmallIcon style={{ color: '#888' }} />
-                Mute Notifications
+                {t('mute_notifications')}
               </button>
               <button type="button" disabled>
                 <PinSmallIcon style={{ color: '#888' }} />
-                Pin Chat
+                {t('pin_chat')}
               </button>
               {isGroup ? (
                 <>
                   <div className="msg-context-menu__sep" />
                   <button type="button" className="msg-context-menu__danger" disabled>
                     <SignOutSmallIcon style={{ color: '#FF4444' }} />
-                    Leave Group
+                    {t('leave_group')}
                   </button>
                 </>
               ) : (
                 <>
                   <button type="button" disabled>
                     <ArchiveSmallIcon style={{ color: '#888' }} />
-                    Archive
+                    {t('archive')}
                   </button>
                   <div className="msg-context-menu__sep" />
                   <button type="button" className="msg-context-menu__danger" disabled>
                     <DeleteSmallTrashIcon style={{ color: '#FF5500' }} />
-                    Delete Chat
+                    {t('delete_chat')}
                   </button>
                 </>
               )}

@@ -8,6 +8,7 @@ import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import type { ChatSummary } from '../../lib/api.ts'
+import { t } from '../../lib/i18n.ts'
 import {
   AttachIcon,
   PhotoSmallIcon,
@@ -70,12 +71,11 @@ type ComposerBarProps = {
   media: ReturnType<typeof useMediaCapture>
   activeChat: ChatSummary | null
   chatList: ReturnType<typeof useChatList>
-  sendKey?: 'enter' | 'ctrl-enter'
   onDraftChange?: (text: string) => void
   onMessageSent?: () => void
 }
 
-export function ComposerBar({ messages, media, activeChat, chatList, sendKey = 'enter', onDraftChange, onMessageSent }: ComposerBarProps) {
+export function ComposerBar({ messages, media, activeChat, chatList, onDraftChange, onMessageSent }: ComposerBarProps) {
   const {
     attachPopoverOpen,
     setAttachPopoverOpen,
@@ -183,7 +183,7 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
           <button
             className="voice-recorder__circle-btn"
             type="button"
-            aria-label="Discard recording"
+            aria-label={t('delete')}
             onClick={() => { void media.handleRoundVideoToggle() }}
           >
             <DeleteIcon />
@@ -191,14 +191,14 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
           <button
             className="voice-recorder__circle-btn"
             type="button"
-            aria-label="Pause recording"
+            aria-label={t('pause_voice')}
             disabled
           >
             <PauseIcon />
           </button>
-          <button className="voice-recorder__send-pill" type="button" aria-label="Stop and send video" onClick={() => void media.handleRoundVideoToggle()}>
+          <button className="voice-recorder__send-pill" type="button" aria-label={t('send')} onClick={() => void media.handleRoundVideoToggle()}>
             <SendIcon stroke="white" />
-            <span>Send</span>
+            <span>{t('send')}</span>
           </button>
         </div>
       </div>
@@ -220,7 +220,7 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
           <button
             className="voice-recorder__circle-btn"
             type="button"
-            aria-label="Discard recording"
+            aria-label={t('delete')}
             onClick={handleDiscardVoiceRecording}
           >
             <DeleteIcon />
@@ -228,14 +228,14 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
           <button
             className="voice-recorder__circle-btn"
             type="button"
-            aria-label="Pause recording"
+            aria-label={t('pause_voice')}
             disabled
           >
             <PauseIcon />
           </button>
-          <button className="voice-recorder__send-pill" type="button" aria-label="Send voice note" onClick={() => void media.handleVoiceNoteToggle()}>
+          <button className="voice-recorder__send-pill" type="button" aria-label={t('send')} onClick={() => void media.handleVoiceNoteToggle()}>
             <SendIcon stroke="white" />
-            <span>Send</span>
+            <span>{t('send')}</span>
           </button>
         </div>
       </div>
@@ -261,10 +261,10 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
           >
             <div className="compose-reply-bar__accent" />
             <div className="compose-reply-bar__content">
-              <strong>{messages.editingMessageId ? 'Editing' : 'Reply'}</strong>
-              <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : 'Earlier message'}</span>
+              <strong>{messages.editingMessageId ? t('edit') : t('reply')}</strong>
+              <span>{messages.replyTargetMessage ? messages.replyTargetMessage.text : t('message')}</span>
             </div>
-            <button className="compose-reply-bar__close" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label="Cancel reply">
+            <button className="compose-reply-bar__close" type="button" onClick={() => messages.setReplyTargetMessageId(null)} aria-label={t('cancel')}>
               <CloseIcon width={16} height={16} />
             </button>
           </motion.div>
@@ -284,8 +284,8 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             style={{ overflow: 'hidden' }}
           >
             <EditSmallIcon />
-            <span>Edit Message</span>
-            <button className="compose-edit-bar__close" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label="Cancel edit">
+            <span>{t('edit_message')}</span>
+            <button className="compose-edit-bar__close" type="button" onClick={() => { messages.setEditingMessageId(null); messages.setDraft('') }} aria-label={t('cancel')}>
               <CloseIcon width={16} height={16} />
             </button>
           </motion.div>
@@ -304,11 +304,11 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             <div className="dropdown-menu dropdown-menu--bottom" onClick={() => setAttachPopoverOpen(false)}>
               <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.setAttribute('accept', 'image/*,video/*'); media.fileInputRef.current?.click() }}>
                 <PhotoSmallIcon />
-                Photo or Video
+                {t('photos')} / {t('videos')}
               </button>
               <button className="dropdown-menu__item" type="button" onClick={() => { media.fileInputRef.current?.removeAttribute('accept'); media.fileInputRef.current?.click() }}>
                 <FileSmallIcon />
-                File
+                {t('files')}
               </button>
             </div>
           ) : null}
@@ -325,7 +325,7 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
             onChange={(event) => { messages.setDraft(event.target.value); onDraftChange?.(event.target.value); handleTextareaInput(event) }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const shouldSend = sendKey === 'enter' ? !e.ctrlKey && !e.metaKey && !e.shiftKey : (e.ctrlKey || e.metaKey)
+                const shouldSend = !e.ctrlKey && !e.metaKey && !e.shiftKey
                 if (shouldSend && messages.draft.trim().length > 0) {
                   e.preventDefault()
                   void messages.sendDraftMessage(chatList.activeChatId)
@@ -334,34 +334,34 @@ export function ComposerBar({ messages, media, activeChat, chatList, sendKey = '
                 }
               }
             }}
-            placeholder={messages.editingMessageId ? 'Edit message\u2026' : 'Write a message...'}
+            placeholder={messages.editingMessageId ? t('edit_message') : t('type_message')}
             ref={draftInputRef}
             rows={1}
             value={messages.draft}
           />
         </div>
         {messages.draft.trim().length > 0 ? (
-          <Tooltip text="Send message">
-            <button className="live-composer__send" type="submit" aria-label="Send">
+          <Tooltip text={t('send')}>
+            <button className="live-composer__send" type="submit" aria-label={t('send')}>
               <SendIcon stroke="white" />
             </button>
           </Tooltip>
         ) : null}
-        <Tooltip text="Record voice message">
+        <Tooltip text={t('voice_messages')}>
           <button
             className="live-composer__btn live-composer__mic"
             type="button"
-            aria-label="Record voice message"
+            aria-label={t('voice_messages')}
             onClick={() => { void media.handleVoiceNoteToggle() }}
           >
             <MicIcon width={20} height={20} />
           </button>
         </Tooltip>
-        <Tooltip text="Record video message">
+        <Tooltip text={t('round_videos')}>
           <button
             className="live-composer__btn live-composer__mic"
             type="button"
-            aria-label="Record video message"
+            aria-label={t('round_videos')}
             onClick={() => { void media.handleRoundVideoToggle() }}
           >
             <VideoCamIcon width={20} height={20} />

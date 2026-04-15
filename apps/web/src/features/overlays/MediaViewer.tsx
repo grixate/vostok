@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, ChevronLeft, ChevronRight, Download, Share2, Trash2 } from 'lucide-react'
+import { t } from '../../lib/i18n.ts'
 import '../../styles/media-viewer.css'
 
 type MediaViewerProps = {
@@ -61,7 +62,7 @@ export function MediaViewer({ items, initialIndex, onClose, onDownload }: MediaV
         <span className="media-viewer__sender">{item.senderName}</span>
         <span className="media-viewer__timestamp">{item.timestamp}</span>
         <div className="media-viewer__topbar-spacer" />
-        <button className="media-viewer__close" type="button" onClick={onClose} aria-label="Close">
+        <button className="media-viewer__close" type="button" onClick={onClose} aria-label={t('close')}>
           <X size={14} />
         </button>
       </div>
@@ -89,7 +90,7 @@ export function MediaViewer({ items, initialIndex, onClose, onDownload }: MediaV
             className="media-viewer__nav media-viewer__nav--prev"
             type="button"
             onClick={goToPrev}
-            aria-label="Previous"
+            aria-label={t('previous')}
           >
             <ChevronLeft size={20} />
           </button>
@@ -100,7 +101,7 @@ export function MediaViewer({ items, initialIndex, onClose, onDownload }: MediaV
             className="media-viewer__nav media-viewer__nav--next"
             type="button"
             onClick={goToNext}
-            aria-label="Next"
+            aria-label={t('next')}
           >
             <ChevronRight size={20} />
           </button>
@@ -108,20 +109,20 @@ export function MediaViewer({ items, initialIndex, onClose, onDownload }: MediaV
       </div>
 
       <div className="media-viewer__bottombar">
-        <span className="media-viewer__counter">{currentIndex + 1} of {items.length}</span>
+        <span className="media-viewer__counter">{t('media_counter', currentIndex + 1, items.length)}</span>
         <div className="media-viewer__actions">
           <button
             className="media-viewer__action-btn"
             type="button"
             onClick={() => onDownload?.(currentIndex)}
-            aria-label="Download"
+            aria-label={t('download')}
           >
             <Download size={20} />
           </button>
-          <button className="media-viewer__action-btn" type="button" aria-label="Forward">
+          <button className="media-viewer__action-btn" type="button" aria-label={t('forward')}>
             <Share2 size={20} />
           </button>
-          <button className="media-viewer__action-btn media-viewer__action-btn--muted" type="button" aria-label="Delete">
+          <button className="media-viewer__action-btn media-viewer__action-btn--muted" type="button" aria-label={t('delete')}>
             <Trash2 size={20} />
           </button>
         </div>

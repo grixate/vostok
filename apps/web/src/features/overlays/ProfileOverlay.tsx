@@ -1,5 +1,6 @@
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import type { useAuth } from '../../hooks/useAuth.ts'
+import { t } from '../../lib/i18n.ts'
 import {
   CloseSmallIcon,
   SettingsIcon,
@@ -33,19 +34,19 @@ export function ProfileOverlay({ auth }: ProfileOverlayProps) {
             <strong>{auth.profileUsername ?? 'User'}</strong>
             <span>@{auth.profileUsername ?? 'user'}</span>
           </div>
-          <button className="profile-overlay__close" type="button" onClick={() => setProfileOverlayOpen(false)} aria-label="Close">
+          <button className="profile-overlay__close" type="button" onClick={() => setProfileOverlayOpen(false)} aria-label={t('close')}>
             <CloseSmallIcon />
           </button>
         </div>
         <div className="profile-overlay__actions">
           <button type="button" onClick={() => { setProfileOverlayOpen(false); setSettingsOverlayOpen(true) }}>
             <SettingsIcon width={18} height={18} />
-            Settings
+            {t('settings')}
           </button>
           <div className="profile-overlay__sep" />
           <button type="button" className="profile-overlay__danger" onClick={() => { setProfileOverlayOpen(false); auth.handleForgetDevice() }}>
             <SignOutIcon width={18} height={18} />
-            Sign Out
+            {t('sign_out')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { t } from '../../lib/i18n.ts'
 import {
   toAttachmentDescriptor,
   isVoiceNoteAttachment,
@@ -101,10 +102,10 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
   }, [])
 
   const tabs: { id: MediaTab; label: string; count: number }[] = [
-    { id: 'photos', label: 'Photos', count: photoItems.length },
-    { id: 'files', label: 'Files', count: fileItems.length },
-    { id: 'links', label: 'Links', count: linkItems.length },
-    { id: 'voice', label: 'Voice', count: voiceItems.length },
+    { id: 'photos', label: t('photos'), count: photoItems.length },
+    { id: 'files', label: t('files'), count: fileItems.length },
+    { id: 'links', label: t('links'), count: linkItems.length },
+    { id: 'voice', label: t('voice'), count: voiceItems.length },
   ]
 
   return (
@@ -161,7 +162,7 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
       {activeTab === 'files' ? (
         <div className="media-gallery__list">
           {fileItems.length === 0 ? (
-            <span className="media-gallery__empty">No files shared</span>
+            <span className="media-gallery__empty">{t('no_files_shared')}</span>
           ) : null}
           {fileItems.slice(0, visibleCount).map((message) => (
             <button
@@ -188,7 +189,7 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
           ))}
           {fileItems.length > visibleCount ? (
             <button className="media-gallery__show-more" type="button" onClick={handleShowMore}>
-              Show more
+              {t('show_more')}
             </button>
           ) : null}
         </div>
@@ -197,7 +198,7 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
       {activeTab === 'links' ? (
         <div className="media-gallery__list">
           {linkItems.length === 0 ? (
-            <span className="media-gallery__empty">No links shared</span>
+            <span className="media-gallery__empty">{t('no_links_shared')}</span>
           ) : null}
           {linkItems.slice(0, visibleCount).map((item) => {
             let hostname: string
@@ -231,7 +232,7 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
           })}
           {linkItems.length > visibleCount ? (
             <button className="media-gallery__show-more" type="button" onClick={handleShowMore}>
-              Show more
+              {t('show_more')}
             </button>
           ) : null}
         </div>
@@ -240,7 +241,7 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
       {activeTab === 'voice' ? (
         <div className="media-gallery__list">
           {voiceItems.length === 0 ? (
-            <span className="media-gallery__empty">No voice notes shared</span>
+            <span className="media-gallery__empty">{t('no_voice_shared')}</span>
           ) : null}
           {voiceItems.slice(0, visibleCount).map((message) => (
             <button
@@ -261,14 +262,14 @@ export function MediaGallery({ messageItems, media }: MediaGalleryProps) {
                 </svg>
               </span>
               <span className="media-gallery__file-info">
-                <strong>{message.attachment?.fileName ?? 'Voice note'}</strong>
+                <strong>{message.attachment?.fileName ?? t('voice_note')}</strong>
                 <span>{formatFileSize(message.attachment?.size ?? 0)}</span>
               </span>
             </button>
           ))}
           {voiceItems.length > visibleCount ? (
             <button className="media-gallery__show-more" type="button" onClick={handleShowMore}>
-              Show more
+              {t('show_more')}
             </button>
           ) : null}
         </div>

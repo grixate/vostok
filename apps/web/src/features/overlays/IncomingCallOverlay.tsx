@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { useAppContext } from '../../contexts/AppContext.tsx'
+import { t } from '../../lib/i18n.ts'
 import { PhoneIcon, PhoneOffIcon, VideoIcon } from '../../icons/index.tsx'
 import { playRingtone, stopRingtone } from '../calls/callSounds.ts'
 import type { useCall } from '../../hooks/useCall.ts'
@@ -33,7 +34,7 @@ export function IncomingCallOverlay({ call, onAccepted }: IncomingCallOverlayPro
 
   if (!isIncoming || !activeCall) return null
 
-  const callerName = call.activeCallDisplayTitle ?? 'Unknown caller'
+  const callerName = call.activeCallDisplayTitle ?? t('unknown_caller')
   const initial = callerName.slice(0, 1).toUpperCase()
   const isVideo = activeCall.mode === 'video' || activeCall.media_mode === 'video'
 
@@ -43,14 +44,14 @@ export function IncomingCallOverlay({ call, onAccepted }: IncomingCallOverlayPro
         <div className="incoming-call-overlay__avatar">{initial}</div>
         <span className="incoming-call-overlay__name">{callerName}</span>
         <span className="incoming-call-overlay__subtitle">
-          Incoming {isVideo ? 'video' : 'voice'} call{isVideo ? <VideoIcon width={14} height={14} /> : null}
+          {isVideo ? t('call_incoming_video') : t('call_incoming_voice')}{isVideo ? <VideoIcon width={14} height={14} /> : null}
         </span>
         <div className="incoming-call-overlay__actions">
           <button
             type="button"
             className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--decline"
             onClick={call.handleDeclineCall}
-            aria-label="Decline call"
+            aria-label={t('decline_call')}
           >
             <PhoneOffIcon width={24} height={24} />
           </button>
@@ -58,7 +59,7 @@ export function IncomingCallOverlay({ call, onAccepted }: IncomingCallOverlayPro
             type="button"
             className="incoming-call-overlay__action-btn incoming-call-overlay__action-btn--accept"
             onClick={handleAccept}
-            aria-label="Accept call"
+            aria-label={t('accept_call')}
           >
             <PhoneIcon width={24} height={24} />
           </button>

@@ -4,6 +4,7 @@ import {
   PhoneIcon,
   SettingsIcon,
 } from '../../icons/index.tsx'
+import { t } from '../../lib/i18n.ts'
 import type { SidebarTab } from '../../contexts/UIContext.tsx'
 
 type TabDef = {
@@ -16,14 +17,15 @@ type TabDef = {
 type BottomTabBarProps = {
   activeTab: SidebarTab
   onTabChange: (tab: SidebarTab) => void
+  chatUnreadCount?: number
 }
 
-export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
+export function BottomTabBar({ activeTab, onTabChange, chatUnreadCount = 0 }: BottomTabBarProps) {
   const tabs: TabDef[] = [
-    { id: 'chats', label: 'Chats', Icon: ChatsIcon, IconActive: ChatsFilledIcon },
-    { id: 'calls', label: 'Calls', Icon: PhoneIcon, IconActive: PhoneIcon },
-    { id: 'members', label: 'Members', Icon: MembersIcon, IconActive: MembersFilledIcon },
-    { id: 'settings', label: 'Settings', Icon: SettingsIcon, IconActive: SettingsIcon },
+    { id: 'chats', label: t('chats'), Icon: ChatsIcon, IconActive: ChatsFilledIcon },
+    { id: 'calls', label: t('calls'), Icon: PhoneIcon, IconActive: PhoneIcon },
+    { id: 'members', label: t('members'), Icon: MembersIcon, IconActive: MembersFilledIcon },
+    { id: 'settings', label: t('settings'), Icon: SettingsIcon, IconActive: SettingsIcon },
   ]
 
   return (
@@ -41,6 +43,11 @@ export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
           >
             <IconComponent className="sidebar__tab-icon" />
             <span className="sidebar__tab-label">{tab.label}</span>
+            {tab.id === 'chats' && chatUnreadCount > 0 && (
+              <span className="sidebar__tab-badge">
+                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+              </span>
+            )}
           </button>
         )
       })}

@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/refs */
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import { t } from '../../lib/i18n.ts'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { MessageSquare } from 'lucide-react'
@@ -669,8 +670,8 @@ export function ConversationPane({
           <div className="empty-state__icon">
             <MessageSquare size={28} strokeWidth={1.5} />
           </div>
-          <p className="empty-state__title">Select a conversation</p>
-          <p className="empty-state__body">Choose a chat from the sidebar to start messaging, or create a new one.</p>
+          <p className="empty-state__title">{t('no_conversations')}</p>
+          <p className="empty-state__body">{t('no_conversations_subtitle')}</p>
         </div>
       </main>
     )
@@ -919,7 +920,6 @@ export function ConversationPane({
         media={media}
         activeChat={resolvedChat}
         chatList={chatList}
-        sendKey={appSettings.settings.general_send_key}
         onDraftChange={(text) => { drafts.handleDraftChange(text); if (text.length > 0 && appSettings.settings.privacy_typing_indicators) typingIndicator.sendTypingEvent() }}
         onMessageSent={() => { drafts.handleMessageSent(); typingIndicator.stopTypingNow() }}
       /> : null}
@@ -932,7 +932,7 @@ export function ConversationPane({
               <path d="M20 16V21" />
               <path d="M4 16V21" />
             </svg>
-            <span>Drop files to send</span>
+            <span>{t('files')}</span>
           </div>
         </div>
       ) : null}

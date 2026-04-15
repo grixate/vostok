@@ -1,3 +1,5 @@
+import { t } from '../../lib/i18n.ts'
+
 type PasswordStrength = 'weak' | 'fair' | 'strong'
 
 function getPasswordStrength(password: string): PasswordStrength {
@@ -15,9 +17,9 @@ function getPasswordStrength(password: string): PasswordStrength {
 }
 
 const strengthConfig = {
-  weak: { segments: 1, color: '#FF453A', label: 'Weak — add numbers and symbols' },
-  fair: { segments: 2, color: '#F59E0B', label: 'Fair — could be stronger' },
-  strong: { segments: 3, color: '#22C55E', label: 'Strong password' }
+  weak: { segments: 1, color: '#FF453A', key: 'pw_weak' },
+  fair: { segments: 2, color: '#F59E0B', key: 'pw_fair' },
+  strong: { segments: 3, color: '#22C55E', key: 'pw_strong' }
 }
 
 export function PasswordStrengthBar({ password }: { password: string }) {
@@ -37,7 +39,7 @@ export function PasswordStrengthBar({ password }: { password: string }) {
         ))}
       </div>
       <span className="auth-strength-hint" style={{ color: config.color }}>
-        {config.label}
+        {t(config.key)}
       </span>
     </div>
   )

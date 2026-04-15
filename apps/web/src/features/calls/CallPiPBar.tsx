@@ -6,6 +6,7 @@ import {
   ExpandIcon,
   PhoneOffIcon,
 } from '../../icons/index.tsx'
+import { t } from '../../lib/i18n.ts'
 
 type CallPiPBarProps = {
   contactName: string
@@ -42,7 +43,7 @@ export function CallPiPBar({
           type="button"
           className="active-call-bar__btn"
           onClick={onToggleMute}
-          aria-label={muted ? 'Unmute' : 'Mute'}
+          aria-label={muted ? t('unmute') : t('mute')}
         >
           {muted ? <MicOffIcon width={14} height={14} /> : <MicIcon width={14} height={14} />}
         </button>
@@ -51,7 +52,7 @@ export function CallPiPBar({
             type="button"
             className="active-call-bar__btn"
             onClick={onToggleCamera}
-            aria-label={cameraOn ? 'Camera off' : 'Camera on'}
+            aria-label={cameraOn ? t('camera_off') : t('camera_on')}
           >
             {cameraOn ? <VideoIcon width={14} height={14} /> : <VideoOffIcon width={14} height={14} />}
           </button>
@@ -60,7 +61,7 @@ export function CallPiPBar({
           type="button"
           className="active-call-bar__btn"
           onClick={onExpand}
-          aria-label="Expand call"
+          aria-label={t('expand_call')}
         >
           <ExpandIcon width={14} height={14} />
         </button>
@@ -68,7 +69,7 @@ export function CallPiPBar({
           type="button"
           className="active-call-bar__btn active-call-bar__btn--hangup"
           onClick={onHangup}
-          aria-label="End call"
+          aria-label={t('end_call')}
         >
           <PhoneOffIcon width={14} height={14} />
         </button>

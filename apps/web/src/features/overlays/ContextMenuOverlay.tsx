@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useUIContext } from '../../contexts/UIContext.tsx'
+import { t } from '../../lib/i18n.ts'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 import {
@@ -61,7 +62,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     // 1. Reply
     menuItems.push({
       key: 'reply',
-      label: 'Reply',
+      label: t('reply'),
       icon: <ReplySmallIcon />,
       action: () => { messages.handleReplyToMessage(msg); draftInputRef.current?.focus(); close() }
     })
@@ -70,7 +71,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     if (msg.side === 'outgoing' && !msg.attachment) {
       menuItems.push({
         key: 'edit',
-        label: 'Edit',
+        label: t('edit'),
         icon: <EditSmallIcon />,
         action: () => { messages.handleStartEditingMessage(msg); draftInputRef.current?.focus(); close() }
       })
@@ -79,23 +80,23 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     // 3. Copy Text
     menuItems.push({
       key: 'copy',
-      label: 'Copy Text',
+      label: t('copy_text'),
       icon: <CopySmallIcon />,
-      action: () => { void navigator.clipboard.writeText(msg.text); close(); showToast('Copied to clipboard') }
+      action: () => { void navigator.clipboard.writeText(msg.text); close(); showToast(t('copied_to_clipboard')) }
     })
 
     // 3b. Go to Original (for forwarded messages)
     if (msg.forwardedFrom) {
       menuItems.push({
         key: 'go-to-original',
-        label: 'Go to Original',
+        label: t('go_to_original'),
         icon: <ExternalLink size={16} strokeWidth={1.75} />,
         accent: true,
         action: () => {
           // Navigate to the original chat and message
           chatList.setActiveChatId(msg.forwardedFrom!.chatId)
           close()
-          showToast('Navigating to original message…')
+          showToast(t('navigating_to_original'))
         }
       })
     }
@@ -104,15 +105,15 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     if (!msg.id.startsWith('optimistic-')) {
       menuItems.push({
         key: 'pin',
-        label: msg.pinnedAt ? 'Unpin' : 'Pin',
+        label: msg.pinnedAt ? t('unpin') : t('pin'),
         icon: <PinSmallIcon />,
         action: () => {
           close()
           messages.handleToggleMessagePin(msg, chatList.activeChatId)
             .then((result) => {
-              if (result) showToast(result.pinned ? 'Message pinned' : 'Message unpinned')
+              if (result) showToast(result.pinned ? t('message_pinned') : t('message_unpinned'))
             })
-            .catch(() => { showToast('Failed to update pin') })
+            .catch(() => { showToast(t('failed_update_pin')) })
         }
       })
     }
@@ -120,16 +121,16 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     // 6. Forward (stub — show toast until full flow is implemented)
     menuItems.push({
       key: 'forward',
-      label: 'Forward',
+      label: t('forward'),
       icon: <ForwardSmallIcon />,
       trailing: <ChevronRightSmallIcon />,
-      action: () => { close(); showToast('Forward is not yet available') }
+      action: () => { close(); showToast(t('forward_not_available')) }
     })
 
     // 7. Select (enabled, wires into selection mode)
     menuItems.push({
       key: 'select',
-      label: 'Select',
+      label: t('select'),
       icon: <SelectSmallIcon />,
       action: () => { onSelectMessage?.(msg.id); close() }
     })
@@ -138,7 +139,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
     if (msg.side === 'outgoing') {
       menuItems.push({
         key: 'delete',
-        label: 'Delete',
+        label: t('delete'),
         icon: <DeleteSmallTrashIcon />,
         danger: true,
         separator: true,
@@ -285,7 +286,7 @@ export function ContextMenuOverlay({ messages, chatList, onSelectMessage }: Cont
               // TODO: open full emoji picker
               close()
             }}
-            title="More reactions"
+            title={t('more_reactions')}
           >
             <ChevronDownSmallIcon />
           </button>

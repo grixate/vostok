@@ -1,4 +1,5 @@
 import { ConversationHeader as ConversationHeaderUI } from '@vostok/ui-chat'
+import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
@@ -54,17 +55,17 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
         : (call.callCapabilityReason ?? 'Calls are unavailable on this browser.'))
     : 'Call (camera optional)'
 
-  const presenceSubtitle = isPresenceOnline ? 'online' : 'last seen recently'
+  const presenceSubtitle = isPresenceOnline ? t('online') : t('last_seen_recently')
   const defaultSubtitle = activeChat.is_self_chat
     ? ''
     : activeChat.type === 'group'
-      ? `${groupChat.groupMembers.length} members`
+      ? t('n_members', groupChat.groupMembers.length)
       : presenceSubtitle
 
   const subtitleText = typingUsers.length > 0
     ? (activeChat.type === 'group'
-        ? `${typingUsers[0]} is typing...`
-        : 'typing...')
+        ? t('typing', typingUsers[0])
+        : t('typing', ''))
     : defaultSubtitle
   const combinedSubtitle = serverLabel
     ? subtitleText
@@ -89,7 +90,7 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
               <button
                 className="conversation-header__btn"
                 type="button"
-                aria-label="Call"
+                aria-label={t('call')}
                 onClick={() => call.handleStartCall('voice')}
                 disabled={callingUnavailable}
                 title={callTooltip}
@@ -116,8 +117,8 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
               </button>
             </Tooltip>
           ) : null}
-          <Tooltip text="Search in chat">
-            <button className="conversation-header__btn" type="button" aria-label="Search in chat" onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>
+          <Tooltip text={t('search_in_chat')}>
+            <button className="conversation-header__btn" type="button" aria-label={t('search_in_chat')} onClick={() => { setChatSearchOpen((v) => !v); setChatSearchQuery('') }}>
               <SearchIcon />
             </button>
           </Tooltip>

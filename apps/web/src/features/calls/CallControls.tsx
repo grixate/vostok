@@ -9,6 +9,7 @@ import {
 } from '../../icons/index.tsx'
 import { DeviceMenu } from './DeviceMenu.tsx'
 import type { MediaDeviceOption } from '../../hooks/useMediaDevices.ts'
+import { t } from '../../lib/i18n.ts'
 
 type CallControlsProps = {
   muted: boolean
@@ -75,7 +76,7 @@ export function CallControls({
             }
           }}
           {...makeLongPressHandlers('audio', audioDevices.length > 1)}
-          aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
+          aria-label={muted ? t('unmute_microphone') : t('mute_microphone')}
           aria-pressed={muted}
         >
           {muted ? <MicOffIcon width={22} height={22} /> : <MicIcon width={22} height={22} />}
@@ -83,7 +84,7 @@ export function CallControls({
         {deviceMenu === 'audio' && onSwitchDevice && (
           <DeviceMenu
             devices={audioDevices}
-            label="Microphone"
+            label={t('microphone')}
             onSelect={(id) => onSwitchDevice(id, 'audio')}
             onClose={() => setDeviceMenu(null)}
           />
@@ -103,7 +104,7 @@ export function CallControls({
               }
             }}
             {...makeLongPressHandlers('video', videoDevices.length > 1)}
-            aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+            aria-label={cameraOn ? t('turn_off_camera') : t('turn_on_camera')}
             aria-pressed={!cameraOn}
           >
             {cameraOn ? <VideoIcon width={22} height={22} /> : <VideoOffIcon width={22} height={22} />}
@@ -111,7 +112,7 @@ export function CallControls({
           {deviceMenu === 'video' && onSwitchDevice && (
             <DeviceMenu
               devices={videoDevices}
-              label="Camera"
+              label={t('camera')}
               onSelect={(id) => onSwitchDevice(id, 'video')}
               onClose={() => setDeviceMenu(null)}
             />
@@ -124,7 +125,7 @@ export function CallControls({
           type="button"
           className={`call-controls__btn${screenSharing ? ' call-controls__btn--active' : ''}`}
           onClick={onToggleScreen}
-          aria-label={screenSharing ? 'Stop screen sharing' : 'Share screen'}
+          aria-label={screenSharing ? t('stop_screen_sharing') : t('share_screen')}
           aria-pressed={screenSharing}
         >
           <MonitorUpIcon width={22} height={22} />
@@ -135,7 +136,7 @@ export function CallControls({
         type="button"
         className="call-controls__btn call-controls__btn--hangup"
         onClick={onHangup}
-        aria-label="End call"
+        aria-label={t('end_call')}
       >
         <PhoneOffIcon width={22} height={22} />
       </button>

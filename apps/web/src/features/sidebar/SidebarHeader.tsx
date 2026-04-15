@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
 import { NewMessagePanel } from './NewMessagePanel.tsx'
@@ -39,7 +40,7 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
           </div>
           <div className="desktop-titlebar__actions">
             <button
-              aria-label="Minimize"
+              aria-label={t('minimize')}
               className="desktop-titlebar__button"
               onClick={desktop.handleMinimizeDesktopHostWindow}
               type="button"
@@ -47,7 +48,7 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               <MinimizeIcon width={12} height={12} />
             </button>
             <button
-              aria-label={desktop.desktopWindowMaximized ? 'Restore' : 'Maximize'}
+              aria-label={desktop.desktopWindowMaximized ? t('restore_window') : t('maximize')}
               className="desktop-titlebar__button"
               onClick={desktop.handleToggleDesktopWindowMaximize}
               type="button"
@@ -55,7 +56,7 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               {desktop.desktopWindowMaximized ? <RestoreIcon width={12} height={12} /> : <MaximizeIcon width={12} height={12} />}
             </button>
             <button
-              aria-label="Close"
+              aria-label={t('close')}
               className="desktop-titlebar__button"
               onClick={desktop.handleCloseDesktopHostWindow}
               type="button"
@@ -70,17 +71,17 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
           <button
             className="sidebar__back-btn"
             type="button"
-            aria-label="Back"
+            aria-label={t('back')}
             onClick={() => { chatList.setNewMessageMode(false); chatList.setNewChatUsername('') }}
           >
             <BackIcon />
           </button>
-          <span className="sidebar__title">New Message</span>
+          <span className="sidebar__title">{t('new_message')}</span>
         </div>
       ) : (
         <div className="sidebar__title-row">
           <div className="sidebar__title-group">
-            <span className="sidebar__title">Messages</span>
+            <span className="sidebar__title">{t('messages')}</span>
             <span
               className="sidebar__status-dot"
               style={{ background: dotColor }}
@@ -88,11 +89,11 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               aria-label={`Connection: ${connectionStatus}`}
             />
           </div>
-          <Tooltip text="New message">
+          <Tooltip text={t('new_message')}>
             <button
               className="sidebar__compose-btn"
               type="button"
-              aria-label="New message"
+              aria-label={t('new_message')}
               onClick={() => { chatList.setNewMessageMode(true); chatList.setNewChatUsername('') }}
             >
               <EditIcon width={18} height={18} />
@@ -110,11 +111,11 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
           <input
             className="search-bar__input"
             onChange={(event) => chatList.setChatFilter(event.target.value)}
-            placeholder="Search"
+            placeholder={t('search')}
             ref={chatFilterInputRef}
             type="search"
             value={chatList.chatFilter}
-            aria-label="Search chats"
+            aria-label={t('search_chats')}
           />
         </label>
       )}

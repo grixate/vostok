@@ -1,4 +1,5 @@
 import { FileText, ArrowDown, Check, AlertCircle } from 'lucide-react'
+import { t } from '../lib/i18n.ts'
 import type { CachedMessage } from '../lib/message-cache.ts'
 import type { AttachmentDescriptor, AttachmentDownloadState } from '../types.ts'
 import { toAttachmentDescriptor } from '../utils/attachment-helpers.ts'
@@ -64,9 +65,9 @@ export function FileAttachment({
         <span className="attachment-file__name">{attachment.fileName}</span>
         <span className="attachment-file__meta">
           {state.status === 'expired'
-            ? 'File expired'
+            ? t('file_expired')
             : state.status === 'ready'
-              ? 'Downloaded'
+              ? t('downloaded')
               : state.status === 'error'
                 ? state.message
                 : formatBytes(attachment.size)}

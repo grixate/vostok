@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Zap, User, Lock, Eye, EyeOff } from 'lucide-react'
 import type { AuthView, ServerInfo } from '../../types.ts'
+import { t } from '../../lib/i18n.ts'
 
 type Props = {
   serverInfo: ServerInfo | null
@@ -59,14 +60,14 @@ export function LoginScreen({
     <div className="auth-shell">
       {isDevMode && (
         <div className="auth-dev-banner">
-          <span>⚠ DEV MODE — Open registration enabled. Do not use in production.</span>
+          <span>⚠ {t('dev_mode_banner')}</span>
         </div>
       )}
       <div className="auth-card">
         <div className="auth-card__logo">
           <Zap size={40} color="var(--accent)" strokeWidth={1.75} />
         </div>
-        <h1 className="auth-card__title">Vostok</h1>
+        <h1 className="auth-card__title">{t('vostok')}</h1>
         <p className="auth-card__subtitle">{serverTitle}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -75,7 +76,7 @@ export function LoginScreen({
             <input
               className="auth-input"
               autoComplete="username"
-              placeholder="Username"
+              placeholder={t('username')}
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -88,7 +89,7 @@ export function LoginScreen({
                 onClick={() => setUsername(generateDevUsername())}
                 tabIndex={-1}
               >
-                Random
+                {t('random')}
               </button>
             )}
           </div>
@@ -99,7 +100,7 @@ export function LoginScreen({
               className="auth-input"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
-              placeholder="Password"
+              placeholder={t('password')}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -120,7 +121,7 @@ export function LoginScreen({
           {error && <p className="auth-error">{error}</p>}
 
           <button className="auth-btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="auth-spinner" /> : 'Sign In'}
+            {loading ? <span className="auth-spinner" /> : t('login')}
           </button>
         </form>
 
@@ -129,12 +130,12 @@ export function LoginScreen({
           type="button"
           onClick={() => onNavigate('forgot-password')}
         >
-          Forgot password?
+          {t('forgot_password')}
         </button>
 
         <div className="auth-divider">
           <span />
-          <span>or</span>
+          <span>{t('or')}</span>
           <span />
         </div>
 
@@ -143,7 +144,7 @@ export function LoginScreen({
           type="button"
           onClick={() => onNavigate('invite-code')}
         >
-          I have an invite code
+          {t('have_invite_code')}
         </button>
 
         {isDevMode && (
@@ -153,7 +154,7 @@ export function LoginScreen({
             disabled={loading}
             onClick={handleDevQuickLogin}
           >
-            Create Dev Account
+            {t('create_dev_account')}
           </button>
         )}
 
@@ -163,7 +164,7 @@ export function LoginScreen({
             type="button"
             onClick={() => onNavigate('access-request')}
           >
-            Request Access
+            {t('request_access')}
           </button>
         )}
       </div>

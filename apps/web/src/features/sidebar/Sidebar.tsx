@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { SidebarHeader } from './SidebarHeader.tsx'
 import { SidebarChatList } from './SidebarChatList.tsx'
@@ -57,7 +58,7 @@ export function Sidebar({ desktop, chatList, activeChat, draftChatIds, call }: S
         <>
           <div className="sidebar__header">
             <div className="sidebar__title-row">
-              <span className="sidebar__title">Members</span>
+              <span className="sidebar__title">{t('members')}</span>
             </div>
           </div>
           <Suspense
@@ -74,11 +75,15 @@ export function Sidebar({ desktop, chatList, activeChat, draftChatIds, call }: S
       {sidebarTab === 'settings' && (
         <div className="sidebar__header">
           <div className="sidebar__title-row">
-            <span className="sidebar__title">Settings</span>
+            <span className="sidebar__title">{t('settings')}</span>
           </div>
         </div>
       )}
-      <BottomTabBar activeTab={sidebarTab} onTabChange={handleTabChange} />
+      <BottomTabBar
+        activeTab={sidebarTab}
+        onTabChange={handleTabChange}
+        chatUnreadCount={chatList.chatItems.reduce((sum, c) => sum + (c.is_self_chat ? 0 : (c.message_count ?? 0)), 0)}
+      />
     </aside>
   )
 }

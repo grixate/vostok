@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { SearchIcon } from '../../icons/index.tsx'
 import { peerColor } from '../../utils/avatar-colors.ts'
@@ -35,7 +36,7 @@ function ContactRow({
       className={`new-message-contact${highlighted ? ' new-message-contact--highlighted' : ''}`}
       onClick={onClick}
       aria-selected={highlighted}
-      aria-label={`Start chat with ${username}`}
+      aria-label={t('start_chat_with', username)}
     >
       <span
         className="new-message-contact__avatar"
@@ -138,7 +139,7 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
   return (
     <div className="new-message-panel">
       <div className="new-message-panel__search-row">
-        <span className="new-message-panel__to">To:</span>
+        <span className="new-message-panel__to">{t('to')}</span>
         <span className="new-message-panel__search-icon"><SearchIcon width={14} height={14} /></span>
         <input
           ref={inputRef}
@@ -148,21 +149,21 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           autoCapitalize="off"
           spellCheck={false}
           className="new-message-panel__input"
-          placeholder="Search members"
+          placeholder={t('search_members')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          aria-label="Search members"
+          aria-label={t('search_members')}
         />
       </div>
 
-      <div className="new-message-panel__list" role="listbox" aria-label="Members">
+      <div className="new-message-panel__list" role="listbox" aria-label={t('members')}>
         {suggestions.length === 0 && !showNewContactRow && normalizedQuery && (
-          <p className="new-message-panel__empty">No members found</p>
+          <p className="new-message-panel__empty">{t('no_members_found')}</p>
         )}
 
         {suggestions.length === 0 && !normalizedQuery && (
-          <p className="new-message-panel__empty">Type to search members</p>
+          <p className="new-message-panel__empty">{t('type_to_search')}</p>
         )}
 
         {suggestions.map((contact, i) => (
@@ -184,7 +185,7 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           >
             <span className="new-message-contact__avatar new-message-contact__avatar--new" aria-hidden="true">+</span>
             <span className="new-message-contact__username">
-              Start chat with <strong>{query.trim()}</strong>
+              {t('start_chat_with', query.trim())}
             </span>
           </button>
         )}

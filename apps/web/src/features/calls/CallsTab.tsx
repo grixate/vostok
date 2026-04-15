@@ -5,6 +5,7 @@ import type { CallHistoryEntry as ApiCallHistoryEntry } from '../../lib/api.ts'
 import { PhoneIcon, PhoneCallIcon } from '../../icons/index.tsx'
 import { ParticipantPicker } from './ParticipantPicker.tsx'
 import type { useCall } from '../../hooks/useCall.ts'
+import { t } from '../../lib/i18n.ts'
 
 type CallHistoryEntry = {
   id: string
@@ -37,8 +38,8 @@ function formatCallDate(isoString: string): string {
     const now = new Date()
     const diff = now.getTime() - d.getTime()
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    if (days === 0) return 'Today'
-    if (days === 1) return 'Yesterday'
+    if (days === 0) return t('today')
+    if (days === 1) return t('yesterday')
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
   } catch {
     return ''
@@ -137,7 +138,7 @@ export function CallsTab({ onStartCall, call }: CallsTabProps) {
       {/* Header */}
       <div className="sidebar__header">
         <div className="sidebar__title-row">
-          <span className="sidebar__title">Calls</span>
+          <span className="sidebar__title">{t('calls')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {call ? (
               <button
@@ -151,8 +152,8 @@ export function CallsTab({ onStartCall, call }: CallsTabProps) {
                   display: 'flex',
                   padding: 4
                 }}
-                aria-label="New group call"
-                title={callingUnavailable ? callingUnavailableReason : 'New group call'}
+                aria-label={t('new_group_call')}
+                title={callingUnavailable ? callingUnavailableReason : t('new_group_call')}
                 disabled={callingUnavailable}
               >
                 <PhoneCallIcon width={20} height={20} />
@@ -170,8 +171,8 @@ export function CallsTab({ onStartCall, call }: CallsTabProps) {
                   display: 'flex',
                   padding: 4
                 }}
-                aria-label="New call"
-                title={callingUnavailable ? callingUnavailableReason : 'New call'}
+                aria-label={t('new_call')}
+                title={callingUnavailable ? callingUnavailableReason : t('new_call')}
                 disabled={callingUnavailable}
               >
                 <PhoneIcon width={20} height={20} />
@@ -192,17 +193,17 @@ export function CallsTab({ onStartCall, call }: CallsTabProps) {
             <div className="empty-state__icon">
               <PhoneIcon width={28} height={28} />
             </div>
-            <p className="empty-state__title">No calls yet</p>
-            <p className="empty-state__body">Your call history will appear here.</p>
+            <p className="empty-state__title">{t('no_calls_yet')}</p>
+            <p className="empty-state__body">{t('no_calls_subtitle')}</p>
             {onStartCall && (
               <button
                 className="primary-action empty-state__action"
                 type="button"
                 onClick={() => onStartCall('voice')}
                 disabled={callingUnavailable}
-                title={callingUnavailable ? callingUnavailableReason : 'Start a Call'}
+                title={callingUnavailable ? callingUnavailableReason : t('start_a_call')}
               >
-                Start a Call
+                {t('start_a_call')}
               </button>
             )}
           </div>
@@ -241,10 +242,10 @@ export function CallsTab({ onStartCall, call }: CallsTabProps) {
                     <div style={{ fontSize: 13, color: entry.missed ? 'var(--danger)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span>{entry.direction === 'outgoing' ? '↗' : '↙'}</span>
                       {entry.missed ? (
-                        <span>Missed call</span>
+                        <span>{t('call_missed')}</span>
                       ) : (
                         <span>
-                          {entry.type === 'video' ? 'Video' : entry.type === 'group' ? 'Group' : 'Voice'} call
+                          {entry.type === 'video' ? t('video_call') : entry.type === 'group' ? t('group_call') : t('voice_call')}
                           {entry.duration ? ` · ${entry.duration}` : ''}
                         </span>
                       )}

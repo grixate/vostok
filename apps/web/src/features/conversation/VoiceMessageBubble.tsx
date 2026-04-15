@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { t } from '../../lib/i18n.ts'
 import type { AttachmentDescriptor } from '../../types.ts'
 
 type VoiceMessageBubbleProps = {
@@ -110,7 +111,7 @@ export function VoiceMessageBubble({ descriptor, playbackUrl, side }: VoiceMessa
         type="button"
         className="voice-bubble__play-btn"
         onClick={togglePlay}
-        aria-label={playing ? 'Pause' : 'Play voice message'}
+        aria-label={playing ? t('pause_voice') : t('play_voice')}
       >
         {playing ? (
           // Pause bars
@@ -163,7 +164,7 @@ export function VoiceMessageBubble({ descriptor, playbackUrl, side }: VoiceMessa
           type="button"
           className="voice-bubble__speed"
           onClick={cycleSpeed}
-          aria-label={`Playback speed: ${currentSpeed}×`}
+          aria-label={t('playback_speed', currentSpeed)}
         >
           {currentSpeed}×
         </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { t } from '../../lib/i18n.ts'
 import { MessageBubble } from '@vostok/ui-chat'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
@@ -66,7 +67,7 @@ function highlightText(text: string, query: string): React.ReactNode {
 
 function formatMessageMetaTimestamp(sentAt: string | null | undefined, editedAt?: string): string {
   const time = formatRelativeTime(sentAt ?? null)
-  return editedAt ? `edited · ${time}` : time
+  return editedAt ? `${t('message_edited')} · ${time}` : time
 }
 
 export function MessageThread({ messages, media, downloadManager, activeChat, chatType, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
@@ -482,9 +483,9 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
                 <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            <p className="conversation-stage__saved-title">Your Cloud Storage</p>
+            <p className="conversation-stage__saved-title">{t('your_cloud_storage')}</p>
             <p className="conversation-stage__saved-body">
-              Forward messages here to save them and access them from any of your devices.
+              {t('your_saved_messages')}
             </p>
           </div>
         ) : (
@@ -497,7 +498,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
             </div>
             <p className="conversation-stage__hello-name">{activeChat.title}</p>
             <p className="conversation-stage__hello-body">
-              Start a conversation with {activeChat.title}.
+              {t('start_chat_with', activeChat.title)}
             </p>
             <button
               className="conversation-stage__hello-btn"
@@ -505,7 +506,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
               onClick={onSayHello}
             >
               <SendIcon stroke="currentColor" />
-              Say hello
+              {t('say_hello')}
             </button>
           </div>
         )
@@ -752,15 +753,15 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
 
       {selectedMessageIds.size > 0 ? (
         <div className="selection-bar">
-          <span className="selection-bar__count">{selectedMessageIds.size} selected</span>
+          <span className="selection-bar__count">{selectedMessageIds.size} {t('select')}</span>
           <div className="selection-bar__actions">
-            <button className="selection-bar__icon-btn" type="button" disabled aria-label="Forward">
+            <button className="selection-bar__icon-btn" type="button" disabled aria-label={t('forward')}>
               <ForwardSmallIcon />
             </button>
-            <button className="selection-bar__icon-btn" type="button" onClick={handleCopySelected} aria-label="Copy">
+            <button className="selection-bar__icon-btn" type="button" onClick={handleCopySelected} aria-label={t('copy')}>
               <CopySmallIcon />
             </button>
-            <button className="selection-bar__icon-btn selection-bar__icon-btn--danger" type="button" disabled aria-label="Delete">
+            <button className="selection-bar__icon-btn selection-bar__icon-btn--danger" type="button" disabled aria-label={t('delete')}>
               <DeleteSmallTrashIcon />
             </button>
           </div>

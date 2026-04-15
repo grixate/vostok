@@ -1,4 +1,5 @@
 import { ChatInfoPanel } from '@vostok/ui-chat'
+import { t } from '../../lib/i18n.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import { MediaGallery } from './MediaGallery.tsx'
 import { RemoteMembraneTrackPreview } from '../../components/RemoteMembraneTrackPreview.tsx'
@@ -52,14 +53,14 @@ export function DetailRail({
       />
       <div className="settings-card">
         <div className="settings-card__header">
-          <h3>Media</h3>
+          <h3>{t('media')}</h3>
         </div>
         <MediaGallery messageItems={messages.messageItems} media={media} />
       </div>
       {activeChat?.type === 'group' ? (
         <div className="settings-card">
           <div className="settings-card__header">
-            <h3>Members</h3>
+            <h3>{t('members')}</h3>
           </div>
           <div className="settings-card__list">
             {groupChat.groupMembers.length > 0 ? (
@@ -71,36 +72,36 @@ export function DetailRail({
                   </div>
                   {member.username !== auth.profileUsername ? (
                     <div className="settings-card__row-actions">
-                      <button className="mini-action" onClick={() => void groupChat.handleRemoveActiveGroupMember(member)} type="button">Remove</button>
+                      <button className="mini-action" onClick={() => void groupChat.handleRemoveActiveGroupMember(member)} type="button">{t('remove')}</button>
                     </div>
                   ) : null}
                 </div>
               ))
             ) : (
-              <span className="settings-card__muted">Loading members\u2026</span>
+              <span className="settings-card__muted">{t('loading_members')}</span>
             )}
           </div>
         </div>
       ) : null}
       <div className="settings-card">
         <div className="settings-card__header">
-          <h3>Settings</h3>
+          <h3>{t('settings')}</h3>
         </div>
         <div className="settings-card__actions">
           <button className="secondary-action" onClick={auth.handleReauthenticate} type="button">
-            Refresh Session
+            {t('refresh_session')}
           </button>
           <button className="secondary-action" type="button" disabled>
-            Link Another Device
+            {t('link_device')}
           </button>
           <button className="danger-action" onClick={auth.handleForgetDevice} type="button">
-            Sign Out
+            {t('sign_out')}
           </button>
         </div>
       </div>
       <div className="settings-card">
         <div className="settings-card__header">
-          <h3>Encryption</h3>
+          <h3>{t('encryption')}</h3>
         </div>
         {chatSessions.safetyNumbers.length > 0 ? (
           <div className="settings-card__list">
@@ -112,25 +113,25 @@ export function DetailRail({
                 </div>
                 <div className="settings-card__row-actions">
                   {!entry.verified ? (
-                    <button className="mini-action" disabled={chatSessions.verifyingSafetyDeviceId === entry.peerDeviceId} onClick={() => void chatSessions.handleVerifyPeerSafetyNumber(entry.peerDeviceId, chatList.activeChatId)} type="button">Verify</button>
+                    <button className="mini-action" disabled={chatSessions.verifyingSafetyDeviceId === entry.peerDeviceId} onClick={() => void chatSessions.handleVerifyPeerSafetyNumber(entry.peerDeviceId, chatList.activeChatId)} type="button">{t('verify')}</button>
                   ) : (
-                    <span style={{ fontSize: 12, color: 'var(--green)' }}>Verified</span>
+                    <span style={{ fontSize: 12, color: 'var(--green)' }}>{t('verified')}</span>
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <span className="settings-card__muted">No safety numbers available</span>
+          <span className="settings-card__muted">{t('no_safety_numbers')}</span>
         )}
       </div>
       {call.activeCall ? (
         <div className="settings-card">
           <div className="settings-card__header">
-            <h3>Active Call</h3>
+            <h3>{t('active_call')}</h3>
           </div>
           <div className="settings-card__actions">
-            <button className="danger-action" onClick={call.handleEndCall} type="button">End Call</button>
+            <button className="danger-action" onClick={call.handleEndCall} type="button">{t('end_call')}</button>
           </div>
           {featuredRemoteTrack ? (
             <div style={{ padding: '0 16px 16px' }}>

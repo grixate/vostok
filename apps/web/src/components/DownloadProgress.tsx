@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { t } from '../lib/i18n.ts'
 
 type DownloadProgressProps = {
   progress: number // 0.0 to 1.0, -1 for indeterminate
@@ -29,7 +30,7 @@ export function DownloadProgress({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onCancel() } }}
-      aria-label="Cancel download"
+      aria-label={t('cancel_download')}
     >
       <div className="download-progress__ring" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
