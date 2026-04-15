@@ -1,0 +1,5 @@
+# Rust build artifacts — never commit these.
+target/
+
+# Tauri bundle outputs
+gen/schemas/
