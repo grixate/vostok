@@ -117,87 +117,10 @@ defmodule VostokServerWeb.GroupFlowTest do
            } = json_response(remove_avatar_conn, 200)
   end
 
-  test "group sender keys can be distributed and fetched by recipient devices", %{conn: conn} do
-    %{token: alice_token} = register_device(conn, "alice-sender")
-    %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-sender")
-
-    %{token: charlie_token, device_id: charlie_device_id} =
-      register_device(build_conn(), "charlie-sender")
-
-    create_group_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{alice_token}")
-      |> post("/api/v1/chats/group", %{
-        title: "Sender Keys",
-        members: ["bob-sender", "charlie-sender"]
-      })
-
-    assert %{
-             "chat" => %{
-               "id" => chat_id
-             }
-           } = json_response(create_group_conn, 201)
-
-    bob_wrapped_key = Base.encode64("wrapped-for-bob")
-    charlie_wrapped_key = Base.encode64("wrapped-for-charlie")
-
-    distribute_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{alice_token}")
-      |> post("/api/v1/chats/#{chat_id}/sender-keys", %{
-        key_id: "sender-key-1",
-        algorithm: "x25519+sealedbox",
-        wrapped_keys: %{
-          bob_device_id => bob_wrapped_key,
-          charlie_device_id => charlie_wrapped_key
-        }
-      })
-
-    assert %{
-             "sender_keys" => sender_keys
-           } = json_response(distribute_conn, 201)
-
-    assert length(sender_keys) == 2
-
-    bob_list_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{bob_token}")
-      |> get("/api/v1/chats/#{chat_id}/sender-keys")
-
-    assert %{
-             "sender_keys" => [
-               %{
-                 "key_id" => "sender-key-1",
-                 "recipient_device_id" => ^bob_device_id,
-                 "wrapped_sender_key" => ^bob_wrapped_key,
-                 "status" => "active"
-               }
-             ]
-           } = json_response(bob_list_conn, 200)
-
-    charlie_list_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{charlie_token}")
-      |> get("/api/v1/chats/#{chat_id}/sender-keys")
-
-    assert %{
-             "sender_keys" => [
-               %{
-                 "key_id" => "sender-key-1",
-                 "recipient_device_id" => ^charlie_device_id,
-                 "wrapped_sender_key" => ^charlie_wrapped_key,
-                 "status" => "active"
-               }
-             ]
-           } = json_response(charlie_list_conn, 200)
-  end
-
-  test "group messages use signal transport while legacy sender-key payloads remain backwards compatible", %{
-    conn: conn
-  } do
+  test "group messages require signal-v2 transport with per-device envelopes", %{conn: conn} do
     %{token: alice_token, device_id: alice_device_id} = register_device(conn, "alice-group-transport")
 
-    %{token: bob_token, device_id: bob_device_id} =
+    %{token: _bob_token, device_id: bob_device_id} =
       register_device(build_conn(), "bob-group-transport")
 
     create_group_conn =
@@ -210,27 +133,13 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert %{"chat" => %{"id" => chat_id}} = json_response(create_group_conn, 201)
 
-    distribute_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{alice_token}")
-      |> post("/api/v1/chats/#{chat_id}/sender-keys", %{
-        key_id: "sender-key-transport",
-        sender_key_epoch: 1,
-        algorithm: "p256-ecdh+a256gcm",
-        wrapped_keys: %{
-          bob_device_id => Base.encode64("wrapped-for-bob")
-        }
-      })
-
-    assert %{"sender_keys" => [_]} = json_response(distribute_conn, 201)
-
     missing_signal_transport_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/#{chat_id}/messages", %{
-        client_id: "legacy-group-message",
+        client_id: "no-scheme-group-message",
         message_kind: "text",
-        ciphertext: Base.encode64("legacy-ciphertext")
+        ciphertext: Base.encode64("opaque")
       })
 
     assert %{"error" => "validation", "message" => transport_error_message} =
@@ -238,20 +147,20 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert String.contains?(
              transport_error_message,
-             "Group messages must use crypto_scheme=signal-v1"
+             "Group messages must use crypto_scheme=signal-v2"
            )
 
     alice_envelope = Base.encode64("wrapped-for-alice")
-    bob_envelope = Base.encode64("wrapped-for-bob-signal")
+    bob_envelope = Base.encode64("wrapped-for-bob")
 
     signal_group_message_conn =
       build_conn()
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/#{chat_id}/messages", %{
-        client_id: "signal-group-message",
+        client_id: "signal-v2-group-message",
         message_kind: "text",
-        crypto_scheme: "signal-v1",
-        header: Base.encode64("{\"algorithm\":\"signal-v1\"}"),
+        crypto_scheme: "signal-v2",
+        header: Base.encode64("{\"algorithm\":\"signal-v2\",\"kyber\":true}"),
         ciphertext: Base.encode64("group-ciphertext"),
         recipient_envelopes: %{
           alice_device_id => alice_envelope,
@@ -261,45 +170,14 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert %{
              "message" => %{
-               "client_id" => "signal-group-message",
-               "crypto_scheme" => "signal-v1",
+               "client_id" => "signal-v2-group-message",
+               "crypto_scheme" => "signal-v2",
                "recipient_envelope" => ^alice_envelope,
                "recipient_device_ids" => recipient_device_ids
              }
            } = json_response(signal_group_message_conn, 201)
 
     assert Enum.sort(recipient_device_ids) == Enum.sort([alice_device_id, bob_device_id])
-
-    legacy_sender_key_message_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{alice_token}")
-      |> post("/api/v1/chats/#{chat_id}/messages", %{
-        client_id: "legacy-sender-key-group-message",
-        message_kind: "text",
-        crypto_scheme: "group_sender_key_v1",
-        sender_key_id: "sender-key-transport",
-        sender_key_epoch: 1,
-        header: Base.encode64("{\"algorithm\":\"vostok-group-sender-key-v1\"}"),
-        ciphertext: Base.encode64("group-ciphertext")
-      })
-
-    assert %{
-             "message" => %{
-               "client_id" => "legacy-sender-key-group-message",
-               "crypto_scheme" => "group_sender_key_v1",
-               "sender_key_id" => "sender-key-transport",
-               "sender_key_epoch" => 1
-             }
-           } = json_response(legacy_sender_key_message_conn, 201)
-
-    # The recipient can still fetch the active sender key state for decryptability.
-    bob_sender_key_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{bob_token}")
-      |> get("/api/v1/chats/#{chat_id}/sender-keys")
-
-    assert %{"sender_keys" => [%{"key_id" => "sender-key-transport"}]} =
-             json_response(bob_sender_key_conn, 200)
   end
 
   test "group message permissions enforce admin pinning and admin-or-owner delete", %{conn: conn} do
@@ -322,7 +200,7 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> post("/api/v1/chats/#{chat_id}/messages", %{
         client_id: "bob-group-perms-message",
         message_kind: "text",
-        crypto_scheme: "signal-v1",
+        crypto_scheme: "signal-v2",
         ciphertext: Base.encode64("member-message"),
         recipient_envelopes: %{
           alice_device_id => Base.encode64("wrapped-for-alice"),
@@ -356,7 +234,7 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> patch("/api/v1/chats/#{chat_id}/messages/#{message_id}", %{
         client_id: "alice-edit-foreign-message",
         message_kind: "text",
-        crypto_scheme: "signal-v1",
+        crypto_scheme: "signal-v2",
         ciphertext: Base.encode64("admin-cannot-edit-member"),
         recipient_envelopes: %{
           alice_device_id => Base.encode64("wrapped-edit-for-alice"),
@@ -380,48 +258,6 @@ defmodule VostokServerWeb.GroupFlowTest do
     assert is_binary(deleted_at)
   end
 
-  test "public channels can be created and joined, while subscriber summaries hide member identities", %{conn: conn} do
-    %{token: alice_token} = register_device(conn, "alice-channel")
-    %{token: bob_token} = register_device(build_conn(), "bob-channel")
-
-    create_channel_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{alice_token}")
-      |> post("/api/v1/chats/channel", %{
-        title: "Announcements",
-        description: "Important updates",
-        is_public: true,
-        allow_comments: true
-      })
-
-    assert %{"chat" => %{"id" => chat_id, "type" => "channel", "membership_role" => "owner"}} =
-             json_response(create_channel_conn, 201)
-
-    list_public_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{bob_token}")
-      |> get("/api/v1/channels")
-
-    assert %{"channels" => [%{"id" => ^chat_id, "is_public" => true}]} = json_response(list_public_conn, 200)
-
-    join_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{bob_token}")
-      |> post("/api/v1/chats/#{chat_id}/join", %{})
-
-    assert %{"chat" => %{"id" => ^chat_id, "membership_role" => "member"}} = json_response(join_conn, 201)
-
-    chats_conn =
-      build_conn()
-      |> put_req_header("authorization", "Bearer #{bob_token}")
-      |> get("/api/v1/chats")
-
-    assert %{"chats" => chats} = json_response(chats_conn, 200)
-    bob_summary = Enum.find(chats, &(&1["id"] == chat_id))
-    assert bob_summary["participant_usernames"] == []
-    assert bob_summary["member_count"] == 2
-  end
-
   test "invite links allow joining private chats and channel views deduplicate per user", %{conn: conn} do
     %{token: alice_token, device_id: alice_device_id} = register_device(conn, "alice-invite")
     %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-invite")
@@ -431,7 +267,6 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> put_req_header("authorization", "Bearer #{alice_token}")
       |> post("/api/v1/chats/channel", %{
         title: "Private Recipes",
-        is_public: false,
         allow_comments: true
       })
 
@@ -457,7 +292,7 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> post("/api/v1/chats/#{chat_id}/messages", %{
         client_id: "channel-post-1",
         message_kind: "text",
-        crypto_scheme: "signal-v1",
+        crypto_scheme: "signal-v2",
         ciphertext: Base.encode64("channel-post"),
         recipient_envelopes: %{
           alice_device_id => Base.encode64("wrapped-for-alice"),
@@ -494,6 +329,14 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
       |> Base.encode64()
 
+    kyber_prekey_raw = :crypto.strong_rand_bytes(1568)
+    kyber_prekey = Base.encode64(kyber_prekey_raw)
+
+    kyber_prekey_signature =
+      kyber_prekey_raw
+      |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
+      |> Base.encode64()
+
     register_conn =
       post(conn, "/api/v1/register", %{
         username: username,
@@ -502,6 +345,8 @@ defmodule VostokServerWeb.GroupFlowTest do
         device_encryption_public_key: encryption_public_key,
         signed_prekey: signed_prekey,
         signed_prekey_signature: signed_prekey_signature,
+        kyber_prekey: kyber_prekey,
+        kyber_prekey_signature: kyber_prekey_signature,
         one_time_prekeys: [Base.encode64(:crypto.strong_rand_bytes(65))]
       })
 

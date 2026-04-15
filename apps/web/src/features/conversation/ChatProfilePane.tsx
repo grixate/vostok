@@ -331,24 +331,14 @@ export function ChatProfilePane({ activeChat, chatList, groupChat, onClose }: Ch
               />
 
               {activeChat.type === 'channel' ? (
-                <>
-                  <label className="chat-profile-pane__toggle-row">
-                    <span>{t('public_channel')}</span>
-                    <input
-                      type="checkbox"
-                      checked={groupChat.chatIsPublic}
-                      onChange={(event) => groupChat.setChatIsPublic(event.target.checked)}
-                    />
-                  </label>
-                  <label className="chat-profile-pane__toggle-row">
-                    <span>{t('allow_comments')}</span>
-                    <input
-                      type="checkbox"
-                      checked={groupChat.chatAllowComments}
-                      onChange={(event) => groupChat.setChatAllowComments(event.target.checked)}
-                    />
-                  </label>
-                </>
+                <label className="chat-profile-pane__toggle-row">
+                  <span>{t('allow_comments')}</span>
+                  <input
+                    type="checkbox"
+                    checked={groupChat.chatAllowComments}
+                    onChange={(event) => groupChat.setChatAllowComments(event.target.checked)}
+                  />
+                </label>
               ) : null}
 
               <div className="chat-profile-pane__permission-grid">

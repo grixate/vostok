@@ -41,13 +41,11 @@ export function useMediaCapture(
       message_kind: string
       header?: string
       crypto_scheme?: string
-      sender_key_id?: string
-      sender_key_epoch?: number
       reply_to_message_id?: string
       recipient_envelopes?: Record<string, string>
       established_session_ids?: string[]
     }
-    deliveryMode: 'group_sender_key' | 'session'
+    deliveryMode: 'session'
   }>,
   queueMessageForOutbox: (
     chatId: string,
@@ -57,8 +55,6 @@ export function useMediaCapture(
       message_kind: string
       header?: string
       crypto_scheme?: string
-      sender_key_id?: string
-      sender_key_epoch?: number
       reply_to_message_id?: string
       recipient_envelopes?: Record<string, string>
       established_session_ids?: string[]
@@ -456,10 +452,7 @@ export function useMediaCapture(
         }
         setBanner({
           tone: 'success',
-          message:
-            deliveryMode === 'group_sender_key'
-              ? 'Encrypted attachment uploaded and delivered with Sender Key transport.'
-              : 'Encrypted attachment uploaded and delivered with session transport.'
+          message: 'Encrypted attachment uploaded and delivered.'
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to send attachment.'

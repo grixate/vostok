@@ -8,6 +8,7 @@ import { formatRelativeTime } from '../../utils/format.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
 import { readChatPreview } from '../../lib/message-cache.ts'
 import {
+  MegaphoneIcon,
   UserSmallIcon,
   UsersSmallIcon,
   CheckCheckSmallIcon,
@@ -182,7 +183,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
                   : chat.type === 'group'
                     ? '👥'
                     : chat.type === 'channel'
-                      ? '📢'
+                      ? <MegaphoneIcon width={22} height={22} />
                       : chat.title.slice(0, 1)
               }
               avatarUrl={chat.is_self_chat

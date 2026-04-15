@@ -31,10 +31,9 @@ This package is the current web shell for Vostok through the early Stage 3 messa
 - reply composer state with inline reply previews for current-thread messages
 - message edit/delete controls for outgoing messages
 - single pinned-message controls with a pinned-message banner in the active thread
-- uniform `signal-v1` outbound message transport for new direct and group messages
+- uniform `signal-v2` (PQXDH) outbound message transport for new direct and group messages, delivered by the official `@signalapp/libsignal` Rust library over Tauri IPC
 - on-demand Signal session bootstrap from published prekey bundles for messaging and call E2EE
 - per-device recipient-envelope coverage enforcement for multi-device decryptability
-- legacy sender-key and recipient-wrapped records kept only for backward-compatible decrypt paths
 - IndexedDB-backed local message cache for the selected chat
 - client-side safety-number display for published remote identity keys in the active chat
 - Phoenix Channel subscription for live updates in the active chat

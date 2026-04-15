@@ -7,8 +7,6 @@ type OutboxRecord = {
     message_kind: string
     header?: string
     crypto_scheme?: string
-    sender_key_id?: string
-    sender_key_epoch?: number
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
     established_session_ids?: string[]

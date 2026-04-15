@@ -15,7 +15,6 @@ defmodule VostokServer.Messaging.Chat do
     field :metadata_encrypted, :binary
     field :description, :string
     field :avatar_path, :string
-    field :is_public, :boolean, default: false
     field :allow_comments, :boolean, default: true
     field :permissions_json, :map, default: %{}
 
@@ -35,7 +34,6 @@ defmodule VostokServer.Messaging.Chat do
       :metadata_encrypted,
       :description,
       :avatar_path,
-      :is_public,
       :allow_comments,
       :permissions_json
     ])

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatSummary } from '../lib/api.ts'
-import { generateSignalIdentity, generateSignalPrekeys } from '../lib/signal-keys.ts'
-import { initSignalStore, arrayBufferToBase64 } from '../lib/signal-store.ts'
+import { registerDeviceKeys } from '../lib/signal-bridge.ts'
 import { createServerApiClient } from '../lib/server-api.ts'
 import { createServerRealtimeClient } from '../lib/server-realtime.ts'
 import {
@@ -372,62 +371,45 @@ export function useServers(
             // Listing devices is optional at bootstrap time.
           }
 
-          // Detect legacy P-256 device and force re-registration
-          if (nextStoredDevice && nextStoredDevice.privateKeyPkcs8Base64 && !nextStoredDevice.identityKeyPairJson) {
+          // Detect legacy devices whose identity keys lived in the JS
+          // privacyresearch store. The Rust store owns identity now, so any
+          // pre-migration device entry must be discarded and re-registered.
+          if (
+            nextStoredDevice &&
+            (nextStoredDevice.privateKeyPkcs8Base64 || nextStoredDevice.identityKeyPairJson)
+          ) {
             nextStoredDevice = null
             applyServerUpdate(server.id, (current) => ({ ...current, device: null }))
           }
 
           if (!nextStoredDevice) {
             try {
-              const signalIdentity = await generateSignalIdentity()
-              const signedPreKeyId = 1
-              const oneTimePreKeyStartId = 1
-              const signalPrekeys = await generateSignalPrekeys(
-                signalIdentity.identityKeyPair,
-                signedPreKeyId,
-                oneTimePreKeyStartId,
-                16
-              )
-
-              // Initialize Signal store and persist keys
-              const identityKeyPairJson = JSON.stringify({
-                pubKey: arrayBufferToBase64(signalIdentity.identityKeyPair.pubKey),
-                privKey: arrayBufferToBase64(signalIdentity.identityKeyPair.privKey)
-              })
-              const store = initSignalStore(identityKeyPairJson, signalIdentity.registrationId)
-
-              // Persist signed prekey and one-time prekeys in Signal store
-              await store.storeSignedPreKey(signedPreKeyId, signalPrekeys.signedPreKey.keyPair)
-              for (const preKey of signalPrekeys.preKeys) {
-                await store.storePreKey(preKey.keyId, preKey.keyPair)
-              }
-
-              const identityPubBase64 = arrayBufferToBase64(signalIdentity.identityKeyPair.pubKey)
-              const signedPreKeyPubBase64 = arrayBufferToBase64(signalPrekeys.signedPreKey.keyPair.pubKey)
-              const signedPreKeySigBase64 = arrayBufferToBase64(signalPrekeys.signedPreKey.signature)
+              const keys = await registerDeviceKeys(server.id, 16)
 
               const linked = await connection.api.linkDevice(activeAuth.accessToken, {
                 device_name: 'Web',
-                device_identity_public_key: identityPubBase64,
-                device_encryption_public_key: identityPubBase64,
-                signed_prekey: signedPreKeyPubBase64,
-                signed_prekey_signature: signedPreKeySigBase64,
-                registration_id: signalIdentity.registrationId,
-                signed_prekey_id: signedPreKeyId,
-                one_time_prekeys: signalPrekeys.preKeys.map((key) => ({
-                  key_id: key.keyId,
-                  public_key: arrayBufferToBase64(key.keyPair.pubKey)
+                device_identity_public_key: keys.identity_public_key_b64,
+                device_encryption_public_key: keys.identity_public_key_b64,
+                signed_prekey: keys.signed_prekey.public_key_b64,
+                signed_prekey_signature: keys.signed_prekey.signature_b64,
+                kyber_prekey: keys.kyber_prekey.public_key_b64,
+                kyber_prekey_signature: keys.kyber_prekey.signature_b64,
+                kyber_prekey_id: keys.kyber_prekey.key_id,
+                registration_id: keys.registration_id,
+                signed_prekey_id: keys.signed_prekey.key_id,
+                one_time_prekeys: keys.one_time_prekeys.map((key) => ({
+                  key_id: key.key_id,
+                  public_key: key.public_key_b64
                 }))
               })
 
               nextStoredDevice = {
                 deviceId: linked.device.id,
                 deviceName: linked.device.device_name,
-                registrationId: signalIdentity.registrationId,
-                identityKeyPairJson,
-                signedPreKeyIdCounter: signedPreKeyId,
-                oneTimePreKeyIdCounter: oneTimePreKeyStartId + signalPrekeys.preKeys.length,
+                registrationId: keys.registration_id,
+                signedPreKeyIdCounter: keys.signed_prekey.key_id,
+                oneTimePreKeyIdCounter:
+                  keys.signed_prekey.key_id + keys.one_time_prekeys.length,
                 sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                 sessionToken: activeAuth.accessToken,
                 username: me.user.username
@@ -437,9 +419,6 @@ export function useServers(
             } catch (deviceError) {
               console.warn(`[useServers] device bootstrap failed for ${server.url}:`, deviceError)
             }
-          } else if (nextStoredDevice.identityKeyPairJson) {
-            // Re-initialize Signal store from existing device
-            initSignalStore(nextStoredDevice.identityKeyPairJson, nextStoredDevice.registrationId)
           }
 
           let chats = listChatsResponse.chats

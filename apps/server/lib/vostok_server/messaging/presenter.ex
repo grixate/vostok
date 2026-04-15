@@ -9,7 +9,6 @@ defmodule VostokServer.Messaging.Presenter do
     Chat,
     ChatMember,
     ChatReadState,
-    GroupSenderKey,
     Message,
     MessageReaction,
     MessageRecipient
@@ -66,7 +65,6 @@ defmodule VostokServer.Messaging.Presenter do
       :metadata_encrypted,
       :description,
       :avatar_path,
-      :is_public,
       :allow_comments,
       :permissions_json
     ])
@@ -88,7 +86,6 @@ defmodule VostokServer.Messaging.Presenter do
       :metadata_encrypted,
       :description,
       :avatar_path,
-      :is_public,
       :allow_comments,
       :permissions_json
     ])
@@ -153,7 +150,6 @@ defmodule VostokServer.Messaging.Presenter do
       message_count: chat.message_count,
       member_count: member_count,
       membership_role: membership_role,
-      is_public: Map.get(chat, :is_public, false),
       allow_comments: Map.get(chat, :allow_comments, true),
       permissions: permissions,
       can_post: can_post?(chat.type, membership_role, permissions),
@@ -174,22 +170,6 @@ defmodule VostokServer.Messaging.Presenter do
     }
   end
 
-  def present_group_sender_key(%GroupSenderKey{} = group_sender_key) do
-    %{
-      id: group_sender_key.id,
-      chat_id: group_sender_key.chat_id,
-      owner_device_id: group_sender_key.owner_device_id,
-      recipient_device_id: group_sender_key.recipient_device_id,
-      key_id: group_sender_key.key_id,
-      sender_key_epoch: group_sender_key.sender_key_epoch,
-      algorithm: group_sender_key.algorithm,
-      status: group_sender_key.status,
-      wrapped_sender_key: Base.encode64(group_sender_key.wrapped_sender_key),
-      inserted_at: iso_or_nil(group_sender_key.inserted_at),
-      updated_at: iso_or_nil(group_sender_key.updated_at)
-    }
-  end
-
   def present_message(message, current_device_id, current_user_id) do
     current_recipient_envelope =
       Enum.find(message.recipient_envelopes, &(&1.device_id == current_device_id))
@@ -200,8 +180,6 @@ defmodule VostokServer.Messaging.Presenter do
       client_id: message.client_id,
       message_kind: message.message_kind,
       crypto_scheme: message.crypto_scheme,
-      sender_key_id: message.sender_key_id,
-      sender_key_epoch: message.sender_key_epoch,
       sender_device_id: message.sender_device_id,
       sender_username: sender_username_for(message),
       inserted_at: DateTime.to_iso8601(message.inserted_at),

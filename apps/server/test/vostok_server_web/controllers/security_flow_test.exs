@@ -23,6 +23,8 @@ defmodule VostokServerWeb.SecurityFlowTest do
         device_encryption_public_key: linked_material.encryption_public_key,
         signed_prekey: linked_material.signed_prekey,
         signed_prekey_signature: linked_material.signed_prekey_signature,
+        kyber_prekey: linked_material.kyber_prekey,
+        kyber_prekey_signature: linked_material.kyber_prekey_signature,
         one_time_prekeys: [linked_material.one_time_prekey]
       })
 
@@ -229,6 +231,8 @@ defmodule VostokServerWeb.SecurityFlowTest do
         device_encryption_public_key: material.encryption_public_key,
         signed_prekey: material.signed_prekey,
         signed_prekey_signature: material.signed_prekey_signature,
+        kyber_prekey: material.kyber_prekey,
+        kyber_prekey_signature: material.kyber_prekey_signature,
         one_time_prekeys: [material.one_time_prekey]
       })
 
@@ -248,11 +252,18 @@ defmodule VostokServerWeb.SecurityFlowTest do
     signed_prekey_signature_raw =
       :crypto.sign(:eddsa, :none, signed_prekey_raw, [identity_private_key_raw, :ed25519])
 
+    kyber_prekey_raw = :crypto.strong_rand_bytes(1568)
+
+    kyber_prekey_signature_raw =
+      :crypto.sign(:eddsa, :none, kyber_prekey_raw, [identity_private_key_raw, :ed25519])
+
     %{
       identity_public_key: Base.encode64(identity_public_key_raw),
       encryption_public_key: Base.encode64(:crypto.strong_rand_bytes(65)),
       signed_prekey: Base.encode64(signed_prekey_raw),
       signed_prekey_signature: Base.encode64(signed_prekey_signature_raw),
+      kyber_prekey: Base.encode64(kyber_prekey_raw),
+      kyber_prekey_signature: Base.encode64(kyber_prekey_signature_raw),
       one_time_prekey: Base.encode64(:crypto.strong_rand_bytes(65))
     }
   end

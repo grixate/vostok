@@ -131,6 +131,5 @@ If the native Membrane dependencies fail to find OpenSSL during compile, export:
 
 ## Next Expected Work
 
-- continue hardening the live `signal-v1` messaging and calling transport
-- treat sender-key and explicit session bootstrap endpoints as legacy compatibility surfaces only
+- continue hardening the live `signal-v2` (PQXDH) messaging and calling transport
 - safety-number verification UX

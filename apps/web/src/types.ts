@@ -36,12 +36,17 @@ export type StoredDevice = {
   deviceId: string
   deviceName: string
   registrationId: number
-  identityKeyPairJson: string
   signedPreKeyIdCounter: number
   oneTimePreKeyIdCounter: number
   sessionExpiresAt: string
   sessionToken: string
   username: string
+  /**
+   * @deprecated Legacy field from the pre-libsignal JS Signal port. Still
+   * read on load from persisted state so pre-migration devices can be
+   * detected and forcibly re-registered; never written again.
+   */
+  identityKeyPairJson?: string
   /** @deprecated Legacy P-256 field — presence triggers re-registration */
   privateKeyPkcs8Base64?: string
 }

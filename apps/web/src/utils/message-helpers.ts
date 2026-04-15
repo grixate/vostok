@@ -3,6 +3,7 @@ import type { CachedMessage } from '../lib/message-cache.ts'
 import type { AttachmentDescriptor } from '../types.ts'
 import { decryptMessageText } from '../lib/message-vault.ts'
 import { base64ToBytes } from '../lib/base64.ts'
+import { getServerIdFromQualifiedChatId } from '../lib/multi-server.ts'
 import { compareMessageOrder } from './chat-helpers.ts'
 
 // Local plaintext cache for outgoing messages so the sender can read their own
@@ -206,9 +207,13 @@ function lookupSentPlaintext(clientId: string | undefined, editedAt?: string | n
 }
 
 function isSignalStoreNotInitializedError(error: unknown): boolean {
+  // The Rust store is always available once the app has launched. This
+  // helper remains as a place-holder for the pre-registration window where
+  // the local identity hasn't been created yet; kept so call sites that
+  // still branch on it continue to compile.
   return (
     error instanceof Error &&
-    error.message.includes('Signal store not initialized. Call initSignalStore() first.')
+    error.message.includes('Signal message decryption requires')
   )
 }
 
@@ -436,6 +441,7 @@ export async function projectMessage(
     const decryptedText = await decryptMessageText(
       message,
       currentDeviceId,
+      getServerIdFromQualifiedChatId(chatScopeId),
       encryptionPrivateKeyPkcs8Base64
     )
     const parsedPayload = parseDecryptedPayload(decryptedText)

@@ -3,11 +3,9 @@ import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { SidebarHeader } from './SidebarHeader.tsx'
 import { SidebarChatList } from './SidebarChatList.tsx'
-import { ChannelDirectory } from './ChannelDirectory.tsx'
 import { BottomTabBar } from './BottomTabBar.tsx'
 import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
-import type { useCall } from '../../hooks/useCall.ts'
 import type { MergedChatSummary } from '../../lib/multi-server.ts'
 
 const MembersPane = lazy(async () => {
@@ -15,20 +13,14 @@ const MembersPane = lazy(async () => {
   return { default: module.MembersPane }
 })
 
-const CallsTab = lazy(async () => {
-  const module = await import('../calls/CallsTab.tsx')
-  return { default: module.CallsTab }
-})
-
 type SidebarProps = {
   desktop: ReturnType<typeof useDesktop>
   chatList: ReturnType<typeof useChatList>
   activeChat: MergedChatSummary | null
   draftChatIds: Map<string, string>
-  call: ReturnType<typeof useCall>
 }
 
-export function Sidebar({ desktop, chatList, activeChat, draftChatIds, call }: SidebarProps) {
+export function Sidebar({ desktop, chatList, activeChat, draftChatIds }: SidebarProps) {
   const { sidebarTab, setSidebarTab, setSettingsOverlayOpen } = useUIContext()
 
   function handleTabChange(tab: typeof sidebarTab) {
@@ -43,20 +35,6 @@ export function Sidebar({ desktop, chatList, activeChat, draftChatIds, call }: S
           <SidebarHeader desktop={desktop} chatList={chatList} />
           <SidebarChatList chatList={chatList} activeChat={activeChat} draftChatIds={draftChatIds} />
         </>
-      )}
-      {sidebarTab === 'calls' && (
-        <Suspense
-          fallback={
-            <div className="empty-state" style={{ flex: 1 }}>
-              <span className="message-thread__loading-spinner" />
-            </div>
-          }
-        >
-          <CallsTab call={call} />
-        </Suspense>
-      )}
-      {sidebarTab === 'channels' && (
-        <ChannelDirectory chatList={chatList} />
       )}
       {sidebarTab === 'members' && (
         <>

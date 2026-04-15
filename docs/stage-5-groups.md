@@ -31,12 +31,7 @@ This repository now includes production-ready group-chat foundations.
 - Web group-admin rename form in the detail rail for the active group chat
 - Web group-member promote/demote/remove controls for non-self members in the detail rail
 - Detail-rail chat media gallery for recent attachments in the active chat
-- Group Sender Key distribution API:
-  - `POST /api/v1/chats/:chat_id/sender-keys`
-- Group Sender Key recipient inbox API:
-  - `GET /api/v1/chats/:chat_id/sender-keys`
-- Legacy Sender Key history import remains available so older group messages stay decryptable
-- New group messages now use the same per-device `signal-v1` transport as direct chats
+- Group messages use the same per-device `signal-v2` (PQXDH) transport as direct chats, delivered by the official `@signalapp/libsignal` Rust library running in the Tauri shell. The legacy `group_sender_key_v1` distribution endpoints have been removed.
 
 ## Not Yet Implemented
 
@@ -44,4 +39,4 @@ This repository now includes production-ready group-chat foundations.
 
 ## Current Meaning of Stage 5
 
-The backend now supports real group chat containers with multiple members, replies/reactions/moderation controls, and the same Signal-based outbound transport contract used by direct chats. Sender-key records are still retained only as a backwards-compatibility path for older history.
+The backend supports real group chat containers with multiple members, replies/reactions/moderation controls, and the same Signal-based outbound transport contract used by direct chats. Group messages use per-device pairwise fanout under `signal-v2` — the legacy sender-key subsystem and its REST endpoints have been removed.

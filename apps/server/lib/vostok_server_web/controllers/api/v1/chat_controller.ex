@@ -416,23 +416,6 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     end
   end
 
-  def list_public_channels(conn, _params) do
-    channels = Messaging.list_public_channels(conn.assigns.current_user.id, device_id(conn))
-    json(conn, %{channels: channels})
-  end
-
-  def join_channel(conn, %{"chat_id" => chat_id}) do
-    case Messaging.join_channel(chat_id, conn.assigns.current_user.id) do
-      {:ok, chat} ->
-        conn
-        |> put_status(:created)
-        |> json(%{chat: chat})
-
-      {:error, {kind, message}} ->
-        render_error(conn, kind, message)
-    end
-  end
-
   def serve_chat_avatar(conn, %{"chat_id" => chat_id}) do
     case VostokServer.Repo.get(VostokServer.Messaging.Chat, chat_id) do
       %{avatar_path: path} when is_binary(path) ->
@@ -499,37 +482,6 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     case Messaging.record_message_view(chat_id, message_id, conn.assigns.current_user.id) do
       {:ok, result} ->
         json(conn, result)
-
-      {:error, {kind, message}} ->
-        render_error(conn, kind, message)
-    end
-  end
-
-  def list_group_sender_keys(conn, %{"chat_id" => chat_id}) do
-    case Messaging.list_group_sender_keys(
-           chat_id,
-           conn.assigns.current_user.id,
-           device_id(conn)
-         ) do
-      {:ok, sender_keys} ->
-        json(conn, %{sender_keys: sender_keys})
-
-      {:error, {kind, message}} ->
-        render_error(conn, kind, message)
-    end
-  end
-
-  def distribute_group_sender_keys(conn, %{"chat_id" => chat_id} = params) do
-    case Messaging.distribute_group_sender_keys(
-           chat_id,
-           conn.assigns.current_user.id,
-           device_id(conn),
-           params
-         ) do
-      {:ok, sender_keys} ->
-        conn
-        |> put_status(:created)
-        |> json(%{sender_keys: sender_keys})
 
       {:error, {kind, message}} ->
         render_error(conn, kind, message)

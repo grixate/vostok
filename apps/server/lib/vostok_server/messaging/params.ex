@@ -145,50 +145,6 @@ defmodule VostokServer.Messaging.Params do
     end
   end
 
-  def normalize_sender_key_distribution(attrs) do
-    with {:ok, key_id} <- fetch_string(attrs, "key_id", "sender key id"),
-         {:ok, sender_key_epoch} <- fetch_optional_integer(attrs, "sender_key_epoch"),
-         {:ok, wrapped_sender_keys} <- fetch_sender_key_map(attrs, "wrapped_keys"),
-         {:ok, algorithm} <- fetch_optional_string(attrs, "algorithm"),
-         {:ok, recipient_wrapped_keys} <- decode_sender_key_map(wrapped_sender_keys) do
-      recipient_device_ids = recipient_wrapped_keys |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-
-      {:ok,
-       %{
-         key_id: key_id,
-         sender_key_epoch: sender_key_epoch || 0,
-         algorithm: algorithm || "p256-ecdh+a256gcm",
-         recipient_device_ids: recipient_device_ids,
-         recipient_wrapped_keys: recipient_wrapped_keys
-       }}
-    end
-  end
-
-  def resolve_group_sender_key_recipients(chat_id, recipient_device_ids)
-      when is_list(recipient_device_ids) do
-    recipient_device_ids = Enum.uniq(recipient_device_ids)
-
-    devices =
-      from(chat_member in ChatMember,
-        join: device in Device,
-        on: device.user_id == chat_member.user_id and is_nil(device.revoked_at),
-        where: chat_member.chat_id == ^chat_id and device.id in ^recipient_device_ids,
-        select: device.id
-      )
-      |> Repo.all()
-      |> MapSet.new()
-
-    expected = MapSet.new(recipient_device_ids)
-
-    if MapSet.equal?(devices, expected) do
-      {:ok, recipient_device_ids}
-    else
-      {:error,
-       {:validation,
-        "wrapped_keys must only contain active recipient devices in this group chat."}}
-    end
-  end
-
   def resolve_safety_peer_device(chat_id, peer_device_id) do
     from(chat_member in ChatMember,
       join: user in User,
@@ -300,55 +256,4 @@ defmodule VostokServer.Messaging.Params do
 
   def normalize_string(_), do: nil
 
-  defp fetch_sender_key_map(attrs, key) do
-    case Map.get(attrs, key) do
-      map when is_map(map) and map_size(map) > 0 ->
-        if Enum.all?(map, fn {map_key, _value} -> is_binary(map_key) end) do
-          {:ok, map}
-        else
-          {:error, {:validation, "#{key} must be keyed by recipient device id strings."}}
-        end
-
-      _ ->
-        {:error, {:validation, "#{key} must be a non-empty object keyed by recipient device id."}}
-    end
-  end
-
-  defp decode_sender_key_map(sender_key_map) when is_map(sender_key_map) do
-    sender_key_map
-    |> Enum.reduce_while({:ok, []}, fn {recipient_device_id, wrapped_sender_key_base64},
-                                       {:ok, decoded} ->
-      case decode_sender_key_payload(recipient_device_id, wrapped_sender_key_base64) do
-        {:ok, wrapped_sender_key} ->
-          {:cont, {:ok, [{recipient_device_id, wrapped_sender_key} | decoded]}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      {:ok, decoded} -> {:ok, Enum.reverse(decoded)}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp decode_sender_key_payload(recipient_device_id, wrapped_sender_key_base64)
-       when is_binary(recipient_device_id) and is_binary(wrapped_sender_key_base64) do
-    case Base.decode64(wrapped_sender_key_base64) do
-      {:ok, wrapped_sender_key} ->
-        {:ok, wrapped_sender_key}
-
-      :error ->
-        {:error,
-         {:validation,
-          "wrapped_keys.#{recipient_device_id} must be a base64-encoded wrapped sender key."}}
-    end
-  end
-
-  defp decode_sender_key_payload(recipient_device_id, _wrapped_sender_key_base64)
-       when is_binary(recipient_device_id) do
-    {:error,
-     {:validation,
-      "wrapped_keys.#{recipient_device_id} must be a base64-encoded wrapped sender key."}}
-  end
 end

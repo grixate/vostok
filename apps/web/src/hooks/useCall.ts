@@ -116,8 +116,11 @@ import {
   getCallCapability,
   type MediaEncryptionState
 } from '../lib/media-e2ee.ts'
-import { getSignalStore } from '../lib/signal-store.ts'
-import { ensureSessionForDevice, type VostokPrekeyBundle } from '../lib/signal-sessions.ts'
+import {
+  ensureSessionForDevice,
+  type SignalContext,
+  type VostokPrekeyBundle
+} from '../lib/signal-bridge.ts'
 import {
   describeMediaDeviceError,
   releaseLocalMediaResources,
@@ -1002,8 +1005,16 @@ export function useCall(
     const response = await fetchUserPrekeys(sessionToken, username)
     const matchingBundle = response.devices.find((bundle) => bundle.device_id === deviceId)
     const prekeyBundle = toSignalPrekeyBundle(matchingBundle)
-    return ensureSessionForDevice(getSignalStore(), deviceId, prekeyBundle)
-  }, [callParticipants, sessionToken, storedDevice?.deviceId, storedDevice?.username])
+
+    if (!storedDevice?.deviceId || !activeChatSummary?.serverId) {
+      return false
+    }
+    const ctx: SignalContext = {
+      serverId: activeChatSummary.serverId,
+      localDeviceId: storedDevice.deviceId
+    }
+    return ensureSessionForDevice(ctx, deviceId, prekeyBundle)
+  }, [activeChatSummary?.serverId, callParticipants, sessionToken, storedDevice?.deviceId, storedDevice?.username])
 
   const ensureSignalSessionsForDevices = useCallback(async (deviceIds: string[]): Promise<string[]> => {
     const readyDeviceIds: string[] = []
@@ -3049,6 +3060,7 @@ export function useCall(
         isInitiator,
         callSignals: callSignalsRef.current,
         localDeviceId,
+        serverId: activeChatSummary?.serverId ?? null,
         membraneClient: membraneClientRef.current,
         getPeerConnection: (client) => getMembranePeerConnection(client as MembraneClient | null),
         ensureController: ensureMediaE2eeController,
@@ -3142,6 +3154,7 @@ export function useCall(
         remoteDeviceId,
         callSignals: callSignalsRef.current,
         localDeviceId,
+        serverId: activeChatSummary?.serverId ?? null,
         isInitiator: currentCall.started_by_device_id === localDeviceId,
         membraneClient: membraneClientRef.current,
         getPeerConnection: (client) => getMembranePeerConnection(client as MembraneClient | null),
@@ -4183,7 +4196,10 @@ function toSignalPrekeyBundle(bundle: PrekeyDeviceBundle | undefined): VostokPre
     !bundle.signed_prekey ||
     !bundle.signed_prekey_signature ||
     bundle.registration_id == null ||
-    bundle.signed_prekey_id == null
+    bundle.signed_prekey_id == null ||
+    bundle.kyber_prekey_id == null ||
+    !bundle.kyber_prekey ||
+    !bundle.kyber_prekey_signature
   ) {
     return null
   }
@@ -4196,6 +4212,9 @@ function toSignalPrekeyBundle(bundle: PrekeyDeviceBundle | undefined): VostokPre
     signed_prekey_public: bundle.signed_prekey,
     signed_prekey_signature: bundle.signed_prekey_signature,
     one_time_prekey_id: bundle.one_time_prekey_id ?? undefined,
-    one_time_prekey_public: bundle.one_time_prekey ?? undefined
+    one_time_prekey_public: bundle.one_time_prekey ?? undefined,
+    kyber_prekey_id: bundle.kyber_prekey_id,
+    kyber_prekey_public: bundle.kyber_prekey,
+    kyber_prekey_signature: bundle.kyber_prekey_signature
   }
 }

@@ -66,7 +66,6 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
   const [groupDescription, setGroupDescription] = useState('')
   const [channelTitle, setChannelTitle] = useState(chatList.newChannelTitle)
   const [channelDescription, setChannelDescription] = useState(chatList.newChannelDescription)
-  const [channelPublic, setChannelPublic] = useState(true)
   const [channelComments, setChannelComments] = useState(true)
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -181,7 +180,6 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
       const response = await createChannel(sessionToken, {
         title: channelTitle.trim(),
         description: channelDescription.trim() || undefined,
-        is_public: channelPublic,
         allow_comments: channelComments
       })
 
@@ -293,10 +291,6 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
             onChange={(event) => setChannelDescription(event.target.value)}
           />
         </div>
-        <label className="new-message-panel__checkbox">
-          <input type="checkbox" checked={channelPublic} onChange={(event) => setChannelPublic(event.target.checked)} />
-          <span>{t('public_channel')}</span>
-        </label>
         <label className="new-message-panel__checkbox">
           <input type="checkbox" checked={channelComments} onChange={(event) => setChannelComments(event.target.checked)} />
           <span>{t('allow_comments')}</span>

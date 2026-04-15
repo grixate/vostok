@@ -240,14 +240,10 @@ function isStoredDevice(value: unknown): value is StoredDevice {
   }
 
   const device = value as Partial<StoredDevice>
-  const hasNewFormat =
-    typeof device.identityKeyPairJson === 'string' &&
-    typeof device.registrationId === 'number'
-  const hasLegacyFormat = typeof device.privateKeyPkcs8Base64 === 'string'
   return (
     typeof device.deviceId === 'string' &&
     typeof device.deviceName === 'string' &&
-    (hasNewFormat || hasLegacyFormat) &&
+    typeof device.registrationId === 'number' &&
     typeof device.sessionExpiresAt === 'string' &&
     typeof device.sessionToken === 'string' &&
     typeof device.username === 'string'

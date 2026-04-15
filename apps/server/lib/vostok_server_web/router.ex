@@ -97,7 +97,6 @@ defmodule VostokServerWeb.Router do
     post "/chats/self", ChatController, :create_self
     post "/chats/group", ChatController, :create_group
     post "/chats/channel", ChatController, :create_channel
-    get "/channels", ChatController, :list_public_channels
     patch "/chats/:chat_id/group", ChatController, :update_group
     patch "/chats/:chat_id/info", ChatController, :update_chat_info
     get "/chats/:chat_id/avatar", ChatController, :serve_chat_avatar
@@ -108,13 +107,10 @@ defmodule VostokServerWeb.Router do
     post "/chats/:chat_id/leave", ChatController, :leave_chat
     delete "/chats/:chat_id", ChatController, :delete_chat
     post "/chats/:chat_id/transfer-ownership/:user_id", ChatController, :transfer_ownership
-    post "/chats/:chat_id/join", ChatController, :join_channel
     post "/chats/:chat_id/invite-links", ChatController, :create_invite_link
     get "/chats/:chat_id/invite-links", ChatController, :list_invite_links
     delete "/chats/:chat_id/invite-links/:id", ChatController, :revoke_invite_link
     post "/invite-links/:code/join", ChatController, :join_via_invite_link
-    get "/chats/:chat_id/sender-keys", ChatController, :list_group_sender_keys
-    post "/chats/:chat_id/sender-keys", ChatController, :distribute_group_sender_keys
     post "/chats/:chat_id/session-bootstrap", ChatController, :session_bootstrap
     post "/chats/:chat_id/session-rekey", ChatController, :session_rekey
     get "/chats/:chat_id/safety-numbers", ChatController, :safety_numbers

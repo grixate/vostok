@@ -16,6 +16,10 @@ export type LinkDevicePayload = {
   device_encryption_public_key: string
   signed_prekey: string
   signed_prekey_signature: string
+  // PQXDH — libsignal v2 requires a Kyber prekey on every device.
+  kyber_prekey: string
+  kyber_prekey_signature: string
+  kyber_prekey_id?: number
   registration_id?: number
   signed_prekey_id?: number
   one_time_prekeys: string[] | Array<{ key_id: number; public_key: string }>
@@ -72,7 +76,6 @@ export type ChatSummary = {
   message_count: number
   member_count?: number
   membership_role?: 'owner' | 'admin' | 'member' | null
-  is_public?: boolean
   allow_comments?: boolean
   permissions?: Record<string, 'everyone' | 'admins'>
   can_post?: boolean
@@ -102,28 +105,12 @@ export type InviteLink = {
   inserted_at: string | null
 }
 
-export type GroupSenderKey = {
-  id: string
-  chat_id: string
-  owner_device_id: string
-  recipient_device_id: string
-  key_id: string
-  sender_key_epoch: number
-  algorithm: string
-  status: 'active' | 'superseded'
-  wrapped_sender_key: string
-  inserted_at: string | null
-  updated_at: string | null
-}
-
 export type ChatMessage = {
   id: string
   chat_id: string
   client_id: string
   message_kind: string
   crypto_scheme: string | null
-  sender_key_id: string | null
-  sender_key_epoch: number | null
   sender_device_id: string
   sender_username: string | null
   inserted_at: string
@@ -184,6 +171,9 @@ export type PrekeyDeviceBundle = {
   signed_prekey_signature: string | null
   one_time_prekey_id: number | null
   one_time_prekey: string | null
+  kyber_prekey_id: number | null
+  kyber_prekey: string | null
+  kyber_prekey_signature: string | null
 }
 
 export type MediaUpload = {
@@ -673,7 +663,6 @@ export async function createChannel(
     description?: string
     avatar_base64?: string
     avatar_content_type?: string
-    is_public?: boolean
     allow_comments?: boolean
   }
 ): Promise<{ chat: ChatSummary }> {
@@ -708,7 +697,6 @@ export async function updateChatInfo(
     avatar_content_type?: string
     remove_avatar?: boolean
     permissions?: Record<string, 'everyone' | 'admins'>
-    is_public?: boolean
     allow_comments?: boolean
   }
 ): Promise<{ chat: ChatSummary }> {
@@ -791,20 +779,6 @@ export async function transferOwnership(
       headers: authHeader(token)
     }
   )
-}
-
-export async function listPublicChannels(token: string): Promise<{ channels: ChatSummary[] }> {
-  return apiRequest<{ channels: ChatSummary[] }>('/channels', {
-    method: 'GET',
-    headers: authHeader(token)
-  })
-}
-
-export async function joinChannel(token: string, chatId: string): Promise<{ chat: ChatSummary }> {
-  return apiRequest<{ chat: ChatSummary }>(`/chats/${chatId}/join`, {
-    method: 'POST',
-    headers: authHeader(token)
-  })
 }
 
 export async function createInviteLink(
@@ -917,33 +891,6 @@ export async function verifySafetyNumber(
   )
 }
 
-export async function listGroupSenderKeys(
-  token: string,
-  chatId: string
-): Promise<{ sender_keys: GroupSenderKey[] }> {
-  return apiRequest<{ sender_keys: GroupSenderKey[] }>(`/chats/${chatId}/sender-keys`, {
-    method: 'GET',
-    headers: authHeader(token)
-  })
-}
-
-export async function distributeGroupSenderKeys(
-  token: string,
-  chatId: string,
-  payload: {
-    key_id: string
-    sender_key_epoch?: number
-    algorithm?: string
-    wrapped_keys: Record<string, string>
-  }
-): Promise<{ sender_keys: GroupSenderKey[] }> {
-  return apiRequest<{ sender_keys: GroupSenderKey[] }>(`/chats/${chatId}/sender-keys`, {
-    method: 'POST',
-    headers: authHeader(token),
-    body: JSON.stringify(payload)
-  })
-}
-
 export async function listMessages(
   token: string,
   chatId: string,
@@ -991,8 +938,6 @@ export async function createMessage(
     message_kind: string
     header?: string
     crypto_scheme?: string
-    sender_key_id?: string
-    sender_key_epoch?: number
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
     established_session_ids?: string[]
@@ -1015,8 +960,6 @@ export async function updateMessage(
     message_kind: string
     header?: string
     crypto_scheme?: string
-    sender_key_id?: string
-    sender_key_epoch?: number
     reply_to_message_id?: string
     recipient_envelopes?: Record<string, string>
     established_session_ids?: string[]

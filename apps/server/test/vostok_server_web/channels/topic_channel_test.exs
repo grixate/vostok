@@ -44,7 +44,7 @@ defmodule VostokServerWeb.TopicChannelTest do
                %{
                   "ciphertext" => ciphertext,
                   "client_id" => "client-#{System.unique_integer([:positive])}",
-                  "crypto_scheme" => "signal-v1",
+                  "crypto_scheme" => "signal-v2",
                   "message_kind" => "text",
                   "recipient_envelopes" => %{
                     alice.device.id => Base.encode64("local-envelope")

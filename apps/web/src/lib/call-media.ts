@@ -47,7 +47,7 @@ export function buildJoinPayload(
   return {
     track_kind: preferredTrackKind(call),
     e2ee_capable: true,
-    e2ee_algorithm: 'signal-v1'
+    e2ee_algorithm: 'signal-v2'
   }
 }
 

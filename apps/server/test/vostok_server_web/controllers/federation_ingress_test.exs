@@ -128,7 +128,7 @@ defmodule VostokServerWeb.FederationIngressTest do
           chat_id: chat_id,
           client_id: "remote-client-1",
           message_kind: "text",
-          crypto_scheme: "signal-v1",
+          crypto_scheme: "signal-v2",
           ciphertext: Base.encode64("remote-ciphertext"),
           recipient_envelopes: %{
             local_device_id => Base.encode64("remote-recipient-envelope")
@@ -164,6 +164,14 @@ defmodule VostokServerWeb.FederationIngressTest do
       |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
       |> Base.encode64()
 
+    kyber_prekey_raw = :crypto.strong_rand_bytes(1568)
+    kyber_prekey = Base.encode64(kyber_prekey_raw)
+
+    kyber_prekey_signature =
+      kyber_prekey_raw
+      |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
+      |> Base.encode64()
+
     register_conn =
       post(conn, "/api/v1/register", %{
         username: username,
@@ -172,6 +180,8 @@ defmodule VostokServerWeb.FederationIngressTest do
         device_encryption_public_key: encryption_public_key,
         signed_prekey: signed_prekey,
         signed_prekey_signature: signed_prekey_signature,
+        kyber_prekey: kyber_prekey,
+        kyber_prekey_signature: kyber_prekey_signature,
         one_time_prekeys: [Base.encode64(:crypto.strong_rand_bytes(65))]
       })
 

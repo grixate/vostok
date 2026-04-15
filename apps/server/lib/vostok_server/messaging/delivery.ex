@@ -45,8 +45,6 @@ defmodule VostokServer.Messaging.Delivery do
       :client_id,
       :message_kind,
       :crypto_scheme,
-      :sender_key_id,
-      :sender_key_epoch,
       :sender_device_id,
       :inserted_at,
       :pinned_at,
@@ -116,8 +114,6 @@ defmodule VostokServer.Messaging.Delivery do
       "client_id" => Map.get(message, :client_id),
       "message_kind" => Map.get(message, :message_kind),
       "crypto_scheme" => Map.get(message, :crypto_scheme),
-      "sender_key_id" => Map.get(message, :sender_key_id),
-      "sender_key_epoch" => Map.get(message, :sender_key_epoch),
       "sender_device_id" => Map.get(message, :sender_device_id),
       "header" => encode_binary(Map.get(message, :header)),
       "ciphertext" =>

@@ -86,7 +86,7 @@ defmodule VostokServer.Calls.Params do
        %{
          e2ee_capable: e2ee_capable,
          e2ee_algorithm: if(e2ee_capable, do: e2ee_algorithm, else: nil),
-         e2ee_key_epoch: if(e2ee_algorithm == "signal-v1", do: nil, else: e2ee_key_epoch)
+         e2ee_key_epoch: if(e2ee_algorithm == "signal-v2", do: nil, else: e2ee_key_epoch)
        }}
     end
   end
@@ -234,7 +234,7 @@ defmodule VostokServer.Calls.Params do
 
   def normalize_user_id_list(_value), do: []
 
-  defp default_join_e2ee_algorithm(nil, true), do: "signal-v1"
+  defp default_join_e2ee_algorithm(nil, true), do: "signal-v2"
   defp default_join_e2ee_algorithm(algorithm, _e2ee_capable), do: algorithm
 
   defp maybe_validate_join_e2ee(
@@ -253,7 +253,7 @@ defmodule VostokServer.Calls.Params do
          _call_id,
          _current_device_id,
          true,
-         "signal-v1",
+         "signal-v2",
          _e2ee_key_epoch,
          _ensure_fun
        ),
@@ -292,7 +292,7 @@ defmodule VostokServer.Calls.Params do
          _e2ee_key_epoch,
          _ensure_fun
        ) do
-    {:error, {:validation, "Only signal-v1 media encryption is supported for non-group calls."}}
+    {:error, {:validation, "Only signal-v2 media encryption is supported for non-group calls."}}
   end
 
   defp decode_wrapped_keys_map(map) when is_map(map) do

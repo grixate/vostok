@@ -1,13 +1,13 @@
 import type { CallSession, CallSignal } from './api.ts'
 import type { MediaEncryptionState } from './media-e2ee.ts'
-import { getSignalStore } from './signal-store.ts'
 import {
   decryptMessage,
   deriveGroupCallKey,
   generateMediaKeyMaterial,
   mediaKeyFingerprint,
-  wrapMediaKeyForDevice
-} from './signal-sessions.ts'
+  wrapMediaKeyForDevice,
+  type SignalContext
+} from './signal-bridge.ts'
 
 type WrappedSignalMediaKey = {
   body: string
@@ -40,6 +40,7 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
     isInitiator: boolean
     callSignals: CallSignal[]
     localDeviceId: string | null
+    serverId: string | null
     groupCallKeyGeneratedForCallId: string | null
     setGroupCallKeyGeneratedForCallId: (callId: string) => void
     membraneClient: unknown
@@ -66,6 +67,7 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
     isInitiator,
     callSignals,
     localDeviceId,
+    serverId,
     groupCallKeyGeneratedForCallId,
     setGroupCallKeyGeneratedForCallId,
     membraneClient,
@@ -82,7 +84,10 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
     setDistributedParticipantDeviceIds
   } = options
 
-  const store = getSignalStore()
+  if (!localDeviceId || !serverId) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
+  const ctx: SignalContext = { serverId, localDeviceId }
   let activeGroupCallKeyMaterial = groupCallKeyMaterial
 
   if (isInitiator && participantDeviceIds.length > 0) {
@@ -99,7 +104,7 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
         const readyParticipantIds = await ensureRemoteSessions(participantDeviceIds)
 
         if (readyParticipantIds.length > 0) {
-          const { keyMaterialBase64, wrappedKeys } = await deriveGroupCallKey(store, readyParticipantIds)
+          const { keyMaterialBase64, wrappedKeys } = await deriveGroupCallKey(ctx, readyParticipantIds)
           activeGroupCallKeyMaterial = keyMaterialBase64
           setGroupCallKeyMaterial(keyMaterialBase64)
           setGroupCallKeyGeneratedForCallId(activeCall.id)
@@ -121,7 +126,7 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
           const wrappedKeys = Object.fromEntries(
             await Promise.all(
               readyParticipantIds.map(async (deviceId) => {
-                return [deviceId, await wrapMediaKeyForDevice(store, deviceId, activeGroupCallKeyMaterial!)] as const
+                return [deviceId, await wrapMediaKeyForDevice(ctx, deviceId, activeGroupCallKeyMaterial!)] as const
               })
             )
           )
@@ -154,7 +159,7 @@ export async function syncGroupMediaEncryption<ControllerType, ConnectionType>(
         if (!localDeviceId || !parsed.wrapped_keys[localDeviceId]) continue
 
         const wrapped = parsed.wrapped_keys[localDeviceId]
-        const decryptedKey = await decryptMessage(store, parsed.sender_device_id, wrapped.body, wrapped.type)
+        const decryptedKey = await decryptMessage(ctx, parsed.sender_device_id, wrapped.body, wrapped.type)
         setGroupCallKeyMaterial(decryptedKey)
         activeGroupCallKeyMaterial = decryptedKey
         break
@@ -196,6 +201,7 @@ export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
     remoteDeviceId: string | null
     callSignals: CallSignal[]
     localDeviceId: string | null
+    serverId: string | null
     isInitiator: boolean
     membraneClient: unknown
     getPeerConnection: (client: unknown) => ConnectionType | null
@@ -220,6 +226,7 @@ export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
     remoteDeviceId,
     callSignals,
     localDeviceId,
+    serverId,
     isInitiator,
     membraneClient,
     getPeerConnection,
@@ -239,7 +246,10 @@ export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
     return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
   }
 
-  const store = getSignalStore()
+  if (!localDeviceId || !serverId) {
+    return { state: 'negotiating', fingerprint: null, currentKeyEpoch: null }
+  }
+  const ctx: SignalContext = { serverId, localDeviceId }
   let activeDirectCallKeyMaterial = directCallKeyMaterial
 
   try {
@@ -259,7 +269,7 @@ export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
       }
 
       const keyMaterialBase64 = generateMediaKeyMaterial()
-      const wrappedKey = await wrapMediaKeyForDevice(store, remoteDeviceId, keyMaterialBase64)
+      const wrappedKey = await wrapMediaKeyForDevice(ctx, remoteDeviceId, keyMaterialBase64)
 
       await sendCallSignal(sessionToken, activeCall.id, {
         signal_type: 'heartbeat',
@@ -293,7 +303,7 @@ export async function syncDirectMediaEncryption<ControllerType, ConnectionType>(
         }
 
         const decryptedKey = await decryptMessage(
-          store,
+          ctx,
           parsed.sender_device_id,
           parsed.wrapped_key.body,
           parsed.wrapped_key.type

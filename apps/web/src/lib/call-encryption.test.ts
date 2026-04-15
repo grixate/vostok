@@ -28,7 +28,6 @@ function buildDevice(): StoredDevice {
     deviceId: 'device-self',
     deviceName: 'Web',
     registrationId: 12345,
-    identityKeyPairJson: '{"pubKey":"pub","privKey":"priv"}',
     signedPreKeyIdCounter: 1,
     oneTimePreKeyIdCounter: 17,
     sessionExpiresAt: '2026-04-02T09:00:00Z',

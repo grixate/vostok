@@ -296,6 +296,14 @@ defmodule VostokServerWeb.MediaFlowTest do
       |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
       |> Base.encode64()
 
+    kyber_prekey_raw = :crypto.strong_rand_bytes(1568)
+    kyber_prekey = Base.encode64(kyber_prekey_raw)
+
+    kyber_prekey_signature =
+      kyber_prekey_raw
+      |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
+      |> Base.encode64()
+
     register_conn =
       post(conn, "/api/v1/register", %{
         username: username,
@@ -304,6 +312,8 @@ defmodule VostokServerWeb.MediaFlowTest do
         device_encryption_public_key: encryption_public_key,
         signed_prekey: signed_prekey,
         signed_prekey_signature: signed_prekey_signature,
+        kyber_prekey: kyber_prekey,
+        kyber_prekey_signature: kyber_prekey_signature,
         one_time_prekeys: [Base.encode64(:crypto.strong_rand_bytes(65))]
       })
 

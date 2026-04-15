@@ -264,11 +264,16 @@ defmodule VostokServer.Identity do
            ) do
       Repo.transaction(fn ->
         updated_device =
-          maybe_update_signed_prekey(
-            device,
+          device
+          |> maybe_update_signed_prekey(
             normalized.signed_prekey,
             normalized.signed_prekey_signature,
             Map.get(normalized, :signed_prekey_id)
+          )
+          |> maybe_update_kyber_prekey(
+            Map.get(normalized, :kyber_prekey_public),
+            Map.get(normalized, :kyber_prekey_signature),
+            Map.get(normalized, :kyber_prekey_id)
           )
 
         if normalized.replace_one_time_prekeys do
@@ -286,6 +291,7 @@ defmodule VostokServer.Identity do
         %{
           device_id: updated_device.id,
           has_signed_prekey: not is_nil(updated_device.signed_prekey),
+          has_kyber_prekey: not is_nil(updated_device.kyber_prekey_public),
           one_time_prekey_count: active_prekey_count(device.id)
         }
       end)
@@ -326,6 +332,9 @@ defmodule VostokServer.Identity do
          {:ok, signed_prekey} <- decode_optional_base64(attrs, "signed_prekey"),
          {:ok, signed_prekey_signature} <-
            decode_optional_base64(attrs, "signed_prekey_signature"),
+         {:ok, kyber_prekey_public} <- decode_optional_base64(attrs, "kyber_prekey"),
+         {:ok, kyber_prekey_signature} <-
+           decode_optional_base64(attrs, "kyber_prekey_signature"),
          {:ok, settings_encrypted} <- decode_optional_base64(attrs, "settings_encrypted"),
          {:ok, one_time_prekeys} <- decode_prekeys(Map.get(attrs, "one_time_prekeys", [])) do
       {:ok,
@@ -337,6 +346,9 @@ defmodule VostokServer.Identity do
          user_identity_public_key: user_identity_public_key,
          signed_prekey: signed_prekey,
          signed_prekey_signature: signed_prekey_signature,
+         kyber_prekey_public: kyber_prekey_public,
+         kyber_prekey_signature: kyber_prekey_signature,
+         kyber_prekey_id: parse_optional_integer(attrs, "kyber_prekey_id"),
          settings_encrypted: settings_encrypted,
          one_time_prekeys: one_time_prekeys,
          invite_token: blank_to_nil(Map.get(attrs, "invite_token"))
@@ -353,6 +365,9 @@ defmodule VostokServer.Identity do
          {:ok, signed_prekey} <- decode_required_base64(attrs, "signed_prekey"),
          {:ok, signed_prekey_signature} <-
            decode_required_base64(attrs, "signed_prekey_signature"),
+         {:ok, kyber_prekey_public} <- decode_required_base64(attrs, "kyber_prekey"),
+         {:ok, kyber_prekey_signature} <-
+           decode_required_base64(attrs, "kyber_prekey_signature"),
          {:ok, one_time_prekeys} <- decode_prekeys_with_ids(Map.get(attrs, "one_time_prekeys", [])),
          :ok <- ensure_non_empty_prekeys(one_time_prekeys) do
       {:ok,
@@ -362,8 +377,11 @@ defmodule VostokServer.Identity do
          device_encryption_public_key: device_encryption_public_key,
          signed_prekey: signed_prekey,
          signed_prekey_signature: signed_prekey_signature,
+         kyber_prekey_public: kyber_prekey_public,
+         kyber_prekey_signature: kyber_prekey_signature,
          registration_id: parse_optional_integer(attrs, "registration_id"),
          signed_prekey_id: parse_optional_integer(attrs, "signed_prekey_id"),
+         kyber_prekey_id: parse_optional_integer(attrs, "kyber_prekey_id"),
          one_time_prekeys: one_time_prekeys
        }}
     end
@@ -457,12 +475,16 @@ defmodule VostokServer.Identity do
       encryption_public_key: normalized.device_encryption_public_key,
       signed_prekey: normalized.signed_prekey,
       signed_prekey_signature: normalized.signed_prekey_signature,
+      kyber_prekey_public: normalized.kyber_prekey_public,
+      kyber_prekey_signature: normalized.kyber_prekey_signature,
       last_active_at: now
     }
 
     base
     |> maybe_put(:registration_id, Map.get(normalized, :registration_id))
     |> maybe_put(:signed_prekey_id_counter, Map.get(normalized, :signed_prekey_id))
+    |> maybe_put(:kyber_prekey_id, Map.get(normalized, :kyber_prekey_id))
+    |> maybe_put(:kyber_prekey_id_counter, Map.get(normalized, :kyber_prekey_id))
   end
 
   defp maybe_put(map, _key, nil), do: map
@@ -548,6 +570,9 @@ defmodule VostokServer.Identity do
     with {:ok, signed_prekey} <- decode_optional_base64(attrs, "signed_prekey"),
          {:ok, signed_prekey_signature} <-
            decode_optional_base64(attrs, "signed_prekey_signature"),
+         {:ok, kyber_prekey_public} <- decode_optional_base64(attrs, "kyber_prekey"),
+         {:ok, kyber_prekey_signature} <-
+           decode_optional_base64(attrs, "kyber_prekey_signature"),
          {:ok, one_time_prekeys} <- decode_prekeys_with_ids(Map.get(attrs, "one_time_prekeys", [])),
          {:ok, replace_one_time_prekeys} <-
            parse_boolean(Map.get(attrs, "replace_one_time_prekeys", false)) do
@@ -556,6 +581,9 @@ defmodule VostokServer.Identity do
          signed_prekey: signed_prekey,
          signed_prekey_signature: signed_prekey_signature,
          signed_prekey_id: parse_optional_integer(attrs, "signed_prekey_id"),
+         kyber_prekey_public: kyber_prekey_public,
+         kyber_prekey_signature: kyber_prekey_signature,
+         kyber_prekey_id: parse_optional_integer(attrs, "kyber_prekey_id"),
          one_time_prekeys: one_time_prekeys,
          replace_one_time_prekeys: replace_one_time_prekeys
        }}
@@ -603,6 +631,33 @@ defmodule VostokServer.Identity do
     }
 
     attrs = if signed_prekey_id, do: Map.put(attrs, :signed_prekey_id_counter, signed_prekey_id), else: attrs
+
+    device
+    |> Device.changeset(attrs)
+    |> Repo.update!()
+  end
+
+  defp maybe_update_kyber_prekey(device, nil, nil, _kyber_prekey_id), do: device
+
+  defp maybe_update_kyber_prekey(
+         %Device{} = device,
+         kyber_prekey_public,
+         kyber_prekey_signature,
+         kyber_prekey_id
+       ) do
+    attrs = %{
+      kyber_prekey_public: kyber_prekey_public,
+      kyber_prekey_signature: kyber_prekey_signature
+    }
+
+    attrs =
+      if kyber_prekey_id do
+        attrs
+        |> Map.put(:kyber_prekey_id, kyber_prekey_id)
+        |> Map.put(:kyber_prekey_id_counter, kyber_prekey_id)
+      else
+        attrs
+      end
 
     device
     |> Device.changeset(attrs)
@@ -668,7 +723,8 @@ defmodule VostokServer.Identity do
       where:
         device.user_id == ^user_id and is_nil(device.revoked_at) and
           not is_nil(device.identity_public_key) and not is_nil(device.encryption_public_key) and
-          not is_nil(device.signed_prekey) and not is_nil(device.signed_prekey_signature),
+          not is_nil(device.signed_prekey) and not is_nil(device.signed_prekey_signature) and
+          not is_nil(device.kyber_prekey_public) and not is_nil(device.kyber_prekey_signature),
       order_by: [asc: device.inserted_at]
     )
     |> Repo.all()
@@ -688,7 +744,10 @@ defmodule VostokServer.Identity do
       signed_prekey: encode_optional_binary(device.signed_prekey),
       signed_prekey_signature: encode_optional_binary(device.signed_prekey_signature),
       one_time_prekey_id: one_time_prekey && one_time_prekey.key_id,
-      one_time_prekey: one_time_prekey && Base.encode64(one_time_prekey.public_key)
+      one_time_prekey: one_time_prekey && Base.encode64(one_time_prekey.public_key),
+      kyber_prekey_id: device.kyber_prekey_id,
+      kyber_prekey: encode_optional_binary(device.kyber_prekey_public),
+      kyber_prekey_signature: encode_optional_binary(device.kyber_prekey_signature)
     }
   end
 

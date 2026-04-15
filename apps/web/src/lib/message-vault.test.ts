@@ -5,17 +5,11 @@ const { signalDecryptMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('./secure-kv-store', () => ({
-  bootstrapSecureStore: vi.fn(),
-  persistSecureStoreValue: vi.fn(),
   whenSecureStoreReady: vi.fn().mockResolvedValue(undefined)
 }))
 
-vi.mock('./signal-sessions', () => ({
+vi.mock('./signal-bridge', () => ({
   decryptMessage: signalDecryptMock
-}))
-
-vi.mock('./signal-store', () => ({
-  getSignalStore: vi.fn(() => ({}))
 }))
 
 import { decryptMessageText } from './message-vault.ts'
@@ -27,9 +21,7 @@ function createSignalMessage(overrides: Partial<ChatMessage> = {}): ChatMessage 
     chat_id: 'chat-1',
     client_id: 'client-1',
     message_kind: 'text',
-    crypto_scheme: 'signal-v1',
-    sender_key_id: null,
-    sender_key_epoch: null,
+    crypto_scheme: 'signal-v2',
     sender_device_id: 'sender-device',
     sender_username: 'alice',
     inserted_at: new Date().toISOString(),
@@ -55,7 +47,7 @@ describe('message-vault signal decrypt', () => {
   it('does not guess a device-specific envelope type from another device entry', async () => {
     const header = btoa(
       JSON.stringify({
-        algorithm: 'signal-v1',
+        algorithm: 'signal-v2',
         type_map: {
           'other-device': 1
         }
@@ -63,7 +55,7 @@ describe('message-vault signal decrypt', () => {
     )
 
     await expect(
-      decryptMessageText(createSignalMessage({ header }), 'current-device')
+      decryptMessageText(createSignalMessage({ header }), 'current-device', 'server-1')
     ).rejects.toThrow(
       'Signal message type_map is missing an entry for current device current-device.'
     )
@@ -72,9 +64,9 @@ describe('message-vault signal decrypt', () => {
   })
 
   it('requires a current device id for signal message decryption', async () => {
-    await expect(decryptMessageText(createSignalMessage(), '')).rejects.toThrow(
-      'Signal message decryption requires the current device id.'
-    )
+    await expect(
+      decryptMessageText(createSignalMessage(), '', 'server-1')
+    ).rejects.toThrow('Signal message decryption requires the current device id.')
 
     expect(signalDecryptMock).not.toHaveBeenCalled()
   })

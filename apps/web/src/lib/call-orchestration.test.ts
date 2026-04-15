@@ -36,7 +36,6 @@ function buildDevice(overrides: Partial<StoredDevice> = {}): StoredDevice {
     deviceId: 'device-self',
     deviceName: 'Laptop',
     registrationId: 12345,
-    identityKeyPairJson: '{"pubKey":"pub","privKey":"priv"}',
     signedPreKeyIdCounter: 1,
     oneTimePreKeyIdCounter: 17,
     sessionExpiresAt: '2026-04-01T10:30:00Z',
@@ -124,7 +123,7 @@ describe('call-orchestration', () => {
       buildJoinPayload: vi.fn(() => ({
         track_kind: 'audio_video' as const,
         e2ee_capable: true,
-        e2ee_algorithm: 'signal-v1'
+        e2ee_algorithm: 'signal-v2'
       })),
       joinCallSession,
       currentEndpoint: null,
@@ -141,7 +140,7 @@ describe('call-orchestration', () => {
     expect(joinCallSession).toHaveBeenCalledWith('token', 'call-1', {
       track_kind: 'audio_video',
       e2ee_capable: true,
-      e2ee_algorithm: 'signal-v1'
+      e2ee_algorithm: 'signal-v2'
     })
     expect(provisionCallWebRtcEndpoint).toHaveBeenCalledWith('token', 'call-1')
     expect(configureMembraneTurnServers).toHaveBeenCalledWith(client, result.turnCredentials)

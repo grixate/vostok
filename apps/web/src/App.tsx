@@ -560,7 +560,7 @@ function AppInner({
               transition={{ type: 'tween', duration: 0.25, ease: [0.2, 0, 0, 1] }}
               style={{ width: '100%', height: '100%' }}
             >
-              <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
+              <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} />
             </motion.div>
           ) : (
             <motion.div
@@ -594,7 +594,7 @@ function AppInner({
       ) : (
         /* Desktop: side-by-side */
         <>
-          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} call={call} />
+          <Sidebar desktop={desktop} chatList={chatListView} activeChat={activeChat} draftChatIds={drafts.draftChatIds} />
           <ConversationPane
             activeChat={activeChat}
             groupChat={groupChat}

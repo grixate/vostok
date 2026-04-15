@@ -509,8 +509,6 @@ defmodule VostokServer.Federation do
     message_kind = payload |> Map.get("message_kind") |> normalize_string() || "text"
     header = payload |> Map.get("header") |> normalize_string()
     crypto_scheme = payload |> Map.get("crypto_scheme") |> normalize_string()
-    sender_key_id = payload |> Map.get("sender_key_id") |> normalize_string()
-    sender_key_epoch = Map.get(payload, "sender_key_epoch")
     reply_to_message_id = payload |> Map.get("reply_to_message_id") |> normalize_string()
 
     recipient_envelopes =
@@ -538,8 +536,6 @@ defmodule VostokServer.Federation do
           }
           |> maybe_put("header", header)
           |> maybe_put("crypto_scheme", crypto_scheme)
-          |> maybe_put("sender_key_id", sender_key_id)
-          |> maybe_put_integer("sender_key_epoch", sender_key_epoch)
           |> maybe_put("reply_to_message_id", reply_to_message_id)
           |> maybe_put("recipient_envelopes", recipient_envelopes)
 
@@ -962,23 +958,6 @@ defmodule VostokServer.Federation do
   defp maybe_put(map, key, value) when is_map(map) and is_binary(key) do
     Map.put(map, key, value)
   end
-
-  defp maybe_put_integer(map, _key, nil) when is_map(map), do: map
-
-  defp maybe_put_integer(map, key, value)
-       when is_map(map) and is_binary(key) and is_integer(value) and value >= 0 do
-    Map.put(map, key, value)
-  end
-
-  defp maybe_put_integer(map, key, value)
-       when is_map(map) and is_binary(key) and is_binary(value) do
-    case Integer.parse(String.trim(value)) do
-      {parsed, ""} when parsed >= 0 -> Map.put(map, key, parsed)
-      _ -> map
-    end
-  end
-
-  defp maybe_put_integer(map, _key, _value) when is_map(map), do: map
 
   defp delivery_signature(
          secret,

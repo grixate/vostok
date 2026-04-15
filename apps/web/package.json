@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@jellyfish-dev/membrane-webrtc-js": "^0.7.1",
-    "@privacyresearch/libsignal-protocol-typescript": "^0.0.16",
     "@tauri-apps/api": "^2.10.1",
     "@vostok/crypto-core": "file:../../packages/crypto-core",
     "@vostok/ui-chat": "file:../../packages/ui-chat",

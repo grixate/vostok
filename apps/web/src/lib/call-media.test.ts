@@ -81,13 +81,13 @@ describe('call-media', () => {
     expect(buildJoinPayload(buildCall({ mode: 'voice' }), null)).toEqual({
       track_kind: 'audio',
       e2ee_capable: true,
-      e2ee_algorithm: 'signal-v1'
+      e2ee_algorithm: 'signal-v2'
     })
 
     expect(buildJoinPayload(buildCall({ mode: 'group', media_mode: 'video' }), buildKey({ key_epoch: 4 }))).toEqual({
       track_kind: 'audio_video',
       e2ee_capable: true,
-      e2ee_algorithm: 'signal-v1'
+      e2ee_algorithm: 'signal-v2'
     })
   })
 

@@ -19,7 +19,7 @@ export type Toast = {
   tone: string
 }
 
-export type SidebarTab = 'chats' | 'channels' | 'calls' | 'members' | 'settings'
+export type SidebarTab = 'chats' | 'members' | 'settings'
 
 export type UIContextValue = {
   contextMenuMessage: ContextMenuState | null

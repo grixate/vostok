@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod signal;
+
 use serde::Serialize;
+use tauri::Manager;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,12 +56,23 @@ fn desktop_close_window(window: tauri::WebviewWindow) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            let state = signal::state::init_signal_state(app.handle())
+                .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            app.manage(state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             desktop_runtime_info,
             desktop_toggle_maximize,
             desktop_minimize,
             desktop_window_maximized,
-            desktop_close_window
+            desktop_close_window,
+            signal::commands::signal_register_identity,
+            signal::commands::signal_process_prekey_bundle,
+            signal::commands::signal_encrypt,
+            signal::commands::signal_decrypt,
+            signal::commands::signal_wipe_all,
         ])
         // TODO: Add system tray when tauri-plugin-tray is installed:
         // .plugin(tauri_plugin_tray::init())

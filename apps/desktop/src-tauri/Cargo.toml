@@ -13,6 +13,25 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.0", features = ["tray-icon"] }
 
+# Signal protocol (official libsignal from Signal Messenger, AGPL-3.0)
+# Not published to crates.io; pinned to a release tag.
+libsignal-protocol = { git = "https://github.com/signalapp/libsignal", tag = "v0.92.1", features = ["kyber768"] }
+
+# Local SQLite store backing libsignal's *Store traits.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Support deps for the signal module.
+async-trait = "0.1"
+base64 = "0.22"
+futures = "0.3"
+rand = "0.9"
+rand_core = "0.9"
+thiserror = "1"
+tokio = { version = "1", features = ["sync", "macros", "rt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

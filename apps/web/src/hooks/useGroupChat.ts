@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useAppContext } from '../contexts/AppContext.tsx'
-import type { ChatSummary, GroupMember, GroupSenderKey } from '../lib/api.ts'
+import type { ChatSummary, GroupMember } from '../lib/api.ts'
 import {
   createGroupChat,
   renameGroupChat,
@@ -10,18 +10,8 @@ import {
   removeGroupMember,
   transferOwnership,
   listGroupMembers,
-  listGroupSenderKeys,
-  listRecipientDevices,
-  distributeGroupSenderKeys
+  listRecipientDevices
 } from '../lib/api.ts'
-import {
-  getActiveGroupSenderKey,
-  setActiveGroupSenderKey,
-  storeGroupSenderKeyMaterial,
-  storeInboundGroupSenderKeys,
-  wrapGroupSenderKeyForRecipients
-} from '../lib/message-vault.ts'
-import { bytesToBase64 } from '../lib/base64.ts'
 import { getRawChatId, qualifyChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
 import type { AuthView } from '../types.ts'
@@ -82,13 +72,11 @@ export function useGroupChat(
   const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
   const [groupDescription, setGroupDescription] = useState('')
-  const [chatIsPublic, setChatIsPublic] = useState(false)
   const [chatAllowComments, setChatAllowComments] = useState(true)
   const [chatPermissions, setChatPermissions] = useState<Record<string, 'everyone' | 'admins'>>(
     DEFAULT_CHAT_PERMISSIONS
   )
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
-  const [, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
 
   const activeGroupChatId =
     activeChat?.type === 'group' || activeChat?.type === 'channel' ? activeChat.id : null
@@ -97,7 +85,6 @@ export function useGroupChat(
     if (activeChat?.type === 'group' || activeChat?.type === 'channel') {
       setGroupRenameTitle(activeChat.title)
       setGroupDescription(activeChat.description ?? '')
-      setChatIsPublic(Boolean(activeChat.is_public))
       setChatAllowComments(activeChat.allow_comments ?? true)
       setChatPermissions({
         ...DEFAULT_CHAT_PERMISSIONS,
@@ -108,14 +95,12 @@ export function useGroupChat(
 
     setGroupRenameTitle('')
     setGroupDescription('')
-    setChatIsPublic(false)
     setChatAllowComments(true)
     setChatPermissions(DEFAULT_CHAT_PERMISSIONS)
   }, [
     activeChat?.allow_comments,
     activeChat?.description,
     activeChat?.id,
-    activeChat?.is_public,
     activeChat?.permissions,
     activeChat?.title,
     activeChat?.type
@@ -168,60 +153,6 @@ export function useGroupChat(
       cancelled = true
     }
   }, [activeGroupChatId, sessionToken, view, setBanner])
-
-  useEffect(() => {
-    if (!sessionToken || !storedDevice || view !== 'chat' || !activeGroupChatId) {
-      setGroupSenderKeys([])
-      return
-    }
-
-    const token2 = sessionToken
-    const groupChatId = getRawChatId(activeGroupChatId)
-
-    if (!groupChatId) {
-      setGroupSenderKeys([])
-      return
-    }
-
-    const rawGroupChatId = groupChatId
-    const qualifiedGroupChatId = activeGroupChatId
-    let cancelled = false
-
-    async function loadGroupSenderKeys() {
-      try {
-        const response = await listGroupSenderKeys(token2, rawGroupChatId)
-
-        if (!cancelled) {
-          // Group sender keys are legacy — Signal pairwise sessions handle
-          // group message encryption now. Still load keys for decrypting
-          // old messages that used the sender key scheme.
-          await storeInboundGroupSenderKeys(
-            qualifiedGroupChatId,
-            response.sender_keys,
-            undefined
-          )
-          if (rawGroupChatId !== qualifiedGroupChatId) {
-            await storeInboundGroupSenderKeys(
-              rawGroupChatId,
-              response.sender_keys,
-              undefined
-            )
-          }
-          setGroupSenderKeys(response.sender_keys)
-        }
-      } catch {
-        if (!cancelled) {
-          setGroupSenderKeys([])
-        }
-      }
-    }
-
-    void loadGroupSenderKeys()
-
-    return () => {
-      cancelled = true
-    }
-  }, [activeGroupChatId, sessionToken, storedDevice, view])
 
   async function _handleCreateGroupChat(event: FormEvent<HTMLFormElement>, newGroupTitle: string, newGroupMembers: string, setNewGroupTitle: (v: string) => void, setNewGroupMembers: (v: string) => void) {
     event.preventDefault()
@@ -321,13 +252,11 @@ export function useGroupChat(
       const response = await updateChatInfo(sessionToken, rawActiveChatId, {
         description: groupDescription.trim() || '',
         permissions: chatPermissions,
-        is_public: activeChat.type === 'channel' ? chatIsPublic : undefined,
         allow_comments: activeChat.type === 'channel' ? chatAllowComments : undefined
       })
 
       setChatItems((current) => mergeChat(current, toMergedGroupChat(response.chat, activeChat)))
       setGroupDescription(response.chat.description ?? '')
-      setChatIsPublic(Boolean(response.chat.is_public))
       setChatAllowComments(response.chat.allow_comments ?? true)
       setChatPermissions({
         ...DEFAULT_CHAT_PERMISSIONS,
@@ -605,70 +534,11 @@ export function useGroupChat(
     }
   }
 
-  async function _handleRotateGroupSenderKey() {
-    if (!sessionToken || !storedDevice || !activeChat || activeChat.type !== 'group') {
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const rawActiveChatId = getRawChatId(activeChat.id)
-
-      if (!rawActiveChatId) {
-        throw new Error('The active group chat is unavailable.')
-      }
-
-      const recipientDevices = (
-        await listRecipientDevices(sessionToken, rawActiveChatId)
-      ).recipient_devices.filter((device) => device.device_id !== storedDevice.deviceId)
-
-      if (recipientDevices.length === 0) {
-        throw new Error('No recipient devices are currently available for sender key distribution.')
-      }
-
-      const senderKeyMaterial = window.crypto.getRandomValues(new Uint8Array(32))
-      const senderKeyMaterialBase64 = bytesToBase64(senderKeyMaterial)
-      const keyId = `sender-${Date.now()}-${window.crypto.randomUUID()}`
-      const wrappedKeys = await wrapGroupSenderKeyForRecipients(
-        senderKeyMaterialBase64,
-        recipientDevices
-      )
-      const currentActiveSenderKey = getActiveGroupSenderKey(activeChat.id)
-      const nextEpoch = currentActiveSenderKey ? currentActiveSenderKey.epoch + 1 : 1
-      const response = await distributeGroupSenderKeys(sessionToken, rawActiveChatId, {
-        key_id: keyId,
-        sender_key_epoch: nextEpoch,
-        algorithm: 'p256-ecdh+a256gcm',
-        wrapped_keys: wrappedKeys
-      })
-
-      storeGroupSenderKeyMaterial(activeChat.id, keyId, senderKeyMaterialBase64)
-      setActiveGroupSenderKey(activeChat.id, keyId, nextEpoch)
-      if (rawActiveChatId !== activeChat.id) {
-        storeGroupSenderKeyMaterial(rawActiveChatId, keyId, senderKeyMaterialBase64)
-        setActiveGroupSenderKey(rawActiveChatId, keyId, nextEpoch)
-      }
-      setGroupSenderKeys(response.sender_keys)
-      setBanner({
-        tone: 'success',
-        message: `Distributed Sender Key ${keyId} (epoch ${nextEpoch}) to ${response.sender_keys.length} recipient device${response.sender_keys.length === 1 ? '' : 's'}.`
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to rotate the group Sender Key.'
-      setBanner({ tone: 'error', message })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return {
     groupRenameTitle,
     setGroupRenameTitle,
     groupDescription,
     setGroupDescription,
-    chatIsPublic,
-    setChatIsPublic,
     chatAllowComments,
     setChatAllowComments,
     chatPermissions,
@@ -683,7 +553,6 @@ export function useGroupChat(
     _handleUpdateActiveGroupMemberRole,
     handleAddActiveGroupMembers,
     handleRemoveActiveGroupMember,
-    handleTransferActiveGroupOwnership,
-    _handleRotateGroupSenderKey
+    handleTransferActiveGroupOwnership
   }
 }

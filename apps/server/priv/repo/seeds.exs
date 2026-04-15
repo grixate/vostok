@@ -11,7 +11,7 @@ import Ecto.Query
 alias VostokServer.Repo
 alias VostokServer.Identity.{User, Device, DeviceSession, OneTimePrekey}
 alias VostokServer.Messaging.{Chat, ChatMember, Message, MessageReaction}
-alias VostokServer.Messaging.{ChatDeviceSession, ChatReadState, ChatSafetyVerification, GroupSenderKey, MessageRecipient}
+alias VostokServer.Messaging.{ChatDeviceSession, ChatReadState, ChatSafetyVerification, MessageRecipient}
 alias VostokServer.Media.Upload
 
 IO.puts("\n=== Vostok Seed Data ===\n")
@@ -50,7 +50,6 @@ if length(existing_users) > 0 do
     Repo.delete_all(from cds in ChatDeviceSession, where: cds.chat_id in ^existing_chat_ids)
     Repo.delete_all(from crs in ChatReadState, where: crs.chat_id in ^existing_chat_ids)
     Repo.delete_all(from csv in ChatSafetyVerification, where: csv.chat_id in ^existing_chat_ids)
-    Repo.delete_all(from gsk in GroupSenderKey, where: gsk.chat_id in ^existing_chat_ids)
     Repo.delete_all(from cm in ChatMember, where: cm.chat_id in ^existing_chat_ids)
     Repo.delete_all(from c in Chat, where: c.id in ^existing_chat_ids)
   end

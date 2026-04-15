@@ -172,7 +172,7 @@ describe('call-commands', () => {
       buildJoinPayload: vi.fn(() => ({
         track_kind: 'audio_video' as const,
         e2ee_capable: true,
-        e2ee_algorithm: 'signal-v1'
+        e2ee_algorithm: 'signal-v2'
       })),
       joinCallSession: vi.fn(async () => ({
         participants: [buildParticipant()],
@@ -194,7 +194,7 @@ describe('call-commands', () => {
       buildJoinPayload: vi.fn(() => ({
         track_kind: 'audio_video' as const,
         e2ee_capable: true,
-        e2ee_algorithm: 'signal-v1'
+        e2ee_algorithm: 'signal-v2'
       })),
       joinCallSession: vi.fn(async () => ({
         participants: [buildParticipant()],

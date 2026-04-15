@@ -840,14 +840,14 @@ defmodule VostokServerWeb.OpsFlowTest do
       |> post("/api/v1/calls/#{call_id}/join", %{
         track_kind: "audio_video",
         e2ee_capable: true,
-        e2ee_algorithm: "signal-v1"
+        e2ee_algorithm: "signal-v2"
       })
 
     assert %{
              "participant" => %{
                "status" => "joined",
                "e2ee_capable" => true,
-               "e2ee_algorithm" => "signal-v1",
+               "e2ee_algorithm" => "signal-v2",
                "e2ee_key_epoch" => nil
              }
            } = json_response(alice_join_conn, 200)
@@ -858,7 +858,7 @@ defmodule VostokServerWeb.OpsFlowTest do
       |> post("/api/v1/calls/#{call_id}/join", %{
         track_kind: "audio_video",
         e2ee_capable: true,
-        e2ee_algorithm: "signal-v1"
+        e2ee_algorithm: "signal-v2"
       })
 
     assert %{
@@ -866,7 +866,7 @@ defmodule VostokServerWeb.OpsFlowTest do
                "device_id" => ^bob_device_id,
                "status" => "joined",
                "e2ee_capable" => true,
-               "e2ee_algorithm" => "signal-v1",
+               "e2ee_algorithm" => "signal-v2",
                "e2ee_key_epoch" => nil
              }
            } = json_response(bob_join_conn, 200)
@@ -884,6 +884,14 @@ defmodule VostokServerWeb.OpsFlowTest do
       |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
       |> Base.encode64()
 
+    kyber_prekey_raw = :crypto.strong_rand_bytes(1568)
+    kyber_prekey = Base.encode64(kyber_prekey_raw)
+
+    kyber_prekey_signature =
+      kyber_prekey_raw
+      |> then(&:crypto.sign(:eddsa, :none, &1, [identity_private_key_raw, :ed25519]))
+      |> Base.encode64()
+
     register_conn =
       post(conn, "/api/v1/register", %{
         username: username,
@@ -892,6 +900,8 @@ defmodule VostokServerWeb.OpsFlowTest do
         device_encryption_public_key: encryption_public_key,
         signed_prekey: signed_prekey,
         signed_prekey_signature: signed_prekey_signature,
+        kyber_prekey: kyber_prekey,
+        kyber_prekey_signature: kyber_prekey_signature,
         one_time_prekeys: [Base.encode64(:crypto.strong_rand_bytes(65))]
       })
 

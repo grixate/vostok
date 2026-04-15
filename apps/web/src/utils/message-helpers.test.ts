@@ -15,9 +15,7 @@ function createIncomingMessage(overrides: Partial<ChatMessage> = {}): ChatMessag
     chat_id: 'chat-1',
     client_id: 'client-1',
     message_kind: 'text',
-    crypto_scheme: 'signal-v1',
-    sender_key_id: null,
-    sender_key_epoch: null,
+    crypto_scheme: 'signal-v2',
     sender_device_id: 'sender-device',
     sender_username: 'alice',
     inserted_at: new Date().toISOString(),
@@ -26,7 +24,7 @@ function createIncomingMessage(overrides: Partial<ChatMessage> = {}): ChatMessag
     deleted_at: null,
     header: btoa(
       JSON.stringify({
-        algorithm: 'signal-v1',
+        algorithm: 'signal-v2',
         type_map: {
           'receiver-device': 3
         }
@@ -194,7 +192,7 @@ describe('message-helpers decrypted plaintext cache', () => {
 
   it('does not log an error when decryption runs before Signal store bootstrap', async () => {
     decryptMessageTextMock.mockRejectedValue(
-      new Error('Signal store not initialized. Call initSignalStore() first.')
+      new Error('Signal message decryption requires a serverId.')
     )
 
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})

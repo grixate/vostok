@@ -15,6 +15,9 @@ defmodule VostokServer.Identity.Device do
     field :encryption_public_key, :binary
     field :signed_prekey, :binary
     field :signed_prekey_signature, :binary
+    field :kyber_prekey_id, :integer
+    field :kyber_prekey_public, :binary
+    field :kyber_prekey_signature, :binary
     field :push_provider, :string
     field :push_token, :string
     field :push_token_updated_at, :utc_datetime_usec
@@ -22,6 +25,7 @@ defmodule VostokServer.Identity.Device do
     field :registration_id, :integer
     field :signed_prekey_id_counter, :integer, default: 0
     field :one_time_prekey_id_counter, :integer, default: 0
+    field :kyber_prekey_id_counter, :integer, default: 0
     field :revoked_at, :utc_datetime_usec
 
     belongs_to :user, VostokServer.Identity.User
@@ -40,9 +44,13 @@ defmodule VostokServer.Identity.Device do
       :encryption_public_key,
       :signed_prekey,
       :signed_prekey_signature,
+      :kyber_prekey_id,
+      :kyber_prekey_public,
+      :kyber_prekey_signature,
       :registration_id,
       :signed_prekey_id_counter,
       :one_time_prekey_id_counter,
+      :kyber_prekey_id_counter,
       :push_provider,
       :push_token,
       :push_token_updated_at,

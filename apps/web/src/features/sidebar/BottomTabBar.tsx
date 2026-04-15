@@ -1,8 +1,6 @@
 import {
   ChatsIcon,
-  LinkChainIcon,
   MembersIcon,
-  PhoneIcon,
   SettingsIcon,
 } from '../../icons/index.tsx'
 import { t } from '../../lib/i18n.ts'
@@ -24,8 +22,6 @@ type BottomTabBarProps = {
 export function BottomTabBar({ activeTab, onTabChange, chatUnreadCount = 0 }: BottomTabBarProps) {
   const tabs: TabDef[] = [
     { id: 'chats', label: t('chats'), Icon: ChatsIcon, IconActive: ChatsIcon },
-    { id: 'channels', label: t('channels'), Icon: LinkChainIcon, IconActive: LinkChainIcon },
-    { id: 'calls', label: t('calls'), Icon: PhoneIcon, IconActive: PhoneIcon },
     { id: 'members', label: t('members'), Icon: MembersIcon, IconActive: MembersIcon },
     { id: 'settings', label: t('settings'), Icon: SettingsIcon, IconActive: SettingsIcon },
   ]

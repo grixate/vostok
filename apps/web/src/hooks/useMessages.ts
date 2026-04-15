@@ -22,13 +22,20 @@ import {
   markOutboxRetry,
   queueOutboxMessage
 } from '../lib/outbox-queue.ts'
-import { encryptMessage as signalEncryptMessage } from '../lib/signal-sessions.ts'
-import { getSignalStore, initSignalStore } from '../lib/signal-store.ts'
-import type { VostokPrekeyBundle } from '../lib/signal-sessions.ts'
-import { hasSession, buildSession } from '../lib/signal-sessions.ts'
+import {
+  encryptMessage as signalEncryptMessage,
+  hasSession,
+  buildSession,
+  type SignalContext,
+  type VostokPrekeyBundle
+} from '../lib/signal-bridge.ts'
 import { outboxRetryDelayMs } from '@vostok/crypto-core'
 import { subscribeToChatStream, subscribeToReconnect } from '../lib/realtime.ts'
-import { getRawChatId, type MergedChatSummary } from '../lib/multi-server.ts'
+import {
+  getRawChatId,
+  getServerIdFromQualifiedChatId,
+  type MergedChatSummary
+} from '../lib/multi-server.ts'
 import { projectMessage, cacheSentPlaintext, seedDecryptedCacheFromPersisted } from '../utils/message-helpers.ts'
 import { mergeMessageThread, mergeSyncedMessageThread } from '../utils/message-helpers.ts'
 import { syncChatSummary, compareMessageOrder } from '../utils/chat-helpers.ts'
@@ -72,7 +79,7 @@ export function useMessages(
   chatSessions: ChatDeviceSession[],
   currentUsername?: string | null
 ) {
-  type MessageDeliveryMode = 'group_sender_key' | 'session'
+  type MessageDeliveryMode = 'session'
   const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   // Use the device ID as a stable dependency for the message-loading effect.
   // The full storedDevice object changes when prekeys are consumed during
@@ -98,20 +105,10 @@ export function useMessages(
     messageItemsRef.current = messageItems
   }, [messageItems])
 
-  // Ensure Signal store is initialized before any decryption/encryption paths
-  // run. On reload, storedDevice may be available from persisted app state
-  // before the server bootstrap hook finishes its own init path.
-  useEffect(() => {
-    if (!storedDevice?.identityKeyPairJson) {
-      return
-    }
-
-    try {
-      initSignalStore(storedDevice.identityKeyPairJson, storedDevice.registrationId)
-    } catch (error) {
-      console.warn('[useMessages] Failed to initialize Signal store from stored device:', error)
-    }
-  }, [storedDevice?.identityKeyPairJson, storedDevice?.registrationId])
+  // The Signal protocol store now lives entirely in the Rust side; there is
+  // nothing to bootstrap on the web when `storedDevice` changes. The device
+  // presence itself (`storedDevice?.deviceId`) is the gate for send/decrypt
+  // paths — see the explicit check in the encrypt path below.
 
   function formatPreviewText(msg: CachedMessage): string {
     const t = msg.text
@@ -526,8 +523,6 @@ export function useMessages(
       message_kind: 'text' | 'attachment'
       header?: string
       crypto_scheme?: string
-      sender_key_id?: string
-      sender_key_epoch?: number
       reply_to_message_id?: string
       recipient_envelopes?: Record<string, string>
       established_session_ids?: string[]
@@ -550,16 +545,27 @@ export function useMessages(
       throw new Error('The selected chat is unavailable.')
     }
 
-    const store = getSignalStore()
+    const chatServerId = getServerIdFromQualifiedChatId(chatId)
+    if (!chatServerId) {
+      throw new Error('Cannot resolve server for chat encryption.')
+    }
+    const signalCtx: SignalContext = {
+      serverId: chatServerId,
+      localDeviceId: device.deviceId
+    }
 
     // Get all recipient devices for this chat
     const recipientDeviceResponse = await listRecipientDevices(sessionToken, rawChatId)
     const recipientDevices = recipientDeviceResponse.recipient_devices
 
-    // Build Signal sessions for devices that don't have one yet
+    // Build Signal sessions for devices that don't have one yet.
+    // The Rust-backed `hasSession` currently short-circuits to false, so we
+    // unconditionally try to build a session for every non-self device.
+    // `buildSession` is idempotent.
     const devicesNeedingSession: string[] = []
     for (const rd of recipientDevices) {
-      if (!(await hasSession(store, rd.device_id))) {
+      if (rd.device_id === device.deviceId) continue
+      if (!(await hasSession(signalCtx, rd.device_id))) {
         devicesNeedingSession.push(rd.device_id)
       }
     }
@@ -593,7 +599,16 @@ export function useMessages(
         try {
           const response = await fetchUserPrekeys(sessionToken, username)
           for (const bundle of response.devices) {
-            if (deviceIds.includes(bundle.device_id) && bundle.signed_prekey && bundle.signed_prekey_signature && bundle.registration_id != null && bundle.signed_prekey_id != null) {
+            if (
+              deviceIds.includes(bundle.device_id) &&
+              bundle.signed_prekey &&
+              bundle.signed_prekey_signature &&
+              bundle.registration_id != null &&
+              bundle.signed_prekey_id != null &&
+              bundle.kyber_prekey_id != null &&
+              bundle.kyber_prekey &&
+              bundle.kyber_prekey_signature
+            ) {
               prekeyBundlesByDeviceId.set(bundle.device_id, {
                 device_id: bundle.device_id,
                 identity_public_key: bundle.identity_public_key,
@@ -602,7 +617,10 @@ export function useMessages(
                 signed_prekey_public: bundle.signed_prekey,
                 signed_prekey_signature: bundle.signed_prekey_signature,
                 one_time_prekey_id: bundle.one_time_prekey_id ?? undefined,
-                one_time_prekey_public: bundle.one_time_prekey ?? undefined
+                one_time_prekey_public: bundle.one_time_prekey ?? undefined,
+                kyber_prekey_id: bundle.kyber_prekey_id,
+                kyber_prekey_public: bundle.kyber_prekey,
+                kyber_prekey_signature: bundle.kyber_prekey_signature
               })
             }
           }
@@ -618,12 +636,7 @@ export function useMessages(
       prekeyBundle: prekeyBundlesByDeviceId.get(rd.device_id)
     }))
 
-    const envelope = await signalEncryptMessage(
-      store,
-      device.deviceId,
-      signalRecipients,
-      plainText
-    )
+    const envelope = await signalEncryptMessage(signalCtx, signalRecipients, plainText)
 
     const payload = {
       client_id: clientId,
@@ -645,8 +658,6 @@ export function useMessages(
       message_kind: string
       header?: string
       crypto_scheme?: string
-      sender_key_id?: string
-      sender_key_epoch?: number
       reply_to_message_id?: string
       recipient_envelopes?: Record<string, string>
       established_session_ids?: string[]
@@ -786,10 +797,7 @@ export function useMessages(
         await ingestMessageIntoActiveThread(response.message, activeChatId)
         setBanner({
           tone: 'success',
-          message:
-            deliveryMode === 'group_sender_key'
-              ? 'Message edited with Sender Key group encryption.'
-              : 'Message edited with session encryption.'
+          message: 'Message edited.'
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to edit message.'
@@ -863,10 +871,7 @@ export function useMessages(
         await ingestMessageIntoActiveThread(response.message, activeChatId)
         setBanner({
           tone: 'success',
-          message:
-            deliveryMode === 'group_sender_key'
-              ? 'Sender Key encrypted message delivered to the server.'
-              : 'Session-bootstrapped encrypted envelope delivered to the server.'
+          message: 'Encrypted message delivered to the server.'
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to send message.'
