@@ -10,12 +10,15 @@ export type DeepLink =
  * Supported formats:
  *   vostok://chat/<chatId>
  *   vostok://settings
- *   vostok://link/<code>
+ *   vostok://invite/<code>   (alias: vostok://link/<code>)
  *
  * Web fallback (query parameters):
  *   ?chat=<chatId>
  *   ?settings
- *   ?link=<code>
+ *   ?invite=<code>           (alias: ?link=<code>)
+ *
+ * Web path fallback (used by shareable invite URLs):
+ *   /invite/<code>           (alias: /join/<code>)
  */
 export function parseDeepLink(url: string): DeepLink {
   try {
@@ -32,17 +35,24 @@ export function parseDeepLink(url: string): DeepLink {
         return { type: 'settings' }
       }
 
-      if (segments[0] === 'link' && segments[1]) {
+      if ((segments[0] === 'invite' || segments[0] === 'link') && segments[1]) {
         return { type: 'link', code: segments[1] }
       }
 
       return null
     }
 
-    // Try parsing as standard URL with query parameters (web fallback)
+    // Try parsing as standard URL
     const parsed = new URL(url, window.location.origin)
+
+    // Path-based invite URL: /invite/<code> or /join/<code>
+    const pathMatch = parsed.pathname.match(/^\/(?:invite|join)\/([a-zA-Z0-9_-]+)$/)
+    if (pathMatch) {
+      return { type: 'link', code: pathMatch[1] }
+    }
+
     const chatId = parsed.searchParams.get('chat')
-    const linkCode = parsed.searchParams.get('link')
+    const linkCode = parsed.searchParams.get('invite') ?? parsed.searchParams.get('link')
 
     if (chatId) {
       return { type: 'chat', chatId }

@@ -40,6 +40,7 @@ export type CachedMessage = {
   status?: number            // 0=sending, 1=sent, 2=delivered, 3=read, 4=failed
   receivedAt?: string        // Local receive time (ISO string)
   mediaMetadata?: string     // JSON string: {blob_id, file_name, size, mime, width, height, duration}
+  viewCount?: number         // Channel post view count
 }
 
 export type CachedConversation = {

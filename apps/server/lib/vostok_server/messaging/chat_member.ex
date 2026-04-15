@@ -23,7 +23,7 @@ defmodule VostokServer.Messaging.ChatMember do
     chat_member
     |> cast(attrs, [:role, :joined_at])
     |> validate_required([:role, :joined_at])
-    |> validate_inclusion(:role, ["admin", "member"])
+    |> validate_inclusion(:role, ["owner", "admin", "member"])
     |> unique_constraint(:user_id, name: :chat_members_chat_id_user_id_index)
   end
 end

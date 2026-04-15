@@ -593,6 +593,87 @@
   margin-top: 4px;
 }
 
+.empty-state--flex {
+  flex: 1;
+}
+
+.empty-state__icon--accent {
+  background: var(--accent-soft, rgba(0, 122, 255, 0.12));
+  color: var(--accent);
+}
+
+.empty-state__icon--accent svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* ─── Channel directory ─────────────────────────────────────────────────── */
+
+.channel-directory__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.channel-directory__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-subtle);
+}
+
+.channel-directory__card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.channel-directory__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft, rgba(0, 122, 255, 0.12));
+  color: var(--accent);
+}
+
+.channel-directory__card-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.channel-directory__card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.channel-directory__card-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.channel-directory__card-meta {
+  font-size: 12px;
+  color: var(--text-muted, var(--text-secondary));
+  margin: 0;
+}
+
+.channel-directory__card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
 /* ─── Chat List Skeleton ────────────────────────────────────────────────── */
 
 .chat-list-skeleton {

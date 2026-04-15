@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { t } from '../../lib/i18n.ts'
 import { LayoutGroup, motion } from 'motion/react'
 import { ChatListItem } from '@vostok/ui-chat'
-import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
+import { resolveApiAssetUrl, useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { formatRelativeTime } from '../../utils/format.ts'
 import { chatAvatarColor } from '../../utils/avatar-colors.ts'
@@ -90,14 +90,30 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               key={chat.id}
               className="chat-list-button"
               type="button"
-              onClick={() => { chatList.setActiveChatId(chat.id); chatList.setNewMessageMode(false); chatList.setNewChatUsername('') }}
+              onClick={() => { chatList.setActiveChatId(chat.id); chatList.setNewChatMode(null); chatList.setNewChatUsername('') }}
             >
               <ChatListItem
                 title={chat.title}
-                preview={chat.is_self_chat ? t('saved_messages') : chat.type === 'group' ? t('group') : t('direct_message')}
+                preview={
+                  chat.is_self_chat
+                    ? t('saved_messages')
+                    : chat.type === 'group'
+                      ? t('group')
+                      : chat.type === 'channel'
+                        ? 'Channel'
+                        : t('direct_message')
+                }
                 timestamp=""
                 avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
-                avatarInitial={chat.is_self_chat ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : chat.title.slice(0, 1)}
+                avatarInitial={
+                  chat.is_self_chat
+                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
+                    : chat.type === 'group'
+                      ? '👥'
+                      : chat.type === 'channel'
+                        ? '📢'
+                        : chat.title.slice(0, 1)
+                }
               />
             </button>
           ))}
@@ -160,14 +176,26 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
               active={chat.id === activeChat?.id}
               pinned={false}
               avatarColor={chatAvatarColor(chat.title, chat.is_self_chat)}
-              avatarInitial={chat.is_self_chat ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : chat.title.slice(0, 1)}
-              avatarUrl={!chat.is_self_chat && chat.serverId === chatList.activeServerId
-                ? (profilePhotos.get(
-                    chat.participant_user_ids?.find(
-                      (id) => id !== (chatList.resolveServerScope(chat.id)?.server.auth?.user.id ?? null)
-                    ) ?? ''
-                  ) ?? null)
-                : null}
+              avatarInitial={
+                chat.is_self_chat
+                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
+                  : chat.type === 'group'
+                    ? '👥'
+                    : chat.type === 'channel'
+                      ? '📢'
+                      : chat.title.slice(0, 1)
+              }
+              avatarUrl={chat.is_self_chat
+                ? null
+                : chat.type === 'direct'
+                  ? (chat.serverId === chatList.activeServerId
+                      ? (profilePhotos.get(
+                          chat.participant_user_ids?.find(
+                            (id) => id !== (chatList.resolveServerScope(chat.id)?.server.auth?.user.id ?? null)
+                          ) ?? ''
+                        ) ?? null)
+                      : null)
+                  : resolveApiAssetUrl(chat.avatar_url, chat.serverUrl)}
               isFirst={index === 0}
               online={chatList.isChatOnline(chat)}
             />
@@ -186,7 +214,7 @@ export function SidebarChatList({ chatList, activeChat, draftChatIds }: SidebarC
           <button
             className="primary-action empty-state__action"
             type="button"
-            onClick={() => chatList.setNewMessageMode(true)}
+            onClick={() => chatList.setNewChatMode('direct')}
           >
             {t('new_message')}
           </button>

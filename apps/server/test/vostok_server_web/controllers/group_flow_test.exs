@@ -54,7 +54,7 @@ defmodule VostokServerWeb.GroupFlowTest do
 
     assert %{
              "members" => [
-               %{"role" => "admin", "username" => "alice-group"},
+               %{"role" => "owner", "username" => "alice-group"},
                %{"role" => "member", "user_id" => ^bob_user_id, "username" => "bob-group"},
                %{"role" => "member", "user_id" => ^charlie_user_id, "username" => "charlie-group"}
              ]
@@ -86,6 +86,35 @@ defmodule VostokServerWeb.GroupFlowTest do
                "username" => "charlie-group"
              }
            } = json_response(remove_charlie_conn, 200)
+
+    update_avatar_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> patch("/api/v1/chats/#{chat_id}/info", %{
+        avatar_base64: Base.encode64("fake-avatar-bytes"),
+        avatar_content_type: "image/png"
+      })
+
+    assert %{
+             "chat" => %{
+               "id" => ^chat_id,
+               "avatar_url" => "/api/v1/chats/" <> ^chat_id <> "/avatar"
+             }
+           } = json_response(update_avatar_conn, 200)
+
+    remove_avatar_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> patch("/api/v1/chats/#{chat_id}/info", %{
+        remove_avatar: true
+      })
+
+    assert %{
+             "chat" => %{
+               "id" => ^chat_id,
+               "avatar_url" => nil
+             }
+           } = json_response(remove_avatar_conn, 200)
   end
 
   test "group sender keys can be distributed and fetched by recipient devices", %{conn: conn} do
@@ -309,7 +338,7 @@ defmodule VostokServerWeb.GroupFlowTest do
       |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/pin", %{})
 
     assert %{"error" => "validation", "message" => pin_error} = json_response(bob_pin_conn, 422)
-    assert String.contains?(pin_error, "Only group admins can update this chat.")
+    assert String.contains?(pin_error, "Only permitted members can pin messages")
 
     alice_pin_conn =
       build_conn()
@@ -349,6 +378,108 @@ defmodule VostokServerWeb.GroupFlowTest do
              json_response(alice_delete_conn, 200)
 
     assert is_binary(deleted_at)
+  end
+
+  test "public channels can be created and joined, while subscriber summaries hide member identities", %{conn: conn} do
+    %{token: alice_token} = register_device(conn, "alice-channel")
+    %{token: bob_token} = register_device(build_conn(), "bob-channel")
+
+    create_channel_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/channel", %{
+        title: "Announcements",
+        description: "Important updates",
+        is_public: true,
+        allow_comments: true
+      })
+
+    assert %{"chat" => %{"id" => chat_id, "type" => "channel", "membership_role" => "owner"}} =
+             json_response(create_channel_conn, 201)
+
+    list_public_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> get("/api/v1/channels")
+
+    assert %{"channels" => [%{"id" => ^chat_id, "is_public" => true}]} = json_response(list_public_conn, 200)
+
+    join_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/chats/#{chat_id}/join", %{})
+
+    assert %{"chat" => %{"id" => ^chat_id, "membership_role" => "member"}} = json_response(join_conn, 201)
+
+    chats_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> get("/api/v1/chats")
+
+    assert %{"chats" => chats} = json_response(chats_conn, 200)
+    bob_summary = Enum.find(chats, &(&1["id"] == chat_id))
+    assert bob_summary["participant_usernames"] == []
+    assert bob_summary["member_count"] == 2
+  end
+
+  test "invite links allow joining private chats and channel views deduplicate per user", %{conn: conn} do
+    %{token: alice_token, device_id: alice_device_id} = register_device(conn, "alice-invite")
+    %{token: bob_token, device_id: bob_device_id} = register_device(build_conn(), "bob-invite")
+
+    create_channel_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/channel", %{
+        title: "Private Recipes",
+        is_public: false,
+        allow_comments: true
+      })
+
+    assert %{"chat" => %{"id" => chat_id}} = json_response(create_channel_conn, 201)
+
+    create_invite_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/invite-links", %{"max_uses" => 3})
+
+    assert %{"invite_link" => %{"code" => code}} = json_response(create_invite_conn, 201)
+
+    join_via_invite_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/invite-links/#{code}/join", %{})
+
+    assert %{"chat" => %{"id" => ^chat_id}} = json_response(join_via_invite_conn, 200)
+
+    post_message_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{alice_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages", %{
+        client_id: "channel-post-1",
+        message_kind: "text",
+        crypto_scheme: "signal-v1",
+        ciphertext: Base.encode64("channel-post"),
+        recipient_envelopes: %{
+          alice_device_id => Base.encode64("wrapped-for-alice"),
+          bob_device_id => Base.encode64("wrapped-for-bob")
+        }
+      })
+
+    assert %{"message" => %{"id" => message_id}} = json_response(post_message_conn, 201)
+
+    first_view_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/view", %{})
+
+    assert %{"message_id" => ^message_id, "view_count" => 1} = json_response(first_view_conn, 200)
+
+    second_view_conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{bob_token}")
+      |> post("/api/v1/chats/#{chat_id}/messages/#{message_id}/view", %{})
+
+    assert %{"message_id" => ^message_id, "view_count" => 1} = json_response(second_view_conn, 200)
   end
 
   defp register_device(conn, username) do

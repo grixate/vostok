@@ -22,27 +22,36 @@ defmodule VostokServer.Messaging.Guards do
   end
 
   def ensure_message_delete_permission(
-        %Chat{type: "group"},
-        %ChatMember{role: "admin"},
+        %Chat{type: type},
+        %ChatMember{role: role},
         %Message{},
         _sender_device_id
-      ),
+      )
+      when type in ["group", "channel"] and role in ["owner", "admin"],
       do: :ok
 
   def ensure_message_delete_permission(_chat, _membership, %Message{} = message, sender_device_id) do
     ensure_message_owner(message, sender_device_id)
   end
 
-  def ensure_message_pin_permission(%Chat{type: "group"}, %ChatMember{} = membership) do
-    ensure_group_admin(membership)
+  def ensure_message_pin_permission(%Chat{type: type} = chat, %ChatMember{} = membership)
+      when type in ["group", "channel"] do
+    if can_pin_messages?(chat, membership) do
+      :ok
+    else
+      {:error, {:validation, "Only permitted members can pin messages in this chat."}}
+    end
   end
 
   def ensure_message_pin_permission(%Chat{}, %ChatMember{}), do: :ok
 
-  def ensure_group_admin(%ChatMember{role: "admin"}), do: :ok
+  def ensure_group_admin(%ChatMember{role: role}) when role in ["owner", "admin"], do: :ok
 
   def ensure_group_admin(%ChatMember{}),
     do: {:error, {:validation, "Only group admins can update this chat."}}
+
+  def ensure_chat_owner(%ChatMember{role: "owner"}), do: :ok
+  def ensure_chat_owner(%ChatMember{}), do: {:error, {:validation, "Only the chat owner can perform this action."}}
 
   def ensure_group_chat(%Chat{type: "group"}), do: :ok
 
@@ -50,13 +59,15 @@ defmodule VostokServer.Messaging.Guards do
     do: {:error, {:validation, "Only group chats support this action."}}
 
   def ensure_admin_continuity(_chat_id, %ChatMember{role: "member"}, _next_role), do: :ok
+  def ensure_admin_continuity(_chat_id, %ChatMember{role: "owner"}, "owner"), do: :ok
   def ensure_admin_continuity(_chat_id, %ChatMember{role: "admin"}, "admin"), do: :ok
 
-  def ensure_admin_continuity(chat_id, %ChatMember{role: "admin", user_id: user_id}, _next_role) do
+  def ensure_admin_continuity(chat_id, %ChatMember{role: role, user_id: user_id}, _next_role)
+      when role in ["owner", "admin"] do
     remaining_admin_count =
       from(chat_member in ChatMember,
         where:
-          chat_member.chat_id == ^chat_id and chat_member.role == "admin" and
+          chat_member.chat_id == ^chat_id and chat_member.role in ["owner", "admin"] and
             chat_member.user_id != ^user_id,
         select: count(chat_member.id)
       )
@@ -107,4 +118,17 @@ defmodule VostokServer.Messaging.Guards do
 
   defp validate_group_role(_role),
     do: {:error, {:validation, "group role must be admin or member."}}
+
+  defp can_pin_messages?(%Chat{permissions_json: permissions}, %ChatMember{role: role})
+       when role in ["owner", "admin"] do
+    case Map.get(permissions || %{}, "who_can_pin_messages", "admins") do
+      "everyone" -> true
+      "admins" -> true
+      _ -> true
+    end
+  end
+
+  defp can_pin_messages?(%Chat{permissions_json: permissions}, %ChatMember{}) do
+    Map.get(permissions || %{}, "who_can_pin_messages", "admins") == "everyone"
+  end
 end

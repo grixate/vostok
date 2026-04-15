@@ -615,6 +615,23 @@
   margin: 0;
 }
 
+.new-message-panel__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.new-message-panel__checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .new-message-contact {
   display: flex;
   align-items: center;

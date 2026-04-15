@@ -96,10 +96,23 @@ defmodule VostokServerWeb.Router do
     post "/chats/direct", ChatController, :create_direct
     post "/chats/self", ChatController, :create_self
     post "/chats/group", ChatController, :create_group
+    post "/chats/channel", ChatController, :create_channel
+    get "/channels", ChatController, :list_public_channels
     patch "/chats/:chat_id/group", ChatController, :update_group
+    patch "/chats/:chat_id/info", ChatController, :update_chat_info
+    get "/chats/:chat_id/avatar", ChatController, :serve_chat_avatar
     get "/chats/:chat_id/members", ChatController, :group_members
+    post "/chats/:chat_id/members", ChatController, :add_chat_members
     patch "/chats/:chat_id/members/:user_id", ChatController, :update_group_member
     post "/chats/:chat_id/members/:user_id/remove", ChatController, :remove_group_member
+    post "/chats/:chat_id/leave", ChatController, :leave_chat
+    delete "/chats/:chat_id", ChatController, :delete_chat
+    post "/chats/:chat_id/transfer-ownership/:user_id", ChatController, :transfer_ownership
+    post "/chats/:chat_id/join", ChatController, :join_channel
+    post "/chats/:chat_id/invite-links", ChatController, :create_invite_link
+    get "/chats/:chat_id/invite-links", ChatController, :list_invite_links
+    delete "/chats/:chat_id/invite-links/:id", ChatController, :revoke_invite_link
+    post "/invite-links/:code/join", ChatController, :join_via_invite_link
     get "/chats/:chat_id/sender-keys", ChatController, :list_group_sender_keys
     post "/chats/:chat_id/sender-keys", ChatController, :distribute_group_sender_keys
     post "/chats/:chat_id/session-bootstrap", ChatController, :session_bootstrap
@@ -110,6 +123,7 @@ defmodule VostokServerWeb.Router do
     get "/chats/:chat_id/messages", ChatController, :messages
     post "/chats/:chat_id/read", ChatController, :mark_read
     post "/chats/:chat_id/messages", ChatController, :create_message
+    post "/chats/:chat_id/messages/:message_id/view", ChatController, :record_view
     patch "/chats/:chat_id/messages/:message_id", ChatController, :update_message
     post "/chats/:chat_id/messages/:message_id/delete", ChatController, :delete_message
     post "/chats/:chat_id/messages/:message_id/pin", ChatController, :toggle_pin

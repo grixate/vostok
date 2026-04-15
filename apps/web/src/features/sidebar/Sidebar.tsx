@@ -3,6 +3,7 @@ import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { SidebarHeader } from './SidebarHeader.tsx'
 import { SidebarChatList } from './SidebarChatList.tsx'
+import { ChannelDirectory } from './ChannelDirectory.tsx'
 import { BottomTabBar } from './BottomTabBar.tsx'
 import type { useDesktop } from '../../hooks/useDesktop.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
@@ -53,6 +54,9 @@ export function Sidebar({ desktop, chatList, activeChat, draftChatIds, call }: S
         >
           <CallsTab call={call} />
         </Suspense>
+      )}
+      {sidebarTab === 'channels' && (
+        <ChannelDirectory chatList={chatList} />
       )}
       {sidebarTab === 'members' && (
         <>

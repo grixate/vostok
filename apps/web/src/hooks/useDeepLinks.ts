@@ -5,6 +5,7 @@ type DeepLinkActions = {
   setActiveChatId: (chatId: string) => void
   setSettingsOverlayOpen: (open: boolean) => void
   normalizeChatId?: (chatId: string) => string | null
+  onInviteCode?: (code: string) => void
 }
 
 /**
@@ -23,7 +24,7 @@ export function useDeepLinks(
   authenticated: boolean,
   actions: DeepLinkActions
 ) {
-  const { normalizeChatId, setActiveChatId, setSettingsOverlayOpen } = actions
+  const { normalizeChatId, setActiveChatId, setSettingsOverlayOpen, onInviteCode } = actions
 
   // Parse initial URL on mount (after auth)
   useEffect(() => {
@@ -34,7 +35,7 @@ export function useDeepLinks(
     const initialLink = parseDeepLink(window.location.href)
 
     if (initialLink) {
-      handleDeepLinkAction(initialLink, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen })
+      handleDeepLinkAction(initialLink, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen, onInviteCode })
 
       // Clean up the URL query params after handling (don't leave ?chat=xxx in the address bar)
       if (window.location.search) {
@@ -42,7 +43,7 @@ export function useDeepLinks(
         window.history.replaceState(null, '', cleanUrl)
       }
     }
-  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen])
+  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen, onInviteCode])
 
   // Listen for deep link events (notification clicks, Tauri deep links, popstate)
   useEffect(() => {
@@ -52,10 +53,10 @@ export function useDeepLinks(
 
     return setupDeepLinkListener((link) => {
       if (link) {
-        handleDeepLinkAction(link, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen })
+        handleDeepLinkAction(link, { normalizeChatId, setActiveChatId, setSettingsOverlayOpen, onInviteCode })
       }
     })
-  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen])
+  }, [authenticated, normalizeChatId, setActiveChatId, setSettingsOverlayOpen, onInviteCode])
 }
 
 function handleDeepLinkAction(
@@ -70,9 +71,7 @@ function handleDeepLinkAction(
       actions.setSettingsOverlayOpen(true)
       break
     case 'link':
-      // Reserved for future invite link handling.
-      // For now, log the code for debugging.
-      console.info('[deep-links] Received link code:', link.code)
+      actions.onInviteCode?.(link.code)
       break
   }
 }

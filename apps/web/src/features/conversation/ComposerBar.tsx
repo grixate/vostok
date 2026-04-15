@@ -168,6 +168,10 @@ export function ComposerBar({ messages, media, activeChat, chatList, onDraftChan
     return null
   }
 
+  if (activeChat.can_post === false) {
+    return null
+  }
+
   // ─── Round video recording UI (bottom bar only — overlay is in ConversationPane) ─
   if (media.roundVideoRecording) {
     return (

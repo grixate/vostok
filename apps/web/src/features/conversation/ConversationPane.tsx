@@ -716,6 +716,7 @@ export function ConversationPane({
       <main className="conversation-pane">
         <ChatProfilePane
           activeChat={resolvedChat}
+          chatList={chatList}
           groupChat={groupChat}
           onClose={handleCloseProfile}
         />
@@ -889,7 +890,7 @@ export function ConversationPane({
         media={media}
         downloadManager={downloadManager}
         activeChat={resolvedChat}
-        chatType={resolvedChat.type === 'group' ? 'group' : 'direct'}
+        chatType={resolvedChat.type === 'group' ? 'group' : resolvedChat.type === 'channel' ? 'channel' : 'direct'}
         searchHighlight={searchHighlight}
         initialSelectedMessageId={initialSelectedMessageId}
         onOpenMedia={handleOpenMediaViewer}
@@ -913,6 +914,11 @@ export function ConversationPane({
               {String(Math.floor(videoRecordingSeconds / 60)).padStart(2, '0')}:{String(videoRecordingSeconds % 60).padStart(2, '0')}
             </span>
           </div>
+        </div>
+      ) : null}
+      {resolvedChat?.type === 'channel' && resolvedChat.can_post === false ? (
+        <div className="settings-card" style={{ margin: '0 16px 16px' }}>
+          <span className="settings-card__muted">Only channel admins can post here.</span>
         </div>
       ) : null}
       {resolvedChat ? <ComposerBar

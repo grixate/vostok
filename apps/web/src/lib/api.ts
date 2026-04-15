@@ -61,21 +61,45 @@ export type SafetyNumberRecord = {
 
 export type ChatSummary = {
   id: string
-  type: string
+  type: 'direct' | 'group' | 'channel'
   title: string
+  description?: string | null
+  avatar_url?: string | null
   participant_usernames: string[]
   participant_user_ids: string[]
   is_self_chat: boolean
   latest_message_at: string | null
   message_count: number
+  member_count?: number
+  membership_role?: 'owner' | 'admin' | 'member' | null
+  is_public?: boolean
+  allow_comments?: boolean
+  permissions?: Record<string, 'everyone' | 'admins'>
+  can_post?: boolean
+  can_manage_members?: boolean
+  can_edit_info?: boolean
+  can_delete_chat?: boolean
+  can_leave_chat?: boolean
 }
 
 export type GroupMember = {
   user_id: string
   username: string
-  role: 'admin' | 'member'
+  role: 'owner' | 'admin' | 'member'
   joined_at: string | null
   last_seen_at: string | null
+}
+
+export type InviteLink = {
+  id: string
+  chat_id: string
+  code: string
+  url: string
+  expires_at: string | null
+  max_uses: number | null
+  use_count: number
+  revoked_at: string | null
+  inserted_at: string | null
 }
 
 export type GroupSenderKey = {
@@ -106,6 +130,7 @@ export type ChatMessage = {
   pinned_at: string | null
   edited_at: string | null
   deleted_at: string | null
+  view_count?: number
   header: string | null
   ciphertext: string
   reply_to_message_id: string | null
@@ -628,10 +653,31 @@ export async function createGroupChat(
   token: string,
   payload: {
     title: string
+    description?: string
+    avatar_base64?: string
+    avatar_content_type?: string
     members?: string[]
   }
 ): Promise<{ chat: ChatSummary }> {
   return apiRequest<{ chat: ChatSummary }>('/chats/group', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function createChannel(
+  token: string,
+  payload: {
+    title: string
+    description?: string
+    avatar_base64?: string
+    avatar_content_type?: string
+    is_public?: boolean
+    allow_comments?: boolean
+  }
+): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>('/chats/channel', {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(payload)
@@ -652,6 +698,27 @@ export async function renameGroupChat(
   })
 }
 
+export async function updateChatInfo(
+  token: string,
+  chatId: string,
+  payload: {
+    title?: string
+    description?: string
+    avatar_base64?: string
+    avatar_content_type?: string
+    remove_avatar?: boolean
+    permissions?: Record<string, 'everyone' | 'admins'>
+    is_public?: boolean
+    allow_comments?: boolean
+  }
+): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>(`/chats/${chatId}/info`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(payload)
+  })
+}
+
 export async function listGroupMembers(
   token: string,
   chatId: string
@@ -659,6 +726,18 @@ export async function listGroupMembers(
   return apiRequest<{ members: GroupMember[] }>(`/chats/${chatId}/members`, {
     method: 'GET',
     headers: authHeader(token)
+  })
+}
+
+export async function addChatMembers(
+  token: string,
+  chatId: string,
+  members: string[]
+): Promise<{ members: GroupMember[] }> {
+  return apiRequest<{ members: GroupMember[] }>(`/chats/${chatId}/members`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ members })
   })
 }
 
@@ -684,6 +763,105 @@ export async function removeGroupMember(
     method: 'POST',
     headers: authHeader(token)
   })
+}
+
+export async function leaveChat(token: string, chatId: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>(`/chats/${chatId}/leave`, {
+    method: 'POST',
+    headers: authHeader(token)
+  })
+}
+
+export async function deleteChat(token: string, chatId: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>(`/chats/${chatId}`, {
+    method: 'DELETE',
+    headers: authHeader(token)
+  })
+}
+
+export async function transferOwnership(
+  token: string,
+  chatId: string,
+  userId: string
+): Promise<{ previous_owner: GroupMember; new_owner: GroupMember }> {
+  return apiRequest<{ previous_owner: GroupMember; new_owner: GroupMember }>(
+    `/chats/${chatId}/transfer-ownership/${userId}`,
+    {
+      method: 'POST',
+      headers: authHeader(token)
+    }
+  )
+}
+
+export async function listPublicChannels(token: string): Promise<{ channels: ChatSummary[] }> {
+  return apiRequest<{ channels: ChatSummary[] }>('/channels', {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function joinChannel(token: string, chatId: string): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>(`/chats/${chatId}/join`, {
+    method: 'POST',
+    headers: authHeader(token)
+  })
+}
+
+export async function createInviteLink(
+  token: string,
+  chatId: string,
+  payload?: { expires_in_hours?: number; max_uses?: number }
+): Promise<{ invite_link: InviteLink }> {
+  return apiRequest<{ invite_link: InviteLink }>(`/chats/${chatId}/invite-links`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload ?? {})
+  })
+}
+
+export async function listInviteLinks(
+  token: string,
+  chatId: string
+): Promise<{ invite_links: InviteLink[] }> {
+  return apiRequest<{ invite_links: InviteLink[] }>(`/chats/${chatId}/invite-links`, {
+    method: 'GET',
+    headers: authHeader(token)
+  })
+}
+
+export async function revokeInviteLink(
+  token: string,
+  chatId: string,
+  inviteLinkId: string
+): Promise<{ invite_link: InviteLink }> {
+  return apiRequest<{ invite_link: InviteLink }>(`/chats/${chatId}/invite-links/${inviteLinkId}`, {
+    method: 'DELETE',
+    headers: authHeader(token)
+  })
+}
+
+export async function joinViaInviteLink(
+  token: string,
+  code: string
+): Promise<{ chat: ChatSummary }> {
+  return apiRequest<{ chat: ChatSummary }>(`/invite-links/${encodeURIComponent(code)}/join`, {
+    method: 'POST',
+    headers: authHeader(token)
+  })
+}
+
+export async function recordMessageView(
+  token: string,
+  chatId: string,
+  messageId: string
+): Promise<{ message_id: string; view_count: number }> {
+  return apiRequest<{ message_id: string; view_count: number }>(
+    `/chats/${chatId}/messages/${messageId}/view`,
+    {
+      method: 'POST',
+      headers: authHeader(token)
+    }
+  )
 }
 
 export async function bootstrapChatSessions(

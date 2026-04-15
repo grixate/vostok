@@ -59,7 +59,17 @@ defmodule VostokServer.Messaging.Presenter do
 
     chat
     |> Map.from_struct()
-    |> Map.take([:id, :type, :members, :metadata_encrypted])
+    |> Map.take([
+      :id,
+      :type,
+      :members,
+      :metadata_encrypted,
+      :description,
+      :avatar_path,
+      :is_public,
+      :allow_comments,
+      :permissions_json
+    ])
     |> Map.put(:message_count, unread_count)
     |> Map.put(:latest_message_at, summary.latest_message_at)
     |> present_chat(current_user_id)
@@ -69,13 +79,30 @@ defmodule VostokServer.Messaging.Presenter do
     chat
     |> Repo.preload(members: [:user])
     |> Map.from_struct()
-    |> Map.take([:id, :type, :inserted_at, :updated_at, :members, :metadata_encrypted])
+    |> Map.take([
+      :id,
+      :type,
+      :inserted_at,
+      :updated_at,
+      :members,
+      :metadata_encrypted,
+      :description,
+      :avatar_path,
+      :is_public,
+      :allow_comments,
+      :permissions_json
+    ])
     |> Map.put(:message_count, 0)
     |> Map.put(:latest_message_at, nil)
     |> present_chat(current_user_id)
   end
 
   def present_chat(chat, current_user_id) do
+    membership = Enum.find(chat.members, &(chat_member_user_id(&1) == current_user_id))
+    membership_role = membership && membership.role
+    permissions = normalized_permissions(chat.type, Map.get(chat, :permissions_json))
+    member_count = length(chat.members)
+
     member_entries =
       chat.members
       |> Enum.map(fn member ->
@@ -91,12 +118,8 @@ defmodule VostokServer.Messaging.Presenter do
       |> Enum.map(& &1.username)
       |> Enum.reject(&is_nil/1)
 
-    participant_ids = Enum.map(member_entries, & &1.user_id)
-
-    participant_names =
-      member_entries
-      |> Enum.map(& &1.username)
-      |> Enum.reject(&is_nil/1)
+    participant_ids = visible_participant_ids(chat.type, membership_role, member_entries)
+    participant_names = visible_participant_names(chat.type, membership_role, member_entries)
 
     title =
       cond do
@@ -120,12 +143,24 @@ defmodule VostokServer.Messaging.Presenter do
       id: chat.id,
       type: chat.type,
       title: title,
+      description: Map.get(chat, :description),
+      avatar_url: chat_avatar_url(chat),
       participant_usernames: participant_names,
       participant_user_ids: participant_ids,
       is_self_chat:
         length(participant_ids) == 1 and Enum.at(participant_ids, 0) == current_user_id,
       latest_message_at: iso_or_nil(chat.latest_message_at),
-      message_count: chat.message_count
+      message_count: chat.message_count,
+      member_count: member_count,
+      membership_role: membership_role,
+      is_public: Map.get(chat, :is_public, false),
+      allow_comments: Map.get(chat, :allow_comments, true),
+      permissions: permissions,
+      can_post: can_post?(chat.type, membership_role, permissions),
+      can_manage_members: can_manage_members?(chat.type, membership_role, permissions),
+      can_edit_info: can_edit_info?(chat.type, membership_role, permissions),
+      can_delete_chat: can_delete_chat?(chat.type, membership_role),
+      can_leave_chat: can_leave_chat?(chat.type, membership_role)
     }
   end
 
@@ -177,6 +212,7 @@ defmodule VostokServer.Messaging.Presenter do
       edited_at: iso_or_nil(message.edited_at),
       deleted_at: iso_or_nil(message.deleted_at),
       seq: message.seq,
+      view_count: message_view_count(message),
       recipient_device_ids: Enum.map(message.recipient_envelopes, & &1.device_id),
       reactions: summarize_reactions(Map.get(message, :reactions, []), current_user_id),
       recipient_envelope:
@@ -216,6 +252,81 @@ defmodule VostokServer.Messaging.Presenter do
   end
 
   defp summarize_reactions(_, _current_user_id), do: []
+
+  defp message_view_count(%{view_count: view_count}) when is_integer(view_count), do: view_count
+  defp message_view_count(%{views: views}) when is_list(views), do: length(views)
+  defp message_view_count(_message), do: 0
+
+  defp visible_participant_ids("channel", role, _entries) when role not in ["owner", "admin"], do: []
+  defp visible_participant_ids(_type, _role, entries), do: Enum.map(entries, & &1.user_id)
+
+  defp visible_participant_names("channel", role, _entries) when role not in ["owner", "admin"], do: []
+
+  defp visible_participant_names(_type, _role, entries) do
+    entries
+    |> Enum.map(& &1.username)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp normalized_permissions("direct", _permissions), do: %{}
+
+  defp normalized_permissions(type, permissions) when type in ["group", "channel"] do
+    base =
+      if type == "channel" do
+        %{
+          "who_can_send" => "admins",
+          "who_can_add_members" => "admins",
+          "who_can_edit_info" => "admins",
+          "who_can_pin_messages" => "admins"
+        }
+      else
+        %{
+          "who_can_send" => "everyone",
+          "who_can_add_members" => "admins",
+          "who_can_edit_info" => "admins",
+          "who_can_pin_messages" => "admins"
+        }
+      end
+
+    Map.merge(base, permissions || %{})
+  end
+
+  defp can_post?("direct", _role, _permissions), do: true
+  defp can_post?(_type, role, _permissions) when role in ["owner", "admin"], do: true
+
+  defp can_post?("group", _role, permissions) do
+    Map.get(permissions, "who_can_send", "everyone") == "everyone"
+  end
+
+  defp can_post?("channel", _role, _permissions), do: false
+  defp can_post?(_type, _role, _permissions), do: false
+
+  defp can_manage_members?("direct", _role, _permissions), do: false
+  defp can_manage_members?(_type, role, _permissions) when role in ["owner", "admin"], do: true
+
+  defp can_manage_members?("group", _role, permissions) do
+    Map.get(permissions, "who_can_add_members", "admins") == "everyone"
+  end
+
+  defp can_manage_members?(_type, _role, _permissions), do: false
+
+  defp can_edit_info?("direct", _role, _permissions), do: false
+  defp can_edit_info?(_type, role, _permissions) when role in ["owner", "admin"], do: true
+
+  defp can_edit_info?("group", _role, permissions) do
+    Map.get(permissions, "who_can_edit_info", "admins") == "everyone"
+  end
+
+  defp can_edit_info?(_type, _role, _permissions), do: false
+
+  defp can_delete_chat?(type, role) when type in ["group", "channel"], do: role == "owner"
+  defp can_delete_chat?(_type, _role), do: false
+
+  defp can_leave_chat?(type, role) when type in ["group", "channel"], do: role not in [nil, "owner"]
+  defp can_leave_chat?(_type, _role), do: false
+
+  defp chat_avatar_url(%{avatar_path: nil}), do: nil
+  defp chat_avatar_url(%{id: chat_id}), do: "/api/v1/chats/#{chat_id}/avatar"
 
   defp sender_username_for(%{sender_device: %{user: %{username: username}}}), do: username
   defp sender_username_for(_), do: nil

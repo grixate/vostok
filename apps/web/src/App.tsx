@@ -1,5 +1,6 @@
 import {
   Suspense,
+  useCallback,
   useDeferredValue,
   useEffect,
   lazy,
@@ -11,8 +12,9 @@ import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import type { AuthSession, Banner, ServerInfo, StoredDevice } from './types.ts'
 import { buildDesktopWindowTitle } from './utils/call-helpers.ts'
 import { setDefaultApiBaseUrl } from './lib/api.ts'
+import { joinViaInviteLink } from './lib/api.ts'
 import { setDefaultRealtimeBaseUrl } from './lib/realtime.ts'
-import { normalizeServerUrl } from './lib/multi-server.ts'
+import { normalizeServerUrl, qualifyChatId } from './lib/multi-server.ts'
 import {
   doesAuthSessionMatchServer,
   findServerForAuthSession,
@@ -186,7 +188,7 @@ function AppInner({
     setSettingsOverlayOpen,
     setSidebarTab
   } = useUIContext()
-  const { storedDevice, sessionToken, setStoredDevice, setSessionToken } = useAppContext()
+  const { storedDevice, sessionToken, setStoredDevice, setSessionToken, setBanner } = useAppContext()
   const [selectMessageId, setSelectMessageId] = useState<string | null>(null)
   const [mobilePanel, setMobilePanelRaw] = useState<'sidebar' | 'conversation'>('sidebar')
   const mobileDirRef = useRef<1 | -1>(1)
@@ -413,9 +415,33 @@ function AppInner({
     deferredActiveChatId,
     appSettings.settings
   )
+  const handleInviteCode = useCallback((code: string) => {
+    if (!activeServer || !activeServerScope?.token) {
+      return
+    }
+
+    joinViaInviteLink(activeServerScope.token, code)
+      .then((response) => {
+        servers.updateChatForServer(activeServer.id, response.chat)
+        setActiveChatId(qualifyChatId(activeServer.id, response.chat.id))
+      })
+      .catch((error) => {
+        setBanner({
+          tone: 'error',
+          message: error instanceof Error ? error.message : 'Failed to join via invite link.'
+        })
+      })
+      .finally(() => {
+        if (window.location.pathname !== '/') {
+          window.history.replaceState(null, '', '/')
+        }
+      })
+  }, [activeServer, activeServerScope?.token, servers, setActiveChatId, setBanner])
+
   useDeepLinks(appView === 'chat', {
     setActiveChatId,
     setSettingsOverlayOpen,
+    onInviteCode: handleInviteCode,
     normalizeChatId(chatId) {
       if (chatId.includes('::')) {
         return chatId

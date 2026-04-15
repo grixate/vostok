@@ -280,12 +280,52 @@ defmodule VostokServerWeb.Api.V1.ChatController do
   end
 
   def create_group(conn, params) do
-    case Messaging.create_group_chat(conn.assigns.current_user.id, params) do
-      {:ok, chat} ->
-        conn
-        |> put_status(:created)
-        |> json(%{chat: chat})
+    with {:ok, enriched_params} <- maybe_store_chat_avatar(params, nil),
+         {:ok, chat} <-
+           Messaging.create_group_chat(
+             conn.assigns.current_user.id,
+             device_id(conn),
+             enriched_params
+           ) do
+      conn
+      |> put_status(:created)
+      |> json(%{chat: chat})
+    else
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
 
+  def create_channel(conn, params) do
+    with {:ok, enriched_params} <- maybe_store_chat_avatar(params, nil),
+         {:ok, chat} <-
+           Messaging.create_channel(
+             conn.assigns.current_user.id,
+             device_id(conn),
+             enriched_params
+           ) do
+      conn
+      |> put_status(:created)
+      |> json(%{chat: chat})
+    else
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def update_chat_info(conn, %{"chat_id" => chat_id} = params) do
+    previous_avatar_path = current_chat_avatar_path(chat_id)
+
+    with {:ok, enriched_params} <- maybe_store_chat_avatar(params, chat_id),
+         {:ok, chat} <- Messaging.update_chat_info(chat_id, conn.assigns.current_user.id, enriched_params) do
+      maybe_cleanup_replaced_chat_avatar(
+        previous_avatar_path,
+        Map.get(enriched_params, "avatar_path"),
+        avatar_removal_requested?(params)
+      )
+
+      json(conn, %{chat: chat})
+    else
       {:error, {kind, message}} ->
         render_error(conn, kind, message)
     end
@@ -303,6 +343,16 @@ defmodule VostokServerWeb.Api.V1.ChatController do
 
   def group_members(conn, %{"chat_id" => chat_id}) do
     case Messaging.list_group_members(chat_id, conn.assigns.current_user.id) do
+      {:ok, members} ->
+        json(conn, %{members: members})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def add_chat_members(conn, %{"chat_id" => chat_id} = params) do
+    case Messaging.add_chat_members(chat_id, conn.assigns.current_user.id, params) do
       {:ok, members} ->
         json(conn, %{members: members})
 
@@ -330,6 +380,125 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     case Messaging.remove_group_member(chat_id, conn.assigns.current_user.id, user_id) do
       {:ok, member} ->
         json(conn, %{member: member})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def leave_chat(conn, %{"chat_id" => chat_id}) do
+    case Messaging.leave_chat(chat_id, conn.assigns.current_user.id) do
+      {:ok, :left} ->
+        json(conn, %{ok: true})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def delete_chat(conn, %{"chat_id" => chat_id}) do
+    case Messaging.delete_chat(chat_id, conn.assigns.current_user.id) do
+      {:ok, :deleted} ->
+        json(conn, %{ok: true})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def transfer_ownership(conn, %{"chat_id" => chat_id, "user_id" => user_id}) do
+    case Messaging.transfer_ownership(chat_id, conn.assigns.current_user.id, user_id) do
+      {:ok, result} ->
+        json(conn, result)
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def list_public_channels(conn, _params) do
+    channels = Messaging.list_public_channels(conn.assigns.current_user.id, device_id(conn))
+    json(conn, %{channels: channels})
+  end
+
+  def join_channel(conn, %{"chat_id" => chat_id}) do
+    case Messaging.join_channel(chat_id, conn.assigns.current_user.id) do
+      {:ok, chat} ->
+        conn
+        |> put_status(:created)
+        |> json(%{chat: chat})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def serve_chat_avatar(conn, %{"chat_id" => chat_id}) do
+    case VostokServer.Repo.get(VostokServer.Messaging.Chat, chat_id) do
+      %{avatar_path: path} when is_binary(path) ->
+        photos_dir = Path.join(Application.app_dir(:vostok_server, "priv"), "chat_avatars")
+        full_path = Path.join(photos_dir, Path.basename(path))
+
+        if File.exists?(full_path) do
+          conn
+          |> put_resp_content_type(MIME.from_path(full_path) || "image/jpeg")
+          |> put_resp_header("cache-control", "public, max-age=3600")
+          |> send_file(200, full_path)
+        else
+          conn |> put_status(:not_found) |> json(%{error: "not_found"})
+        end
+
+      _ ->
+        conn |> put_status(:not_found) |> json(%{error: "not_found"})
+    end
+  end
+
+  def create_invite_link(conn, %{"chat_id" => chat_id} = params) do
+    case Messaging.create_invite_link(chat_id, conn.assigns.current_user.id, params) do
+      {:ok, invite_link} ->
+        conn
+        |> put_status(:created)
+        |> json(%{invite_link: invite_link})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def list_invite_links(conn, %{"chat_id" => chat_id}) do
+    case Messaging.list_invite_links(chat_id, conn.assigns.current_user.id) do
+      {:ok, invite_links} ->
+        json(conn, %{invite_links: invite_links})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def join_via_invite_link(conn, %{"code" => code}) do
+    case Messaging.join_via_invite_link(code, conn.assigns.current_user.id) do
+      {:ok, chat} ->
+        json(conn, %{chat: chat})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def revoke_invite_link(conn, %{"chat_id" => chat_id, "id" => invite_link_id}) do
+    case Messaging.revoke_invite_link(chat_id, invite_link_id, conn.assigns.current_user.id) do
+      {:ok, invite_link} ->
+        json(conn, %{invite_link: invite_link})
+
+      {:error, {kind, message}} ->
+        render_error(conn, kind, message)
+    end
+  end
+
+  def record_view(conn, %{"chat_id" => chat_id, "message_id" => message_id}) do
+    case Messaging.record_message_view(chat_id, message_id, conn.assigns.current_user.id) do
+      {:ok, result} ->
+        json(conn, result)
 
       {:error, {kind, message}} ->
         render_error(conn, kind, message)
@@ -590,9 +759,123 @@ defmodule VostokServerWeb.Api.V1.ChatController do
     |> json(%{error: "not_found", message: message})
   end
 
+  defp render_error(conn, :forbidden, message) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{error: "forbidden", message: message})
+  end
+
   defp render_error(conn, _kind, message) do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: "validation", message: message})
+  end
+
+  defp maybe_store_chat_avatar(params, nil) do
+    maybe_store_chat_avatar(params, Ecto.UUID.generate())
+  end
+
+  defp maybe_store_chat_avatar(params, chat_id) do
+    with {:ok, sanitized} <- strip_avatar_upload_fields(params),
+         avatar_base64 when is_binary(avatar_base64) <- Map.get(params, "avatar_base64"),
+         content_type when is_binary(content_type) <- Map.get(params, "avatar_content_type"),
+         {:ok, avatar_bytes} <- Base.decode64(avatar_base64),
+         true <- content_type in ["image/jpeg", "image/png", "image/gif", "image/webp"],
+         true <- byte_size(avatar_bytes) <= 5 * 1024 * 1024,
+         {:ok, relative_path} <- write_chat_avatar(chat_id, avatar_bytes, content_type) do
+      {:ok, Map.put(sanitized, "avatar_path", relative_path)}
+    else
+      {:ok, sanitized} ->
+        {:ok, sanitized}
+
+      nil ->
+        strip_avatar_upload_fields(params)
+
+      false ->
+        {:error, {:validation, "Invalid chat avatar. Supported types: jpeg, png, gif, webp (max 5 MB)."}}
+
+      :error ->
+        {:error, {:validation, "Invalid base64 avatar data."}}
+
+      {:error, reason} ->
+        {:error, {:validation, "Failed to save chat avatar: #{inspect(reason)}"}}
+    end
+  end
+
+  defp strip_avatar_upload_fields(params) do
+    {:ok, Map.drop(params, ["avatar_base64", "avatar_content_type"])}
+  end
+
+  defp write_chat_avatar(chat_id, avatar_bytes, content_type) do
+    photos_dir = Path.join(Application.app_dir(:vostok_server, "priv"), "chat_avatars")
+    File.mkdir_p!(photos_dir)
+
+    ext =
+      case content_type do
+        "image/jpeg" -> "jpg"
+        "image/png" -> "png"
+        "image/gif" -> "gif"
+        "image/webp" -> "webp"
+        _ -> "jpg"
+      end
+
+    filename = "#{chat_id || Ecto.UUID.generate()}.#{ext}"
+    path = Path.join(photos_dir, filename)
+
+    case File.write(path, avatar_bytes) do
+      :ok ->
+        remove_other_chat_avatar_files(chat_id, filename)
+        {:ok, "chat_avatars/#{filename}"}
+
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp current_chat_avatar_path(chat_id) do
+    case VostokServer.Repo.get(VostokServer.Messaging.Chat, chat_id) do
+      %{avatar_path: path} when is_binary(path) -> path
+      _ -> nil
+    end
+  end
+
+  defp avatar_removal_requested?(params) do
+    case Map.get(params, "remove_avatar") do
+      true -> true
+      "true" -> true
+      _ -> false
+    end
+  end
+
+  defp maybe_cleanup_replaced_chat_avatar(nil, _new_avatar_path, _remove_avatar), do: :ok
+
+  defp maybe_cleanup_replaced_chat_avatar(previous_avatar_path, new_avatar_path, remove_avatar) do
+    if remove_avatar or (is_binary(new_avatar_path) and new_avatar_path != previous_avatar_path) do
+      delete_chat_avatar_file(previous_avatar_path)
+    end
+  end
+
+  defp remove_other_chat_avatar_files(nil, _filename), do: :ok
+
+  defp remove_other_chat_avatar_files(chat_id, keep_filename) do
+    photos_dir = Path.join(Application.app_dir(:vostok_server, "priv"), "chat_avatars")
+
+    photos_dir
+    |> Path.join("#{chat_id}.*")
+    |> Path.wildcard()
+    |> Enum.reject(&(Path.basename(&1) == keep_filename))
+    |> Enum.each(&File.rm/1)
+  end
+
+  defp delete_chat_avatar_file(nil), do: :ok
+
+  defp delete_chat_avatar_file(path) do
+    photos_dir = Path.join(Application.app_dir(:vostok_server, "priv"), "chat_avatars")
+    full_path = Path.join(photos_dir, Path.basename(path))
+
+    if File.exists?(full_path) do
+      File.rm(full_path)
+    else
+      :ok
+    end
   end
 end

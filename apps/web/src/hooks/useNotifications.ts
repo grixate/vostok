@@ -7,6 +7,7 @@ import {
   sendNotification,
   isWindowFocused
 } from '../lib/notifications.ts'
+import { getChannelCommentsNotify } from '../lib/channel-prefs.ts'
 
 // ── Notification sound ──────────────────────────────────────────────────
 
@@ -108,13 +109,18 @@ export function useNotifications(
       return
     }
 
+    // In channels, comments (replies) are opt-in. Skip unless the viewer enabled them.
+    const suppressChannelComments =
+      activeChat?.type === 'channel' && !getChannelCommentsNotify(activeChatId)
+
     // Find new incoming messages that weren't in the previous set
     const newIncomingMessages = messageItems.filter(
       (m) =>
         !previousIds.has(m.id) &&
         m.side === 'incoming' &&
         !m.id.startsWith('optimistic-') &&
-        !m.deletedAt
+        !m.deletedAt &&
+        !(suppressChannelComments && m.replyToMessageId)
     )
 
     for (const message of newIncomingMessages) {

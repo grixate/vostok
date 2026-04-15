@@ -16,7 +16,7 @@ defmodule VostokServer.Messaging do
   import VostokServer.Messaging.Guards,
     only: [
       ensure_admin_continuity: 3,
-      ensure_group_admin: 1,
+      ensure_chat_owner: 1,
       ensure_group_chat: 1,
       ensure_message_chat: 2,
       ensure_message_delete_permission: 4,
@@ -75,7 +75,9 @@ defmodule VostokServer.Messaging do
     ChatSafetyVerification,
     GroupSenderKey,
     ChatMember,
+    InviteLink,
     Message,
+    MessageView,
     MessageReaction,
     MessageRecipient
   }
@@ -83,6 +85,18 @@ defmodule VostokServer.Messaging do
   alias VostokServer.Repo
 
   @messages_seq_cache_key {__MODULE__, :messages_seq_supported}
+  @group_permissions_default %{
+    "who_can_send" => "everyone",
+    "who_can_add_members" => "admins",
+    "who_can_edit_info" => "admins",
+    "who_can_pin_messages" => "admins"
+  }
+  @channel_permissions_default %{
+    "who_can_send" => "admins",
+    "who_can_add_members" => "admins",
+    "who_can_edit_info" => "admins",
+    "who_can_pin_messages" => "admins"
+  }
 
   def list_chats_for_user(user_id, device_id \\ nil) when is_binary(user_id) do
     from(chat in Chat,
@@ -116,12 +130,15 @@ defmodule VostokServer.Messaging do
     end
   end
 
-  def create_group_chat(current_user_id, attrs)
-      when is_binary(current_user_id) and is_map(attrs) do
+  def create_group_chat(current_user_id, current_device_id, attrs)
+      when is_binary(current_user_id) and is_binary(current_device_id) and is_map(attrs) do
     with %User{} = current_user <- Repo.get(User, current_user_id),
          {:ok, title} <- fetch_string(attrs, "title", "group title"),
+         {:ok, description} <- fetch_optional_string(attrs, "description"),
+         {:ok, avatar_path} <- fetch_optional_string(attrs, "avatar_path"),
          {:ok, member_usernames} <- fetch_username_list(attrs, "members"),
-         {:ok, members} <- resolve_group_members(current_user, member_usernames) do
+         {:ok, members} <- resolve_group_members(current_user, member_usernames),
+         {:ok, permissions} <- normalize_permissions_attrs("group", attrs) do
       now = DateTime.utc_now()
 
       Multi.new()
@@ -129,11 +146,17 @@ defmodule VostokServer.Messaging do
         :chat,
         Chat.changeset(%Chat{}, %{
           type: "group",
-          metadata_encrypted: title
+          metadata_encrypted: title,
+          description: description,
+          avatar_path: avatar_path,
+          permissions_json: permissions,
+          is_public: false,
+          allow_comments: true
         })
       )
       |> Multi.run(:memberships, fn repo, %{chat: chat} ->
-        Enum.reduce_while(members, {:ok, []}, fn {user, role}, {:ok, inserted} ->
+        Enum.reduce_while(initial_memberships(current_user, members), {:ok, []}, fn
+          {user, role}, {:ok, inserted} ->
           case insert_chat_member(repo, chat, user, now, role) do
             {:ok, membership} -> {:cont, {:ok, [membership | inserted]}}
             {:error, reason} -> {:halt, {:error, reason}}
@@ -143,6 +166,64 @@ defmodule VostokServer.Messaging do
       |> Repo.transaction()
       |> case do
         {:ok, %{chat: chat}} ->
+          _ =
+            create_system_message(
+              chat.id,
+              current_device_id,
+              "#{current_user.username} created the group"
+            )
+
+          {:ok, present_chat_with_preloaded_members(chat, current_user_id)}
+
+        {:error, _step, reason, _changes} ->
+          {:error, reason}
+      end
+    else
+      nil ->
+        {:error, {:not_found, "Current user not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def create_channel(current_user_id, current_device_id, attrs)
+      when is_binary(current_user_id) and is_binary(current_device_id) and is_map(attrs) do
+    with %User{} = current_user <- Repo.get(User, current_user_id),
+         {:ok, title} <- fetch_string(attrs, "title", "channel title"),
+         {:ok, description} <- fetch_optional_string(attrs, "description"),
+         {:ok, avatar_path} <- fetch_optional_string(attrs, "avatar_path"),
+         {:ok, is_public} <- fetch_optional_boolean(attrs, "is_public"),
+         {:ok, allow_comments} <- fetch_optional_boolean(attrs, "allow_comments"),
+         {:ok, permissions} <- normalize_permissions_attrs("channel", attrs) do
+      now = DateTime.utc_now()
+
+      Multi.new()
+      |> Multi.insert(
+        :chat,
+        Chat.changeset(%Chat{}, %{
+          type: "channel",
+          metadata_encrypted: title,
+          description: description,
+          avatar_path: avatar_path,
+          permissions_json: permissions,
+          is_public: is_public,
+          allow_comments: allow_comments
+        })
+      )
+      |> Multi.run(:owner_membership, fn repo, %{chat: chat} ->
+        insert_chat_member(repo, chat, current_user, now, "owner")
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{chat: chat}} ->
+          _ =
+            create_system_message(
+              chat.id,
+              current_device_id,
+              "#{current_user.username} created the channel"
+            )
+
           {:ok, present_chat_with_preloaded_members(chat, current_user_id)}
 
         {:error, _step, reason, _changes} ->
@@ -159,15 +240,18 @@ defmodule VostokServer.Messaging do
 
   def rename_group_chat(chat_id, user_id, attrs)
       when is_binary(chat_id) and is_binary(user_id) and is_map(attrs) do
+    update_chat_info(chat_id, user_id, attrs)
+  end
+
+  def update_chat_info(chat_id, user_id, attrs)
+      when is_binary(chat_id) and is_binary(user_id) and is_map(attrs) do
     with {:ok, membership} <- ensure_membership(chat_id, user_id),
-         :ok <- ensure_group_admin(membership),
          %Chat{} = chat <- Repo.get(Chat, chat_id),
-         :ok <- ensure_group_chat(chat),
-         {:ok, title} <- fetch_string(attrs, "title", "group title"),
-         {:ok, updated_chat} <-
-           chat
-           |> Chat.changeset(%{metadata_encrypted: title})
-           |> Repo.update() do
+         :ok <- ensure_editable_chat(chat),
+         :ok <- authorize_chat_info_update(chat, membership),
+         {:ok, update_attrs} <- normalize_chat_info_update(chat, attrs),
+         {:ok, updated_chat} <- chat |> Chat.changeset(update_attrs) |> Repo.update() do
+      emit_chat_info_system_messages(chat, updated_chat, user_id)
       {:ok, present_chat_with_preloaded_members(updated_chat, user_id)}
     else
       nil ->
@@ -179,9 +263,9 @@ defmodule VostokServer.Messaging do
   end
 
   def list_group_members(chat_id, user_id) when is_binary(chat_id) and is_binary(user_id) do
-    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
          %Chat{} = chat <- Repo.get(Chat, chat_id),
-         :ok <- ensure_group_chat(chat) do
+         :ok <- ensure_member_listing_visible(chat, membership) do
       members =
         from(chat_member in ChatMember,
           where: chat_member.chat_id == ^chat_id,
@@ -205,16 +289,33 @@ defmodule VostokServer.Messaging do
       when is_binary(chat_id) and is_binary(current_user_id) and is_binary(target_user_id) and
              is_map(attrs) do
     with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
-         :ok <- ensure_group_admin(membership),
          %Chat{} = chat <- Repo.get(Chat, chat_id),
-         :ok <- ensure_group_chat(chat),
+         :ok <- ensure_manageable_chat(chat),
          %ChatMember{} = target_member <-
            Repo.get_by(ChatMember, chat_id: chat_id, user_id: target_user_id),
          {:ok, role} <- fetch_group_role(attrs, &fetch_string/3),
+         :ok <- authorize_role_change(membership, target_member, role),
          :ok <- ensure_admin_continuity(chat_id, target_member, role),
          {:ok, updated_member} <-
            target_member |> ChatMember.changeset(%{role: role}) |> Repo.update() do
-      {:ok, present_group_member(Repo.preload(updated_member, :user))}
+      presented = present_group_member(Repo.preload(updated_member, :user))
+      actor = Repo.get(User, current_user_id)
+      if actor && presented.username && target_member.role != role do
+        text =
+          cond do
+            role == "admin" and target_member.role == "member" ->
+              "#{actor.username} made #{presented.username} an admin"
+
+            role == "member" and target_member.role == "admin" ->
+              "#{actor.username} removed admin rights from #{presented.username}"
+
+            true ->
+              nil
+          end
+
+        if text, do: emit_system_message(chat_id, current_user_id, text)
+      end
+      {:ok, presented}
     else
       nil ->
         {:error, {:not_found, "Group member not found."}}
@@ -227,17 +328,353 @@ defmodule VostokServer.Messaging do
   def remove_group_member(chat_id, current_user_id, target_user_id)
       when is_binary(chat_id) and is_binary(current_user_id) and is_binary(target_user_id) do
     with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
-         :ok <- ensure_group_admin(membership),
          %Chat{} = chat <- Repo.get(Chat, chat_id),
-         :ok <- ensure_group_chat(chat),
+         :ok <- ensure_manageable_chat(chat),
          %ChatMember{} = target_member <-
            Repo.get_by(ChatMember, chat_id: chat_id, user_id: target_user_id),
+         :ok <- authorize_member_removal(membership, target_member),
          :ok <- ensure_admin_continuity(chat_id, target_member, nil),
          {:ok, deleted_member} <- Repo.delete(target_member) do
-      {:ok, present_group_member(Repo.preload(deleted_member, :user))}
+      presented = present_group_member(Repo.preload(deleted_member, :user))
+      actor = Repo.get(User, current_user_id)
+      if actor && presented.username do
+        emit_system_message(chat_id, current_user_id, "#{actor.username} removed #{presented.username}")
+      end
+      {:ok, presented}
     else
       nil ->
         {:error, {:not_found, "Group member not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def add_chat_members(chat_id, current_user_id, attrs)
+      when is_binary(chat_id) and is_binary(current_user_id) and is_map(attrs) do
+    with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         :ok <- authorize_add_members(chat, membership),
+         {:ok, usernames} <- fetch_username_list(attrs, "members"),
+         %User{} = current_user <- Repo.get(User, current_user_id),
+         {:ok, users} <- resolve_group_members(current_user, usernames) do
+      now = DateTime.utc_now()
+
+      users
+      |> Enum.reject(fn {user, _role} -> user.id == current_user_id end)
+      |> Enum.reduce_while({:ok, []}, fn {user, _role}, {:ok, inserted} ->
+        case Repo.get_by(ChatMember, chat_id: chat_id, user_id: user.id) do
+          %ChatMember{} ->
+            {:cont, {:ok, inserted}}
+
+          nil ->
+            case insert_chat_member(Repo, chat, user, now, "member") do
+              {:ok, member} -> {:cont, {:ok, [present_group_member(Repo.preload(member, :user)) | inserted]}}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
+        end
+      end)
+      |> case do
+        {:ok, members} ->
+          added = Enum.reverse(members)
+          if added != [] do
+            names =
+              added
+              |> Enum.map(& &1.username)
+              |> Enum.reject(&is_nil/1)
+              |> Enum.join(", ")
+
+            if names != "" do
+              emit_system_message(chat_id, current_user_id, "#{current_user.username} added #{names}")
+            end
+          end
+          {:ok, added}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def leave_chat(chat_id, user_id)
+      when is_binary(chat_id) and is_binary(user_id) do
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         true <- membership.role != "owner" do
+      actor = Repo.get(User, user_id)
+      case Repo.delete(membership) do
+        {:ok, _deleted} ->
+          if actor do
+            emit_system_message(
+              chat_id,
+              user_id,
+              "#{actor.username} left the #{chat_kind_label(chat)}"
+            )
+          end
+          {:ok, :left}
+
+        {:error, reason} ->
+          {:error, {:validation, format_changeset_error(reason)}}
+      end
+    else
+      false ->
+        {:error, {:validation, "The chat owner must transfer ownership before leaving."}}
+
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def delete_chat(chat_id, user_id)
+      when is_binary(chat_id) and is_binary(user_id) do
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
+         :ok <- ensure_chat_owner(membership),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         {:ok, _deleted} <- Repo.delete(chat) do
+      {:ok, :deleted}
+    else
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def transfer_ownership(chat_id, current_user_id, target_user_id)
+      when is_binary(chat_id) and is_binary(current_user_id) and is_binary(target_user_id) do
+    with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
+         :ok <- ensure_chat_owner(membership),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         %ChatMember{} = target_member <- Repo.get_by(ChatMember, chat_id: chat_id, user_id: target_user_id),
+         {:ok, %{owner: owner, target: target}} <-
+           Repo.transaction(fn ->
+             owner =
+               membership
+               |> ChatMember.changeset(%{role: "admin"})
+               |> Repo.update!()
+
+             target =
+               target_member
+               |> ChatMember.changeset(%{role: "owner"})
+               |> Repo.update!()
+
+             %{owner: owner, target: target}
+           end) do
+      previous_owner = present_group_member(Repo.preload(owner, :user))
+      new_owner = present_group_member(Repo.preload(target, :user))
+
+      if previous_owner.username && new_owner.username do
+        emit_system_message(
+          chat_id,
+          current_user_id,
+          "#{previous_owner.username} transferred ownership to #{new_owner.username}"
+        )
+      end
+
+      {:ok,
+       %{
+         previous_owner: previous_owner,
+         new_owner: new_owner
+       }}
+    else
+      nil ->
+        {:error, {:not_found, "Chat member not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def list_public_channels(user_id, device_id \\ nil) when is_binary(user_id) do
+    from(chat in Chat,
+      where: chat.type == "channel" and chat.is_public == true,
+      order_by: [desc: chat.updated_at, desc: chat.inserted_at],
+      preload: [members: ^member_query()]
+    )
+    |> Repo.all()
+    |> Enum.map(&hydrate_chat_summary(&1, user_id, device_id))
+  end
+
+  def join_channel(chat_id, user_id)
+      when is_binary(chat_id) and is_binary(user_id) do
+    with %Chat{} = chat <- Repo.get(Chat, chat_id),
+         true <- chat.type == "channel",
+         true <- chat.is_public,
+         %User{} = user <- Repo.get(User, user_id) do
+      case Repo.get_by(ChatMember, chat_id: chat_id, user_id: user_id) do
+        %ChatMember{} ->
+          {:ok, present_chat_with_preloaded_members(chat, user_id)}
+
+        nil ->
+          now = DateTime.utc_now()
+
+          case insert_chat_member(Repo, chat, user, now, "member") do
+            {:ok, _membership} -> {:ok, present_chat_with_preloaded_members(chat, user_id)}
+            {:error, reason} -> {:error, {:validation, format_changeset_error(reason)}}
+          end
+      end
+    else
+      false ->
+        {:error, {:validation, "Only public channels can be joined directly."}}
+
+      nil ->
+        {:error, {:not_found, "Channel not found."}}
+    end
+  end
+
+  def create_invite_link(chat_id, current_user_id, attrs)
+      when is_binary(chat_id) and is_binary(current_user_id) and is_map(attrs) do
+    with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         :ok <- authorize_add_members(chat, membership),
+         {:ok, expires_in_hours} <- fetch_optional_integer(attrs, "expires_in_hours"),
+         {:ok, max_uses} <- fetch_optional_integer(attrs, "max_uses"),
+         {:ok, invite_link} <-
+           %InviteLink{}
+           |> InviteLink.changeset(%{
+             chat_id: chat_id,
+             created_by_id: current_user_id,
+             code: random_invite_code(),
+             expires_at: invite_expiry(expires_in_hours),
+             max_uses: max_uses,
+             use_count: 0
+           })
+           |> Repo.insert() do
+      {:ok, present_invite_link(invite_link)}
+    else
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:error, {:validation, format_changeset_error(changeset)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def list_invite_links(chat_id, current_user_id)
+      when is_binary(chat_id) and is_binary(current_user_id) do
+    with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         :ok <- authorize_add_members(chat, membership) do
+      invite_links =
+        from(invite_link in InviteLink,
+          where: invite_link.chat_id == ^chat_id,
+          order_by: [desc: invite_link.inserted_at]
+        )
+        |> Repo.all()
+        |> Enum.map(&present_invite_link/1)
+
+      {:ok, invite_links}
+    else
+      nil ->
+        {:error, {:not_found, "Chat not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def revoke_invite_link(chat_id, invite_link_id, current_user_id)
+      when is_binary(chat_id) and is_binary(invite_link_id) and is_binary(current_user_id) do
+    with {:ok, membership} <- ensure_membership(chat_id, current_user_id),
+         %Chat{} = chat <- Repo.get(Chat, chat_id),
+         :ok <- ensure_manageable_chat(chat),
+         :ok <- authorize_add_members(chat, membership),
+         %InviteLink{} = invite_link <- Repo.get_by(InviteLink, id: invite_link_id, chat_id: chat_id),
+         {:ok, revoked} <- invite_link |> InviteLink.changeset(%{revoked_at: DateTime.utc_now()}) |> Repo.update() do
+      {:ok, present_invite_link(revoked)}
+    else
+      nil ->
+        {:error, {:not_found, "Invite link not found."}}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:error, {:validation, format_changeset_error(changeset)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def join_via_invite_link(code, user_id)
+      when is_binary(code) and is_binary(user_id) do
+    now = DateTime.utc_now()
+
+    with %InviteLink{} = invite_link <- Repo.get_by(InviteLink, code: code),
+         :ok <- validate_invite_link(invite_link, now),
+         %Chat{} = chat <- Repo.get(Chat, invite_link.chat_id),
+         %User{} = user <- Repo.get(User, user_id),
+         {:ok, _invite_link} <-
+           Repo.transaction(fn ->
+             case Repo.get_by(ChatMember, chat_id: chat.id, user_id: user_id) do
+               %ChatMember{} ->
+                 :ok
+
+               nil ->
+                 case insert_chat_member(Repo, chat, user, now, "member") do
+                   {:ok, _membership} -> :ok
+                   {:error, reason} -> Repo.rollback(reason)
+                 end
+             end
+
+             invite_link
+             |> InviteLink.changeset(%{use_count: invite_link.use_count + 1})
+             |> Repo.update!()
+           end) do
+      {:ok, present_chat_with_preloaded_members(chat, user_id)}
+    else
+      nil ->
+        {:error, {:not_found, "Invite link not found."}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def record_message_view(chat_id, message_id, user_id)
+      when is_binary(chat_id) and is_binary(message_id) and is_binary(user_id) do
+    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+         %Chat{type: "channel"} = chat <- Repo.get(Chat, chat_id),
+         %Message{} = message <- Repo.get(Message, message_id),
+         true <- message.chat_id == chat.id,
+         true <- is_nil(message.reply_to_message_id) do
+      attrs = %{message_id: message_id, user_id: user_id, viewed_at: DateTime.utc_now()}
+
+      %MessageView{}
+      |> MessageView.changeset(attrs)
+      |> Repo.insert(
+        on_conflict: {:replace, [:viewed_at]},
+        conflict_target: [:message_id, :user_id]
+      )
+
+      count =
+        from(view in MessageView, where: view.message_id == ^message_id, select: count("*"))
+        |> Repo.one()
+
+      {:ok, %{message_id: message_id, view_count: count}}
+    else
+      false ->
+        {:error, {:validation, "Only top-level channel posts can record views."}}
+
+      nil ->
+        {:error, {:not_found, "Message or chat not found."}}
 
       {:error, reason} ->
         {:error, reason}
@@ -528,7 +965,8 @@ defmodule VostokServer.Messaging do
           preload: [
             recipient_envelopes: ^recipient_query(),
             reactions: ^reaction_query(),
-            sender_device: [:user]
+            sender_device: [:user],
+            views: []
           ]
         )
 
@@ -811,10 +1249,11 @@ defmodule VostokServer.Messaging do
   def create_message(chat_id, sender_device_id, user_id, attrs, current_device_id)
       when is_binary(chat_id) and is_binary(sender_device_id) and is_binary(user_id) and
              is_binary(current_device_id) and is_map(attrs) do
-    with {:ok, _membership} <- ensure_membership(chat_id, user_id),
+    with {:ok, membership} <- ensure_membership(chat_id, user_id),
          %Chat{} = chat <- Repo.get(Chat, chat_id),
          {:ok, normalized} <- normalize_message_attrs(attrs),
          {:ok, _reply_target} <- validate_reply_target(chat_id, normalized.reply_to_message_id),
+         :ok <- authorize_message_send(chat, membership, normalized),
          {:ok, recipient_device_ids} <- recipient_device_ids(chat_id),
          :ok <-
            ensure_message_transport(
@@ -867,6 +1306,66 @@ defmodule VostokServer.Messaging do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # Emits a system message attributed to any device owned by `user_id`.
+  # Silently no-ops if the user has no devices (e.g. during federation edges)
+  # or `chat_id` is missing. Used by lifecycle events (member add/remove,
+  # rename, role changes, etc.) where callers don't thread a device id through.
+  defp emit_system_message(chat_id, user_id, text)
+       when is_binary(chat_id) and is_binary(user_id) and is_binary(text) do
+    case lookup_system_device_id(user_id) do
+      nil -> :ok
+      device_id ->
+        _ = create_system_message(chat_id, device_id, text)
+        :ok
+    end
+  end
+
+  defp lookup_system_device_id(user_id) do
+    from(d in Device, where: d.user_id == ^user_id, order_by: [asc: d.inserted_at], limit: 1, select: d.id)
+    |> Repo.one()
+  end
+
+  defp chat_kind_label(%Chat{type: "channel"}), do: "channel"
+  defp chat_kind_label(_chat), do: "group"
+
+  defp emit_chat_info_system_messages(%Chat{} = before, %Chat{} = updated, user_id) do
+    actor = Repo.get(User, user_id)
+    if actor do
+      username = actor.username
+      kind = chat_kind_label(updated)
+
+      cond do
+        before.metadata_encrypted != updated.metadata_encrypted and
+            is_binary(updated.metadata_encrypted) and updated.metadata_encrypted != "" ->
+          emit_system_message(
+            updated.id,
+            user_id,
+            "#{username} renamed the #{kind} to #{updated.metadata_encrypted}"
+          )
+
+        true ->
+          :ok
+      end
+
+      cond do
+        before.avatar_path != updated.avatar_path and is_nil(updated.avatar_path) ->
+          emit_system_message(updated.id, user_id, "#{username} removed the #{kind} photo")
+
+        before.avatar_path != updated.avatar_path ->
+          emit_system_message(updated.id, user_id, "#{username} changed the #{kind} photo")
+
+        true ->
+          :ok
+      end
+
+      if (before.permissions_json || %{}) != (updated.permissions_json || %{}) do
+        emit_system_message(updated.id, user_id, "#{username} changed #{kind} permissions")
+      end
+    end
+
+    :ok
   end
 
   def create_system_message(chat_id, sender_device_id, text)
@@ -1232,6 +1731,236 @@ defmodule VostokServer.Messaging do
     |> Ecto.build_assoc(:members, user_id: user.id)
     |> ChatMember.changeset(%{role: role, joined_at: joined_at})
     |> repo.insert()
+  end
+
+  defp initial_memberships(%User{} = current_user, members) do
+    Enum.map(members, fn {user, role} ->
+      if user.id == current_user.id, do: {user, "owner"}, else: {user, role}
+    end)
+  end
+
+  defp ensure_manageable_chat(%Chat{type: type}) when type in ["group", "channel"], do: :ok
+  defp ensure_manageable_chat(%Chat{}), do: {:error, {:validation, "Only groups and channels support this action."}}
+
+  defp ensure_editable_chat(%Chat{type: type}) when type in ["group", "channel"], do: :ok
+  defp ensure_editable_chat(%Chat{}), do: {:error, {:validation, "Direct chats do not support editable chat info."}}
+
+  defp ensure_member_listing_visible(%Chat{type: "group"}, _membership), do: :ok
+  defp ensure_member_listing_visible(%Chat{type: "channel"}, %ChatMember{role: role}) when role in ["owner", "admin"], do: :ok
+
+  defp ensure_member_listing_visible(%Chat{type: "channel"}, _membership) do
+    {:error, {:validation, "Only channel admins can view channel subscribers."}}
+  end
+
+  defp ensure_member_listing_visible(%Chat{}, _membership),
+    do: {:error, {:validation, "Only groups and channels expose membership lists."}}
+
+  defp authorize_chat_info_update(%Chat{type: "group", permissions_json: permissions}, %ChatMember{role: role})
+       when role in ["owner", "admin"] do
+    _ = permissions
+    :ok
+  end
+
+  defp authorize_chat_info_update(%Chat{type: "channel"}, %ChatMember{role: role})
+       when role in ["owner", "admin"],
+       do: :ok
+
+  defp authorize_chat_info_update(%Chat{type: "group", permissions_json: permissions}, %ChatMember{}) do
+    if Map.get(normalized_permissions("group", permissions), "who_can_edit_info", "admins") == "everyone" do
+      :ok
+    else
+      {:error, {:validation, "Only permitted members can edit this chat."}}
+    end
+  end
+
+  defp authorize_chat_info_update(%Chat{}, _membership),
+    do: {:error, {:validation, "Only admins can edit this chat."}}
+
+  defp authorize_add_members(%Chat{type: "channel"}, %ChatMember{role: role})
+       when role in ["owner", "admin"],
+       do: :ok
+
+  defp authorize_add_members(%Chat{type: "group", permissions_json: permissions}, %ChatMember{role: role})
+       when role in ["owner", "admin"] do
+    _ = permissions
+    :ok
+  end
+
+  defp authorize_add_members(%Chat{type: "group", permissions_json: permissions}, %ChatMember{}) do
+    if Map.get(normalized_permissions("group", permissions), "who_can_add_members", "admins") == "everyone" do
+      :ok
+    else
+      {:error, {:validation, "Only permitted members can add users to this chat."}}
+    end
+  end
+
+  defp authorize_add_members(%Chat{}, _membership),
+    do: {:error, {:validation, "Only admins can add users to this chat."}}
+
+  defp authorize_role_change(%ChatMember{role: role}, _target_member, _next_role)
+       when role not in ["owner", "admin"] do
+    {:error, {:validation, "Only admins can change member roles."}}
+  end
+
+  defp authorize_role_change(_membership, %ChatMember{role: "owner"}, _next_role) do
+    {:error, {:validation, "The chat owner role can only be changed via ownership transfer."}}
+  end
+
+  defp authorize_role_change(%ChatMember{role: "admin"}, %ChatMember{role: "admin"}, _next_role) do
+    {:error, {:validation, "Only the chat owner can change another admin's role."}}
+  end
+
+  defp authorize_role_change(%ChatMember{role: "admin"}, %ChatMember{}, "admin"), do: :ok
+  defp authorize_role_change(%ChatMember{role: "admin"}, %ChatMember{}, "member"), do: :ok
+  defp authorize_role_change(%ChatMember{role: "owner"}, %ChatMember{}, role) when role in ["admin", "member"], do: :ok
+
+  defp authorize_member_removal(%ChatMember{role: role}, _target_member)
+       when role not in ["owner", "admin"] do
+    {:error, {:validation, "Only admins can remove members from this chat."}}
+  end
+
+  defp authorize_member_removal(%ChatMember{user_id: user_id}, %ChatMember{user_id: user_id}) do
+    {:error, {:validation, "Use the leave chat action to remove yourself."}}
+  end
+
+  defp authorize_member_removal(_membership, %ChatMember{role: "owner"}) do
+    {:error, {:validation, "The chat owner cannot be removed."}}
+  end
+
+  defp authorize_member_removal(%ChatMember{role: "admin"}, %ChatMember{role: "admin"}) do
+    {:error, {:validation, "Only the chat owner can remove another admin."}}
+  end
+
+  defp authorize_member_removal(%ChatMember{role: role}, %ChatMember{})
+       when role in ["owner", "admin"],
+       do: :ok
+
+  defp authorize_message_send(%Chat{type: "direct"}, _membership, _normalized), do: :ok
+  defp authorize_message_send(%Chat{type: _type}, %ChatMember{role: role}, _normalized)
+       when role in ["owner", "admin"],
+       do: :ok
+
+  defp authorize_message_send(%Chat{type: "group", permissions_json: permissions}, _membership, _normalized) do
+    if Map.get(normalized_permissions("group", permissions), "who_can_send", "everyone") == "everyone" do
+      :ok
+    else
+      {:error, {:forbidden, "Only group admins can send in this group."}}
+    end
+  end
+
+  defp authorize_message_send(%Chat{type: "channel"}, _membership, _normalized) do
+    {:error, {:forbidden, "Only channel admins can post."}}
+  end
+
+  defp normalize_chat_info_update(%Chat{} = chat, attrs) do
+    with {:ok, title} <- fetch_optional_string(attrs, "title"),
+         {:ok, description} <- fetch_optional_string(attrs, "description"),
+         {:ok, avatar_path} <- fetch_optional_string(attrs, "avatar_path"),
+         {:ok, remove_avatar} <- optional_boolean_if_present(attrs, "remove_avatar"),
+         {:ok, is_public} <- optional_boolean_if_present(attrs, "is_public"),
+         {:ok, allow_comments} <- optional_boolean_if_present(attrs, "allow_comments"),
+         {:ok, permissions} <- merge_permissions_attrs(chat, attrs) do
+      update_attrs =
+        %{}
+        |> maybe_put(:metadata_encrypted, title)
+        |> maybe_put(:description, description)
+        |> maybe_put_avatar_path(avatar_path, remove_avatar)
+        |> maybe_put(:is_public, is_public)
+        |> maybe_put(:allow_comments, allow_comments)
+        |> Map.put(:permissions_json, permissions)
+
+      {:ok, update_attrs}
+    end
+  end
+
+  defp normalize_permissions_attrs(type, attrs) do
+    type
+    |> default_permissions()
+    |> merge_permissions_input(Map.get(attrs, "permissions"))
+  end
+
+  defp merge_permissions_attrs(%Chat{type: type, permissions_json: current_permissions}, attrs) do
+    default_permissions(type)
+    |> Map.merge(current_permissions || %{})
+    |> merge_permissions_input(Map.get(attrs, "permissions"))
+  end
+
+  defp merge_permissions_input(current_permissions, nil), do: {:ok, current_permissions}
+
+  defp merge_permissions_input(current_permissions, permissions) when is_map(permissions) do
+    Enum.reduce_while(permissions, {:ok, current_permissions}, fn {key, value}, {:ok, acc} ->
+      if key in Map.keys(default_permissions("group")) and value in ["everyone", "admins"] do
+        {:cont, {:ok, Map.put(acc, key, value)}}
+      else
+        {:halt, {:error, {:validation, "permissions must use everyone/admins values."}}}
+      end
+    end)
+  end
+
+  defp merge_permissions_input(_current_permissions, _permissions) do
+    {:error, {:validation, "permissions must be an object."}}
+  end
+
+  defp normalized_permissions(type, permissions) do
+    Map.merge(default_permissions(type), permissions || %{})
+  end
+
+  defp default_permissions("channel"), do: @channel_permissions_default
+  defp default_permissions("group"), do: @group_permissions_default
+  defp default_permissions(_type), do: %{}
+
+  defp optional_boolean_if_present(attrs, key) do
+    if Map.has_key?(attrs, key) do
+      fetch_optional_boolean(attrs, key)
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp maybe_put_avatar_path(map, _avatar_path, true), do: Map.put(map, :avatar_path, nil)
+  defp maybe_put_avatar_path(map, avatar_path, _remove_avatar), do: maybe_put(map, :avatar_path, avatar_path)
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp invite_expiry(nil), do: nil
+  defp invite_expiry(hours), do: DateTime.add(DateTime.utc_now(), hours * 3600, :second)
+
+  defp random_invite_code do
+    12
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
+    |> binary_part(0, 16)
+  end
+
+  defp validate_invite_link(%InviteLink{} = invite_link, now) do
+    cond do
+      not is_nil(invite_link.revoked_at) ->
+        {:error, {:validation, "This invite link has been revoked."}}
+
+      not is_nil(invite_link.expires_at) and DateTime.compare(invite_link.expires_at, now) == :lt ->
+        {:error, {:validation, "This invite link has expired."}}
+
+      is_integer(invite_link.max_uses) and invite_link.use_count >= invite_link.max_uses ->
+        {:error, {:validation, "This invite link has reached its usage limit."}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp present_invite_link(%InviteLink{} = invite_link) do
+    %{
+      id: invite_link.id,
+      chat_id: invite_link.chat_id,
+      code: invite_link.code,
+      url: "/join/#{invite_link.code}",
+      expires_at: iso_or_nil(invite_link.expires_at),
+      max_uses: invite_link.max_uses,
+      use_count: invite_link.use_count,
+      revoked_at: iso_or_nil(invite_link.revoked_at),
+      inserted_at: iso_or_nil(invite_link.inserted_at)
+    }
   end
 
   defp validate_bootstrap_device(%Device{revoked_at: revoked_at}) when not is_nil(revoked_at) do
@@ -1722,12 +2451,12 @@ defmodule VostokServer.Messaging do
   defp default_crypto_scheme(crypto_scheme, _recipient_envelopes), do: crypto_scheme
 
   defp ensure_message_transport(
-         %Chat{type: "group", id: chat_id},
+         %Chat{type: type, id: chat_id},
          sender_device_id,
          normalized,
          recipient_device_ids
        )
-       when is_map(normalized) and is_list(recipient_device_ids) do
+       when type in ["group", "channel"] and is_map(normalized) and is_list(recipient_device_ids) do
     crypto_scheme = normalize_string(Map.get(normalized, :crypto_scheme))
 
     cond do
@@ -1760,7 +2489,7 @@ defmodule VostokServer.Messaging do
       true ->
         {:error,
          {:validation,
-          "Group messages must use crypto_scheme=signal-v1. Legacy group_sender_key_v1 is accepted only for backwards compatibility."}}
+          "#{String.capitalize(type)} messages must use crypto_scheme=signal-v1. Legacy group_sender_key_v1 is accepted only for backwards compatibility."}}
     end
   end
 

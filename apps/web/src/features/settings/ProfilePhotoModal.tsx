@@ -11,6 +11,17 @@ type ProfilePhotoModalProps = {
   hasExistingPhoto: boolean
   onClose: () => void
   onPhotoUpdated: (photoUrl: string | null) => void
+  title?: string
+  hint?: string
+  adjustTitle?: string
+  successTitle?: string
+  successText?: string
+  uploadingTitle?: string
+  uploadButtonLabel?: string
+  saveButtonLabel?: string
+  removeButtonLabel?: string
+  onUploadPhoto?: (photoBase64: string, contentType: string) => Promise<string | null | void>
+  onDeletePhoto?: (() => Promise<void>) | null
 }
 
 export function ProfilePhotoModal({
@@ -18,6 +29,17 @@ export function ProfilePhotoModal({
   hasExistingPhoto,
   onClose,
   onPhotoUpdated,
+  title = 'Profile Photo',
+  hint = 'A photo helps people recognise you',
+  adjustTitle = 'Adjust Photo',
+  successTitle = 'Photo Updated!',
+  successText = 'Your profile photo has been updated successfully.',
+  uploadingTitle = 'Uploading...',
+  uploadButtonLabel = 'Upload Photo',
+  saveButtonLabel = 'Save Photo',
+  removeButtonLabel = 'Remove Photo',
+  onUploadPhoto,
+  onDeletePhoto = null,
 }: ProfilePhotoModalProps) {
   const { sessionToken } = useAppContext()
   const sessionTokenRef = useRef(sessionToken)
@@ -178,32 +200,39 @@ export function ProfilePhotoModal({
         setUploadProgress((p) => Math.min(p + 15, 90))
       }, 200)
 
-      const result = await uploadProfilePhoto(token, base64, 'image/jpeg')
+      const uploadedUrl =
+        onUploadPhoto
+          ? await onUploadPhoto(base64, 'image/jpeg')
+          : (await uploadProfilePhoto(token, base64, 'image/jpeg')).photo_url
 
       clearInterval(progressTimer)
       setUploadProgress(100)
 
       setTimeout(() => {
         setStep('success')
-        onPhotoUpdated(result.photo_url)
+        onPhotoUpdated(uploadedUrl ?? null)
       }, 300)
     } catch (err) {
       setStep('adjust')
       setError(err instanceof Error ? err.message : 'Upload failed.')
     }
-  }, [generateCroppedBlob, onPhotoUpdated])
+  }, [generateCroppedBlob, onPhotoUpdated, onUploadPhoto])
 
   const handleRemove = useCallback(async () => {
-    const token = sessionTokenRef.current
-    if (!token) return
     try {
-      await deleteProfilePhoto(token)
+      if (onDeletePhoto) {
+        await onDeletePhoto()
+      } else {
+        const token = sessionTokenRef.current
+        if (!token) return
+        await deleteProfilePhoto(token)
+      }
       onPhotoUpdated(null)
       onClose()
     } catch {
       setError('Failed to remove photo.')
     }
-  }, [onPhotoUpdated, onClose])
+  }, [onDeletePhoto, onPhotoUpdated, onClose])
 
   return (
     <div className="incoming-call-overlay" onClick={onClose}>
@@ -213,7 +242,7 @@ export function ProfilePhotoModal({
         {step === 'pick' && (
           <>
             <div className="profile-photo-modal__header">
-              <span className="profile-photo-modal__title">Profile Photo</span>
+              <span className="profile-photo-modal__title">{title}</span>
               <button type="button" className="profile-photo-modal__close" onClick={onClose}>
                 <CloseIcon width={18} height={18} />
               </button>
@@ -229,7 +258,7 @@ export function ProfilePhotoModal({
                   <Pencil size={12} />
                 </span>
               </div>
-              <span className="profile-photo-modal__hint">A photo helps people recognise you</span>
+              <span className="profile-photo-modal__hint">{hint}</span>
 
               <input
                 ref={fileInputRef}
@@ -255,9 +284,9 @@ export function ProfilePhotoModal({
               {error && <span className="profile-photo-modal__error">{error}</span>}
             </div>
             <div className="profile-photo-modal__footer">
-              {hasExistingPhoto && (
+              {hasExistingPhoto && (onDeletePhoto !== null || !onUploadPhoto) && (
                 <button type="button" className="profile-photo-modal__btn profile-photo-modal__btn--outline" onClick={() => void handleRemove()}>
-                  Remove Photo
+                  {removeButtonLabel}
                 </button>
               )}
               <div style={{ flex: 1 }} />
@@ -267,7 +296,7 @@ export function ProfilePhotoModal({
                 disabled={!selectedFile}
                 onClick={() => setStep('adjust')}
               >
-                Upload Photo
+                {uploadButtonLabel}
               </button>
             </div>
           </>
@@ -280,7 +309,7 @@ export function ProfilePhotoModal({
               <button type="button" className="profile-photo-modal__close" onClick={() => setStep('pick')} style={{ marginRight: 8 }}>
                 <BackIcon width={18} height={18} />
               </button>
-              <span className="profile-photo-modal__title" style={{ flex: 1 }}>Adjust Photo</span>
+              <span className="profile-photo-modal__title" style={{ flex: 1 }}>{adjustTitle}</span>
               <button type="button" className="profile-photo-modal__close" onClick={onClose}>
                 <CloseIcon width={18} height={18} />
               </button>
@@ -345,7 +374,7 @@ export function ProfilePhotoModal({
               </button>
               <div style={{ flex: 1 }} />
               <button type="button" className="profile-photo-modal__btn profile-photo-modal__btn--primary" onClick={() => void handleSaveAndUpload()}>
-                Save Photo
+                {saveButtonLabel}
               </button>
             </div>
           </>
@@ -355,7 +384,7 @@ export function ProfilePhotoModal({
         {step === 'uploading' && (
           <>
             <div className="profile-photo-modal__header">
-              <span className="profile-photo-modal__title">Uploading...</span>
+              <span className="profile-photo-modal__title">{uploadingTitle}</span>
               <button type="button" className="profile-photo-modal__close" onClick={onClose}>
                 <CloseIcon width={18} height={18} />
               </button>
@@ -396,7 +425,7 @@ export function ProfilePhotoModal({
         {step === 'success' && (
           <>
             <div className="profile-photo-modal__header">
-              <span className="profile-photo-modal__title">Profile Photo</span>
+              <span className="profile-photo-modal__title">{title}</span>
               <button type="button" className="profile-photo-modal__close" onClick={onClose}>
                 <CloseIcon width={18} height={18} />
               </button>
@@ -408,8 +437,8 @@ export function ProfilePhotoModal({
                 </svg>
                 <span className="profile-photo-modal__success-badge">✓</span>
               </div>
-              <span className="profile-photo-modal__success-title">Photo Updated!</span>
-              <span className="profile-photo-modal__success-text">Your profile photo has been updated successfully.</span>
+              <span className="profile-photo-modal__success-title">{successTitle}</span>
+              <span className="profile-photo-modal__success-text">{successText}</span>
             </div>
             <div className="profile-photo-modal__footer" style={{ justifyContent: 'center' }}>
               <button type="button" className="profile-photo-modal__btn profile-photo-modal__btn--primary" onClick={onClose}>

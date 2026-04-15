@@ -4,8 +4,11 @@ import type { ChatSummary, GroupMember, GroupSenderKey } from '../lib/api.ts'
 import {
   createGroupChat,
   renameGroupChat,
+  updateChatInfo,
+  addChatMembers,
   updateGroupMemberRole,
   removeGroupMember,
+  transferOwnership,
   listGroupMembers,
   listGroupSenderKeys,
   listRecipientDevices,
@@ -22,6 +25,13 @@ import { bytesToBase64 } from '../lib/base64.ts'
 import { getRawChatId, qualifyChatId, type MergedChatSummary } from '../lib/multi-server.ts'
 import { mergeChat } from '../utils/chat-helpers.ts'
 import type { AuthView } from '../types.ts'
+
+const DEFAULT_CHAT_PERMISSIONS: Record<string, 'everyone' | 'admins'> = {
+  who_can_send: 'everyone',
+  who_can_add_members: 'admins',
+  who_can_edit_info: 'admins',
+  who_can_pin_messages: 'admins'
+}
 
 type ActiveServerScope = {
   id: string
@@ -71,22 +81,57 @@ export function useGroupChat(
 ) {
   const { sessionToken, storedDevice, setLoading, setBanner } = useAppContext()
   const [groupRenameTitle, setGroupRenameTitle] = useState('')
+  const [groupDescription, setGroupDescription] = useState('')
+  const [chatIsPublic, setChatIsPublic] = useState(false)
+  const [chatAllowComments, setChatAllowComments] = useState(true)
+  const [chatPermissions, setChatPermissions] = useState<Record<string, 'everyone' | 'admins'>>(
+    DEFAULT_CHAT_PERMISSIONS
+  )
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
   const [, setGroupSenderKeys] = useState<GroupSenderKey[]>([])
 
-  const activeGroupChatId = activeChat?.type === 'group' ? activeChat.id : null
+  const activeGroupChatId =
+    activeChat?.type === 'group' || activeChat?.type === 'channel' ? activeChat.id : null
 
   useEffect(() => {
-    if (activeChat?.type === 'group') {
+    if (activeChat?.type === 'group' || activeChat?.type === 'channel') {
       setGroupRenameTitle(activeChat.title)
+      setGroupDescription(activeChat.description ?? '')
+      setChatIsPublic(Boolean(activeChat.is_public))
+      setChatAllowComments(activeChat.allow_comments ?? true)
+      setChatPermissions({
+        ...DEFAULT_CHAT_PERMISSIONS,
+        ...(activeChat.permissions ?? {})
+      })
       return
     }
 
     setGroupRenameTitle('')
-  }, [activeChat?.id, activeChat?.title, activeChat?.type])
+    setGroupDescription('')
+    setChatIsPublic(false)
+    setChatAllowComments(true)
+    setChatPermissions(DEFAULT_CHAT_PERMISSIONS)
+  }, [
+    activeChat?.allow_comments,
+    activeChat?.description,
+    activeChat?.id,
+    activeChat?.is_public,
+    activeChat?.permissions,
+    activeChat?.title,
+    activeChat?.type
+  ])
 
   useEffect(() => {
     if (!sessionToken || view !== 'chat' || !activeGroupChatId) {
+      setGroupMembers([])
+      return
+    }
+
+    if (
+      activeChat?.type === 'channel' &&
+      activeChat.membership_role !== 'owner' &&
+      activeChat.membership_role !== 'admin'
+    ) {
       setGroupMembers([])
       return
     }
@@ -219,7 +264,12 @@ export function useGroupChat(
   async function _handleRenameActiveGroupChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!sessionToken || !activeChat || activeChat.type !== 'group' || groupRenameTitle.trim() === '') {
+    if (
+      !sessionToken ||
+      !activeChat ||
+      !['group', 'channel'].includes(activeChat.type) ||
+      groupRenameTitle.trim() === ''
+    ) {
       return
     }
 
@@ -232,9 +282,14 @@ export function useGroupChat(
         throw new Error('The active group chat is unavailable.')
       }
 
-      const response = await renameGroupChat(sessionToken, rawActiveChatId, {
-        title: groupRenameTitle.trim()
-      })
+      const response =
+        activeChat.type === 'group'
+          ? await renameGroupChat(sessionToken, rawActiveChatId, {
+              title: groupRenameTitle.trim()
+            })
+          : await updateChatInfo(sessionToken, rawActiveChatId, {
+              title: groupRenameTitle.trim()
+            })
 
       setChatItems((current) => mergeChat(current, toMergedGroupChat(response.chat, activeChat)))
       setGroupRenameTitle(response.chat.title)
@@ -247,8 +302,120 @@ export function useGroupChat(
     }
   }
 
+  async function handleUpdateActiveChatSettings(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await updateChatInfo(sessionToken, rawActiveChatId, {
+        description: groupDescription.trim() || '',
+        permissions: chatPermissions,
+        is_public: activeChat.type === 'channel' ? chatIsPublic : undefined,
+        allow_comments: activeChat.type === 'channel' ? chatAllowComments : undefined
+      })
+
+      setChatItems((current) => mergeChat(current, toMergedGroupChat(response.chat, activeChat)))
+      setGroupDescription(response.chat.description ?? '')
+      setChatIsPublic(Boolean(response.chat.is_public))
+      setChatAllowComments(response.chat.allow_comments ?? true)
+      setChatPermissions({
+        ...DEFAULT_CHAT_PERMISSIONS,
+        ...(response.chat.permissions ?? {})
+      })
+      setBanner({ tone: 'success', message: `Chat settings updated: ${response.chat.title}` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update chat settings.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleUpdateActiveChatAvatar(photoBase64: string, contentType: string): Promise<string | null> {
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
+      throw new Error('The active chat does not support avatars.')
+    }
+
+    setLoading(true)
+
+    try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await updateChatInfo(sessionToken, rawActiveChatId, {
+        avatar_base64: photoBase64,
+        avatar_content_type: contentType
+      })
+
+      const mergedChat = toMergedGroupChat(response.chat, activeChat)
+      if (mergedChat.avatar_url) {
+        mergedChat.avatar_url = `${mergedChat.avatar_url}${mergedChat.avatar_url.includes('?') ? '&' : '?'}v=${Date.now()}`
+      }
+
+      setChatItems((current) => mergeChat(current, mergedChat))
+      setBanner({ tone: 'success', message: `Chat avatar updated: ${response.chat.title}` })
+      return mergedChat.avatar_url ?? null
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update chat avatar.'
+      setBanner({ tone: 'error', message })
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRemoveActiveChatAvatar(): Promise<void> {
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
+      throw new Error('The active chat does not support avatars.')
+    }
+
+    setLoading(true)
+
+    try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await updateChatInfo(sessionToken, rawActiveChatId, {
+        remove_avatar: true
+      })
+
+      const mergedChat = toMergedGroupChat(response.chat, activeChat)
+      mergedChat.avatar_url = null
+      setChatItems((current) => mergeChat(current, mergedChat))
+      setBanner({ tone: 'success', message: `Chat avatar removed: ${response.chat.title}` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove chat avatar.'
+      setBanner({ tone: 'error', message })
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function _handleUpdateActiveGroupMemberRole(member: GroupMember, role: 'admin' | 'member') {
-    if (!sessionToken || !activeChat || activeChat.type !== 'group' || member.role === role) {
+    if (
+      !sessionToken ||
+      !activeChat ||
+      !['group', 'channel'].includes(activeChat.type) ||
+      member.role === role
+    ) {
       return
     }
 
@@ -278,7 +445,7 @@ export function useGroupChat(
   }
 
   async function handleRemoveActiveGroupMember(member: GroupMember) {
-    if (!sessionToken || !activeChat || activeChat.type !== 'group') {
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
       return
     }
 
@@ -308,6 +475,130 @@ export function useGroupChat(
       setBanner({ tone: 'success', message: `${response.member.username} was removed from the group.` })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to remove the group member.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleAddActiveGroupMembers(usernames: string[]) {
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
+      return
+    }
+
+    const normalizedUsernames = usernames.map((username) => username.trim()).filter(Boolean)
+
+    if (normalizedUsernames.length === 0) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await addChatMembers(sessionToken, rawActiveChatId, normalizedUsernames)
+
+      if (response.members.length === 0) {
+        setBanner({ tone: 'info', message: 'No new members were added.' })
+        return
+      }
+
+      setGroupMembers((current) => {
+        const existingById = new Map(current.map((entry) => [entry.user_id, entry]))
+
+        for (const member of response.members) {
+          existingById.set(member.user_id, member)
+        }
+
+        return Array.from(existingById.values())
+      })
+
+      setChatItems((current) =>
+        current.map((chat) =>
+          chat.id === activeChat.id
+            ? {
+                ...chat,
+                member_count: (chat.member_count ?? groupMembers.length) + response.members.length,
+                participant_usernames: Array.from(
+                  new Set([...chat.participant_usernames, ...response.members.map((member) => member.username)])
+                )
+              }
+            : chat
+        )
+      )
+
+      setBanner({
+        tone: 'success',
+        message: `Added ${response.members.length} member${response.members.length === 1 ? '' : 's'}.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add chat members.'
+      setBanner({ tone: 'error', message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleTransferActiveGroupOwnership(member: GroupMember) {
+    if (!sessionToken || !activeChat || !['group', 'channel'].includes(activeChat.type)) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const rawActiveChatId = getRawChatId(activeChat.id)
+
+      if (!rawActiveChatId) {
+        throw new Error('The active group chat is unavailable.')
+      }
+
+      const response = await transferOwnership(sessionToken, rawActiveChatId, member.user_id)
+      setGroupMembers((current) =>
+        current.map((entry) => {
+          if (entry.user_id === response.previous_owner.user_id) {
+            return response.previous_owner
+          }
+
+          if (entry.user_id === response.new_owner.user_id) {
+            return response.new_owner
+          }
+
+          return entry
+        })
+      )
+
+      setChatItems((current) =>
+        current.map((chat) =>
+          chat.id === activeChat.id
+            ? {
+                ...chat,
+                membership_role:
+                  profileUsername === response.previous_owner.username
+                    ? 'admin'
+                    : profileUsername === response.new_owner.username
+                      ? 'owner'
+                      : chat.membership_role,
+                can_delete_chat:
+                  profileUsername === response.previous_owner.username ? false : chat.can_delete_chat,
+                can_leave_chat:
+                  profileUsername === response.previous_owner.username ? true : chat.can_leave_chat
+              }
+            : chat
+        )
+      )
+
+      setBanner({
+        tone: 'success',
+        message: `${response.new_owner.username} is now the owner.`
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to transfer ownership.'
       setBanner({ tone: 'error', message })
     } finally {
       setLoading(false)
@@ -374,12 +665,25 @@ export function useGroupChat(
   return {
     groupRenameTitle,
     setGroupRenameTitle,
+    groupDescription,
+    setGroupDescription,
+    chatIsPublic,
+    setChatIsPublic,
+    chatAllowComments,
+    setChatAllowComments,
+    chatPermissions,
+    setChatPermissions,
     groupMembers,
     activeGroupChatId,
     _handleCreateGroupChat,
     _handleRenameActiveGroupChat,
+    handleUpdateActiveChatAvatar,
+    handleRemoveActiveChatAvatar,
+    handleUpdateActiveChatSettings,
     _handleUpdateActiveGroupMemberRole,
+    handleAddActiveGroupMembers,
     handleRemoveActiveGroupMember,
+    handleTransferActiveGroupOwnership,
     _handleRotateGroupSenderKey
   }
 }

@@ -42,14 +42,26 @@ function normalizeBaseUrl(baseUrl?: string | null): string {
   }
 }
 
-export function buildProfilePhotoUrl(userId: string, baseUrl?: string | null, bustCache = false): string {
-  const url = new URL(`/api/v1/users/${userId}/photo`, normalizeBaseUrl(baseUrl))
+export function resolveApiAssetUrl(
+  path: string | null | undefined,
+  baseUrl?: string | null,
+  bustCache = false
+): string | null {
+  if (!path) {
+    return null
+  }
+
+  const url = new URL(path, normalizeBaseUrl(baseUrl))
 
   if (bustCache) {
     url.searchParams.set('v', String(Date.now()))
   }
 
   return url.toString()
+}
+
+export function buildProfilePhotoUrl(userId: string, baseUrl?: string | null, bustCache = false): string {
+  return resolveApiAssetUrl(`/api/v1/users/${userId}/photo`, baseUrl, bustCache) ?? ''
 }
 
 function photoCacheKey(userId: string, baseUrl?: string | null): string {

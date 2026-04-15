@@ -3,7 +3,9 @@ import { t } from '../../lib/i18n.ts'
 import { useAppContext } from '../../contexts/AppContext.tsx'
 import { SearchIcon } from '../../icons/index.tsx'
 import { peerColor } from '../../utils/avatar-colors.ts'
-import { listUsers } from '../../lib/api.ts'
+import { listUsers, createGroupChat, createChannel } from '../../lib/api.ts'
+import { qualifyChatId } from '../../lib/multi-server.ts'
+import { mergeChat } from '../../utils/chat-helpers.ts'
 import type { useChatList } from '../../hooks/useChatList.ts'
 
 type NewMessagePanelProps = {
@@ -14,11 +16,13 @@ function ContactRow({
   username,
   subtitle,
   highlighted,
-  onClick,
+  selected,
+  onClick
 }: {
   username: string
   subtitle?: string
   highlighted: boolean
+  selected?: boolean
   onClick: () => void
 }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -46,68 +50,51 @@ function ContactRow({
         {username[0]?.toUpperCase() ?? '?'}
       </span>
       <span className="new-message-contact__username">{username}</span>
-      {subtitle ? <span className="new-message-contact__handle">{subtitle}</span> : (
-        <span className="new-message-contact__handle">@{username}</span>
-      )}
+      <span className="new-message-contact__handle">
+        {selected ? 'Selected' : (subtitle ?? `@${username}`)}
+      </span>
     </button>
   )
 }
 
 export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
-  const { sessionToken } = useAppContext()
+  const { sessionToken, setBanner, setLoading } = useAppContext()
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const [allUsers, setAllUsers] = useState<{ id: string; username: string }[]>([])
+  const [groupTitle, setGroupTitle] = useState(chatList.newGroupTitle)
+  const [groupDescription, setGroupDescription] = useState('')
+  const [channelTitle, setChannelTitle] = useState(chatList.newChannelTitle)
+  const [channelDescription, setChannelDescription] = useState(chatList.newChannelDescription)
+  const [channelPublic, setChannelPublic] = useState(true)
+  const [channelComments, setChannelComments] = useState(true)
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
     setQuery('')
     setHighlightedIndex(0)
-  }, [])
+  }, [chatList.newChatMode])
 
-  // Fetch all server members once
   useEffect(() => {
     if (!sessionToken) return
     listUsers(sessionToken).then((res) => setAllUsers(res.users)).catch(() => {})
   }, [sessionToken])
 
   const normalizedQuery = query.trim().toLowerCase()
-
-  // Merge recent contacts + all server users, deduplicated, with recent contacts first
   const suggestions = (() => {
-    const recentUsernames = new Set(chatList.recentContacts.map((c) => c.username.toLowerCase()))
-
-    // If no query, show recent contacts only
     if (!normalizedQuery) {
-      return chatList.recentContacts.map((c) => ({
-        username: c.username,
-        isRecent: true,
-      }))
+      return allUsers
     }
 
-    // Filter recent contacts matching query
-    const recentMatches = chatList.recentContacts
-      .filter((c) => c.username.toLowerCase().includes(normalizedQuery))
-      .map((c) => ({ username: c.username, isRecent: true }))
-
-    // Filter all users matching query, excluding those already in recent matches
-    const userMatches = allUsers
-      .filter(
-        (u) =>
-          u.username.toLowerCase().includes(normalizedQuery) &&
-          !recentUsernames.has(u.username.toLowerCase())
-      )
-      .map((u) => ({ username: u.username, isRecent: false }))
-
-    return [...recentMatches, ...userMatches]
+    return allUsers.filter((user) => user.username.toLowerCase().includes(normalizedQuery))
   })()
 
-  // Show "new contact" row when query doesn't match any user exactly
-  const exactMatch = suggestions.some(
-    (s) => s.username.toLowerCase() === normalizedQuery
-  )
-  const showNewContactRow = normalizedQuery.length > 0 && !exactMatch
+  const showNewContactRow =
+    chatList.newChatMode === 'direct' &&
+    normalizedQuery.length > 0 &&
+    !suggestions.some((s) => s.username.toLowerCase() === normalizedQuery)
 
   const totalRows = suggestions.length + (showNewContactRow ? 1 : 0)
 
@@ -116,24 +103,209 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
   }, [query])
 
   const selectHighlighted = useCallback(() => {
+    if (chatList.newChatMode !== 'direct') {
+      return
+    }
+
     if (highlightedIndex < suggestions.length) {
       void chatList.startDirectChatWith(suggestions[highlightedIndex].username)
     } else if (showNewContactRow && normalizedQuery) {
       void chatList.startDirectChatWith(normalizedQuery)
     }
-  }, [highlightedIndex, suggestions, showNewContactRow, normalizedQuery, chatList])
+  }, [chatList, highlightedIndex, normalizedQuery, showNewContactRow, suggestions])
 
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (chatList.newChatMode !== 'direct') {
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
       setHighlightedIndex((i) => Math.min(i + 1, totalRows - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
       setHighlightedIndex((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
       selectHighlighted()
     }
+  }
+
+  async function handleCreateGroup() {
+    if (!sessionToken || !chatList.activeServer || groupTitle.trim() === '') {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await createGroupChat(sessionToken, {
+        title: groupTitle.trim(),
+        description: groupDescription.trim() || undefined,
+        members: selectedMembers
+      })
+
+      const mergedChat = {
+        ...response.chat,
+        id: qualifyChatId(chatList.activeServer.id, response.chat.id),
+        rawId: response.chat.id,
+        qualifiedId: qualifyChatId(chatList.activeServer.id, response.chat.id),
+        serverId: chatList.activeServer.id,
+        serverLabel: chatList.activeServer.label,
+        serverColor: chatList.activeServer.color,
+        serverUrl: chatList.activeServer.url
+      }
+
+      chatList.setChatItems((current) => mergeChat(current, mergedChat))
+      chatList.setActiveChatId(mergedChat.id)
+      chatList.setNewChatMode(null)
+      setGroupTitle('')
+      setGroupDescription('')
+      setSelectedMembers([])
+      setBanner({ tone: 'success', message: `Group ready: ${response.chat.title}` })
+    } catch (error) {
+      setBanner({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to create group.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCreateChannel() {
+    if (!sessionToken || !chatList.activeServer || channelTitle.trim() === '') {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await createChannel(sessionToken, {
+        title: channelTitle.trim(),
+        description: channelDescription.trim() || undefined,
+        is_public: channelPublic,
+        allow_comments: channelComments
+      })
+
+      const mergedChat = {
+        ...response.chat,
+        id: qualifyChatId(chatList.activeServer.id, response.chat.id),
+        rawId: response.chat.id,
+        qualifiedId: qualifyChatId(chatList.activeServer.id, response.chat.id),
+        serverId: chatList.activeServer.id,
+        serverLabel: chatList.activeServer.label,
+        serverColor: chatList.activeServer.color,
+        serverUrl: chatList.activeServer.url
+      }
+
+      chatList.setChatItems((current) => mergeChat(current, mergedChat))
+      chatList.setActiveChatId(mergedChat.id)
+      chatList.setNewChatMode(null)
+      setChannelTitle('')
+      setChannelDescription('')
+      setBanner({ tone: 'success', message: `Channel ready: ${response.chat.title}` })
+    } catch (error) {
+      setBanner({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to create channel.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function toggleMember(username: string) {
+    setSelectedMembers((current) =>
+      current.includes(username)
+        ? current.filter((entry) => entry !== username)
+        : [...current, username]
+    )
+  }
+
+  if (chatList.newChatMode === 'group') {
+    return (
+      <div className="new-message-panel">
+        <div className="new-message-panel__search-row">
+          <input
+            ref={inputRef}
+            type="text"
+            className="new-message-panel__input"
+            placeholder="Group title"
+            value={groupTitle}
+            onChange={(event) => setGroupTitle(event.target.value)}
+          />
+        </div>
+        <div className="new-message-panel__search-row">
+          <input
+            type="text"
+            className="new-message-panel__input"
+            placeholder="Description (optional)"
+            value={groupDescription}
+            onChange={(event) => setGroupDescription(event.target.value)}
+          />
+        </div>
+        <div className="new-message-panel__search-row">
+          <span className="new-message-panel__search-icon"><SearchIcon width={14} height={14} /></span>
+          <input
+            type="search"
+            autoComplete="off"
+            className="new-message-panel__input"
+            placeholder={t('search_members')}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+        {selectedMembers.length > 0 ? (
+          <p className="new-message-panel__empty">{selectedMembers.join(', ')}</p>
+        ) : null}
+        <div className="new-message-panel__list">
+          {suggestions.map((user) => (
+            <ContactRow
+              key={user.id}
+              username={user.username}
+              selected={selectedMembers.includes(user.username)}
+              highlighted={false}
+              onClick={() => toggleMember(user.username)}
+            />
+          ))}
+        </div>
+        <button className="primary-action empty-state__action" type="button" onClick={() => void handleCreateGroup()}>
+          Create Group
+        </button>
+      </div>
+    )
+  }
+
+  if (chatList.newChatMode === 'channel') {
+    return (
+      <div className="new-message-panel">
+        <div className="new-message-panel__search-row">
+          <input
+            ref={inputRef}
+            type="text"
+            className="new-message-panel__input"
+            placeholder={t('channel_title')}
+            value={channelTitle}
+            onChange={(event) => setChannelTitle(event.target.value)}
+          />
+        </div>
+        <div className="new-message-panel__search-row">
+          <input
+            type="text"
+            className="new-message-panel__input"
+            placeholder={t('description')}
+            value={channelDescription}
+            onChange={(event) => setChannelDescription(event.target.value)}
+          />
+        </div>
+        <label className="new-message-panel__checkbox">
+          <input type="checkbox" checked={channelPublic} onChange={(event) => setChannelPublic(event.target.checked)} />
+          <span>{t('public_channel')}</span>
+        </label>
+        <label className="new-message-panel__checkbox">
+          <input type="checkbox" checked={channelComments} onChange={(event) => setChannelComments(event.target.checked)} />
+          <span>{t('allow_comments')}</span>
+        </label>
+        <button className="primary-action empty-state__action" type="button" onClick={() => void handleCreateChannel()}>
+          {t('create_channel')}
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -151,7 +323,7 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           className="new-message-panel__input"
           placeholder={t('search_members')}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
           aria-label={t('search_members')}
         />
@@ -166,16 +338,16 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
           <p className="new-message-panel__empty">{t('type_to_search')}</p>
         )}
 
-        {suggestions.map((contact, i) => (
+        {suggestions.map((contact, index) => (
           <ContactRow
             key={contact.username}
             username={contact.username}
-            highlighted={highlightedIndex === i}
+            highlighted={highlightedIndex === index}
             onClick={() => void chatList.startDirectChatWith(contact.username)}
           />
         ))}
 
-        {showNewContactRow && (
+        {showNewContactRow ? (
           <button
             type="button"
             className={`new-message-contact new-message-contact--new${
@@ -184,11 +356,9 @@ export function NewMessagePanel({ chatList }: NewMessagePanelProps) {
             onClick={() => void chatList.startDirectChatWith(normalizedQuery)}
           >
             <span className="new-message-contact__avatar new-message-contact__avatar--new" aria-hidden="true">+</span>
-            <span className="new-message-contact__username">
-              {t('start_chat_with', query.trim())}
-            </span>
+            <span className="new-message-contact__username">{t('start_chat_with', query.trim())}</span>
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   )

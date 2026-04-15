@@ -366,7 +366,8 @@ export async function projectMessage(
         reactionKey: reaction.reaction_key,
         count: reaction.count,
         reacted: reaction.reacted
-      }))
+      })),
+      viewCount: typeof message.view_count === 'number' ? message.view_count : undefined
     }
   }
 
@@ -396,7 +397,8 @@ export async function projectMessage(
         reactionKey: reaction.reaction_key,
         count: reaction.count,
         reacted: reaction.reacted
-      }))
+      })),
+      viewCount: typeof message.view_count === 'number' ? message.view_count : undefined
     }
   }
 
@@ -425,7 +427,8 @@ export async function projectMessage(
         reactionKey: reaction.reaction_key,
         count: reaction.count,
         reacted: reaction.reacted
-      }))
+      })),
+      viewCount: typeof message.view_count === 'number' ? message.view_count : undefined
     }
   }
 
@@ -465,7 +468,8 @@ export async function projectMessage(
         reactionKey: reaction.reaction_key,
         count: reaction.count,
         reacted: reaction.reacted
-      }))
+      })),
+      viewCount: typeof message.view_count === 'number' ? message.view_count : undefined
     }
   } catch (decryptionError) {
     const cached = isOwnMessage ? lookupSentPlaintext(message.client_id, message.edited_at) : null
@@ -526,7 +530,8 @@ export async function projectMessage(
         reactionKey: reaction.reaction_key,
         count: reaction.count,
         reacted: reaction.reacted
-      }))
+      })),
+      viewCount: typeof message.view_count === 'number' ? message.view_count : undefined
     }
   }
 }

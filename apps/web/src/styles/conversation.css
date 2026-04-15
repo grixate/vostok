@@ -676,6 +676,115 @@
   padding-left: 0;
 }
 
+.thread-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-0);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.thread-header__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.thread-header__back:hover {
+  background: var(--bg-overlay);
+}
+
+.thread-header__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.thread-header__title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.thread-header__count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.message-thread__channel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.message-thread__views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: fit-content;
+}
+
+.message-thread__comment-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: var(--bg-overlay);
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.message-thread__comment-button:hover {
+  background: var(--bg-surface-1);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.message-thread__comment-icon {
+  display: inline-flex;
+  opacity: 0.85;
+}
+
+.message-thread__comment-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.message-thread__views-icon {
+  display: inline-flex;
+  opacity: 0.8;
+}
+
+.message-thread__views-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.message-thread__views-count {
+  font-variant-numeric: tabular-nums;
+}
+
 .message-thread__reaction-chip {
   display: inline-flex;
   align-items: center;

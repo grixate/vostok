@@ -12,7 +12,7 @@ import {
   SearchIcon,
   VideoCamIcon,
 } from '../../icons/index.tsx'
-import { useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
+import { resolveApiAssetUrl, useProfilePhoto } from '../../hooks/useProfilePhotos.ts'
 
 type ConversationHeaderProps = {
   activeChat: ChatSummary | null
@@ -28,7 +28,7 @@ type ConversationHeaderProps = {
 }
 
 function getOtherUserId(activeChat: ChatSummary, currentUserId: string | null | undefined): string | null {
-  if (activeChat.is_self_chat || activeChat.type === 'group') return null
+  if (activeChat.is_self_chat || activeChat.type !== 'direct') return null
   return activeChat.participant_user_ids?.find((id) => id !== currentUserId) ?? null
 }
 
@@ -39,6 +39,10 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
   } = useUIContext()
   const otherUserId = activeChat ? getOtherUserId(activeChat, currentUserId) : null
   const otherPhotoUrl = useProfilePhoto(activeChat?.is_self_chat ? null : otherUserId, serverUrl)
+  const chatAvatarUrl =
+    activeChat && !activeChat.is_self_chat && activeChat.type !== 'direct'
+      ? resolveApiAssetUrl(activeChat.avatar_url, serverUrl)
+      : null
 
   if (!activeChat) {
     return null
@@ -46,8 +50,8 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
 
   const isPresenceOnline = otherUserId ? presence.onlineUserIds.has(otherUserId) : false
   // If user is typing, they're clearly online
-  const isOnline = isPresenceOnline || (typingUsers.length > 0 && !activeChat.is_self_chat && activeChat.type !== 'group')
-  const supportsCalling = !activeChat.is_self_chat
+  const isOnline = isPresenceOnline || (typingUsers.length > 0 && !activeChat.is_self_chat && activeChat.type === 'direct')
+  const supportsCalling = !activeChat.is_self_chat && activeChat.type !== 'channel'
   const callingUnavailable = call.callCapabilityState !== 'supported' || !call.isCallSessionReady
   const callTooltip = callingUnavailable
     ? (!call.isCallSessionReady
@@ -59,12 +63,16 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
   const defaultSubtitle = activeChat.is_self_chat
     ? ''
     : activeChat.type === 'group'
-      ? t('n_members', groupChat.groupMembers.length)
-      : presenceSubtitle
+      ? t('n_members', activeChat.member_count ?? groupChat.groupMembers.length)
+      : activeChat.type === 'channel'
+        ? `${activeChat.member_count ?? 0} subscribers`
+        : presenceSubtitle
 
   const subtitleText = typingUsers.length > 0
     ? (activeChat.type === 'group'
         ? t('typing', typingUsers[0])
+        : activeChat.type === 'channel'
+          ? defaultSubtitle
         : t('typing', ''))
     : defaultSubtitle
   const combinedSubtitle = serverLabel
@@ -79,7 +87,7 @@ export function ConversationHeader({ activeChat, currentUserId, serverLabel, ser
       subtitle={combinedSubtitle}
       avatarColor={chatAvatarColor(activeChat.title, activeChat.is_self_chat)}
       avatarInitial={activeChat.is_self_chat ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg> : activeChat.title.slice(0, 1)}
-      avatarUrl={otherPhotoUrl}
+      avatarUrl={activeChat.type === 'direct' ? otherPhotoUrl : chatAvatarUrl}
       online={isOnline}
       onBack={onBack}
       onClickInfo={onClickTitle}

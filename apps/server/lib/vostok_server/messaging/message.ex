@@ -22,12 +22,14 @@ defmodule VostokServer.Messaging.Message do
     field :deleted_at, :utc_datetime_usec
     field :expires_at, :utc_datetime_usec
     field :seq, :integer
+    field :view_count, :integer, virtual: true, default: 0
 
     belongs_to :chat, VostokServer.Messaging.Chat
     belongs_to :sender_device, VostokServer.Identity.Device
     belongs_to :reply_to_message, __MODULE__
     has_many :recipient_envelopes, VostokServer.Messaging.MessageRecipient
     has_many :reactions, VostokServer.Messaging.MessageReaction
+    has_many :views, VostokServer.Messaging.MessageView, foreign_key: :message_id
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

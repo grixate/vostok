@@ -23,7 +23,8 @@ defmodule VostokServer.Messaging.Delivery do
     |> Repo.preload(
       recipient_envelopes: recipient_query(),
       reactions: reaction_query(),
-      sender_device: [:user]
+      sender_device: [:user],
+      views: []
     )
     |> present_message(current_device_id, user_id)
   end
@@ -34,7 +35,8 @@ defmodule VostokServer.Messaging.Delivery do
     |> Repo.preload(
       recipient_envelopes: recipient_query(),
       reactions: reaction_query(),
-      sender_device: [:user]
+      sender_device: [:user],
+      views: []
     )
     |> Map.from_struct()
     |> Map.take([
@@ -54,6 +56,8 @@ defmodule VostokServer.Messaging.Delivery do
       :ciphertext,
       :reply_to_message_id,
       :seq,
+      :view_count,
+      :views,
       :recipient_envelopes,
       :reactions
     ])

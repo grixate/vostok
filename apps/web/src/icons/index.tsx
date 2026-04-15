@@ -69,6 +69,7 @@ import {
   PhoneCall,
   Maximize2,
   Redo2,
+  Megaphone,
 } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
 
@@ -137,6 +138,7 @@ export const InfoIcon = wrap(Info)
 export const PlusIcon = wrap(Plus)
 export const CodeIcon = wrap(Code)
 export const LinkChainIcon = wrap(Link)
+export const MegaphoneIcon = wrap(Megaphone)
 export const EyeOffIcon = wrap(EyeOff)
 export const PhoneOffIcon = wrap(PhoneOff)
 export const MonitorIcon = wrap(Monitor)

@@ -162,6 +162,18 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  // Detect desktop-class input (mouse + hover). True in desktop browsers even
+  // when resized to a mobile-width window; false on touch devices.
+  const [isDesktopDevice, setIsDesktopDevice] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+  )
+  useEffect(() => {
+    const mql = window.matchMedia('(hover: hover) and (pointer: fine)')
+    const handler = (e: MediaQueryListEvent) => setIsDesktopDevice(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+
   // In mobile, selecting a section shows the detail view
   function handleSelectSection(section: Section) {
     setActiveSection(section)
@@ -249,7 +261,7 @@ export function SettingsPane({ auth, chatSessions, chatList, servers, settingsHo
           />
         ))}
 
-        {!isMobile && (
+        {isDesktopDevice && (
           <button
             type="button"
             onClick={() => setShortcutsOpen(true)}

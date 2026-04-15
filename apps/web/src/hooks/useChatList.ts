@@ -53,7 +53,7 @@ function isDirectChatOnline(
   currentUserId: string | null,
   isUserOnline: (serverId: string, userId: string) => boolean
 ) {
-  if (chat.is_self_chat || chat.type === 'group') {
+  if (chat.is_self_chat || chat.type !== 'direct') {
     return false
   }
 
@@ -71,7 +71,9 @@ export function useChatList(
   const [newChatUsername, setNewChatUsername] = useState('')
   const [newGroupTitle, setNewGroupTitle] = useState('')
   const [newGroupMembers, setNewGroupMembers] = useState('')
-  const [newMessageMode, setNewMessageMode] = useState(false)
+  const [newChannelTitle, setNewChannelTitle] = useState('')
+  const [newChannelDescription, setNewChannelDescription] = useState('')
+  const [newChatMode, setNewChatMode] = useState<'direct' | 'group' | 'channel' | null>(null)
 
   const chatItems = servers.mergedChats
 
@@ -168,7 +170,7 @@ export function useChatList(
       servers.updateChatForServer(activeServer.id, response.chat)
       setActiveChatId(qualifyChatId(activeServer.id, response.chat.id))
       setNewChatUsername('')
-      setNewMessageMode(false)
+      setNewChatMode(null)
       setBanner({ tone: 'success', message: `Direct chat ready: ${response.chat.title}` })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create direct chat.'
@@ -232,6 +234,8 @@ export function useChatList(
     return servers.servers.find((server) => server.id === servers.activeServerId)?.auth?.user.id ?? null
   }, [servers.servers, servers.activeServerId])
 
+  const newMessageMode = newChatMode !== null
+
   return {
     chatItems,
     setChatItems,
@@ -245,8 +249,13 @@ export function useChatList(
     setNewGroupTitle,
     newGroupMembers,
     setNewGroupMembers,
+    newChannelTitle,
+    setNewChannelTitle,
+    newChannelDescription,
+    setNewChannelDescription,
+    newChatMode,
+    setNewChatMode,
     newMessageMode,
-    setNewMessageMode,
     visibleChatItems,
     recentContacts,
     hasMultipleServers: servers.servers.length > 1,
@@ -256,6 +265,7 @@ export function useChatList(
     isChatOnline,
     isMemberOnline,
     currentUserId,
+    activeServer: servers.activeServer,
     startDirectChatWith,
     handleCreateDirectChat
   }

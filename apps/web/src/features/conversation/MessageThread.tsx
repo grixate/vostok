@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { t } from '../../lib/i18n.ts'
 import { MessageBubble } from '@vostok/ui-chat'
 import { useAppContext } from '../../contexts/AppContext.tsx'
+import { recordMessageView } from '../../lib/api.ts'
+import { getRawChatId } from '../../lib/multi-server.ts'
 import { useProfilePhotos } from '../../hooks/useProfilePhotos.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { PinnedBar } from './PinnedBar.tsx'
@@ -22,7 +24,7 @@ import { VideoAttachment } from '../../components/VideoAttachment.tsx'
 import { FileAttachment } from '../../components/FileAttachment.tsx'
 import { VoiceAttachment } from '../../components/VoiceAttachment.tsx'
 import { RoundVideoAttachment } from '../../components/RoundVideoAttachment.tsx'
-import { ChevronDownIcon, ForwardSmallIcon, CopySmallIcon, DeleteSmallTrashIcon, CheckIcon, SendIcon } from '../../icons/index.tsx'
+import { ChevronDownIcon, ForwardSmallIcon, CopySmallIcon, DeleteSmallTrashIcon, CheckIcon, SendIcon, BackIcon, EyeIcon, ChatsIcon } from '../../icons/index.tsx'
 import type { useMessages } from '../../hooks/useMessages.ts'
 import type { useMediaCapture } from '../../hooks/useMediaCapture.ts'
 import type { useDownloadManager } from '../../hooks/useDownloadManager.ts'
@@ -41,7 +43,7 @@ type MessageThreadProps = {
   media: ReturnType<typeof useMediaCapture>
   downloadManager: ReturnType<typeof useDownloadManager>
   activeChat: ChatSummary | null
-  chatType: 'direct' | 'group'
+  chatType: 'direct' | 'group' | 'channel'
   searchHighlight?: { query: string; activeMessageId?: string } | null
   initialSelectedMessageId?: string | null
   onSayHello?: () => void
@@ -71,7 +73,7 @@ function formatMessageMetaTimestamp(sentAt: string | null | undefined, editedAt?
 }
 
 export function MessageThread({ messages, media, downloadManager, activeChat, chatType, searchHighlight, initialSelectedMessageId, onSayHello, onOpenMedia }: MessageThreadProps) {
-  const { storedDevice } = useAppContext()
+  const { storedDevice, sessionToken } = useAppContext()
   const { setContextMenuMessage, draftInputRef } = useUIContext()
   const participantUsernames = activeChat?.participant_usernames ?? EMPTY_PARTICIPANT_IDS
   const participantUserIds = activeChat?.participant_user_ids ?? EMPTY_PARTICIPANT_IDS
@@ -96,6 +98,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
       : null
   const participantPhotos = useProfilePhotos(participantUserIds, activeServerUrl)
   const currentUsername = storedDevice?.username || ''
+  const viewedMessageIdsRef = useRef<Set<string>>(new Set())
 
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const lastClickedIdRef = useRef<string | null>(null)
@@ -197,6 +200,10 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
     loadingOlderForScrollRef.current = messages.loadingOlder
     activeChatIdForScrollRef.current = activeChat?.id
   }, [activeChat?.id, messages.hasMoreMessages, messages.loadingOlder])
+
+  useEffect(() => {
+    viewedMessageIdsRef.current.clear()
+  }, [activeChat?.id])
 
   function handleScroll() {
     const el = stageRef.current
@@ -374,6 +381,24 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
     handleScrollToMessage(replyToMessageId)
   }, [handleScrollToMessage])
 
+  // Comment counts per channel post (derived from cached reply messages)
+  const commentCountByPostId = useMemo(() => {
+    if (chatType !== 'channel') return new Map<string, number>()
+    const counts = new Map<string, number>()
+    for (const m of messages.messageItems) {
+      if (m.deletedAt || !m.replyToMessageId) continue
+      counts.set(m.replyToMessageId, (counts.get(m.replyToMessageId) ?? 0) + 1)
+    }
+    return counts
+  }, [chatType, messages.messageItems])
+
+  // Start a comment on a channel post: enter thread mode (filter feed + pin reply target)
+  const handleStartComment = useCallback((message: typeof messages.messageItems[number]) => {
+    setThreadRootId(message.id)
+    messages.setReplyTargetMessageId(message.id)
+    requestAnimationFrame(() => draftInputRef.current?.focus())
+  }, [messages, draftInputRef])
+
   // --- Auto-download eligible attachments ---
   useEffect(() => {
     const eligible: { attachment: import('../../types.ts').AttachmentDescriptor; chatType: 'direct' | 'group' }[] = []
@@ -384,7 +409,7 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
       if (state.status !== 'idle') continue
       eligible.push({
         attachment: toAttachmentDescriptor(message.attachment),
-        chatType,
+        chatType: chatType === 'channel' ? 'group' : chatType,
       })
     }
     if (eligible.length > 0) {
@@ -431,11 +456,98 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
     return classes.join(' ')
   }
 
+  // Thread mode: when set, MessageThread shows only the given channel post + its replies.
+  const [threadRootId, setThreadRootId] = useState<string | null>(null)
+
+  // Clear thread mode when chat changes
+  useEffect(() => {
+    setThreadRootId(null)
+  }, [activeChat?.id])
+
+  const threadRoot = useMemo(
+    () => (threadRootId ? messages.messageItems.find((m) => m.id === threadRootId) ?? null : null),
+    [threadRootId, messages.messageItems]
+  )
+
+  // Keep the composer's reply target pinned to the thread root while in thread mode
+  useEffect(() => {
+    if (!threadRoot) return
+    if (messages.replyTargetMessageId !== threadRoot.id) {
+      messages.setReplyTargetMessageId(threadRoot.id)
+    }
+  }, [threadRoot, messages.replyTargetMessageId, messages.setReplyTargetMessageId])
+
+  const exitThreadMode = useCallback(() => {
+    setThreadRootId(null)
+    messages.setReplyTargetMessageId(null)
+  }, [messages])
+
   // Filter out deleted messages — they disappear completely (Telegram-style)
   const visibleMessages = useMemo(
-    () => messages.messageItems.filter((m) => !m.deletedAt),
-    [messages.messageItems]
+    () =>
+      messages.messageItems.filter((message) => {
+        if (message.deletedAt) {
+          return false
+        }
+
+        // Thread mode: show only the root post + its direct replies
+        if (threadRootId) {
+          return message.id === threadRootId || message.replyToMessageId === threadRootId
+        }
+
+        if (chatType === 'channel' && message.side !== 'system' && message.replyToMessageId) {
+          return false
+        }
+
+        return true
+      }),
+    [chatType, messages.messageItems, threadRootId]
   )
+
+  useEffect(() => {
+    if (chatType !== 'channel' || !activeChat?.id || !sessionToken) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue
+          }
+
+          const messageId = (entry.target as HTMLElement).dataset.messageId
+          if (!messageId || viewedMessageIdsRef.current.has(messageId)) {
+            continue
+          }
+
+          // Don't record self-views: the user's own posts shouldn't count toward
+          // audience engagement metrics.
+          const message = messages.messageItems.find((m) => m.id === messageId)
+          if (!message || message.side === 'outgoing' || message.side === 'system') {
+            viewedMessageIdsRef.current.add(messageId)
+            continue
+          }
+
+          const rawChatId = getRawChatId(activeChat.id)
+          if (!rawChatId) {
+            continue
+          }
+
+          viewedMessageIdsRef.current.add(messageId)
+          void recordMessageView(sessionToken, rawChatId, messageId).catch(() => {
+            viewedMessageIdsRef.current.delete(messageId)
+          })
+        }
+      },
+      { threshold: 0.6 }
+    )
+
+    const nodes = stageRef.current?.querySelectorAll<HTMLElement>('[data-channel-post="true"]') ?? []
+    nodes.forEach((node) => observer.observe(node))
+
+    return () => observer.disconnect()
+  }, [activeChat?.id, chatType, sessionToken, visibleMessages.length, messages.messageItems])
 
   // Compute message groups for flat layout (sender + within 5-minute window).
   // Prefer senderUsername for grouping (stable across device changes);
@@ -475,6 +587,24 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
         messageItems={messages.messageItems}
         onScrollToMessage={handleScrollToMessage}
       />
+      {threadRootId ? (
+        <div className="thread-header">
+          <button
+            type="button"
+            className="thread-header__back"
+            onClick={exitThreadMode}
+            aria-label={t('back')}
+          >
+            <BackIcon />
+          </button>
+          <div className="thread-header__text">
+            <span className="thread-header__title">{t('discussion')}</span>
+            <span className="thread-header__count">
+              {(commentCountByPostId.get(threadRootId) ?? 0)}
+            </span>
+          </div>
+        </div>
+      ) : null}
       {!activeChat ? null : messages.messageItems.length === 0 ? (
         activeChat.is_self_chat ? (
           <div className="conversation-stage__empty conversation-stage__empty--saved">
@@ -498,16 +628,20 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
             </div>
             <p className="conversation-stage__hello-name">{activeChat.title}</p>
             <p className="conversation-stage__hello-body">
-              {t('start_chat_with', activeChat.title)}
+              {chatType === 'channel'
+                ? 'This channel is ready for its first post.'
+                : t('start_chat_with', activeChat.title)}
             </p>
-            <button
-              className="conversation-stage__hello-btn"
-              type="button"
-              onClick={onSayHello}
-            >
-              <SendIcon stroke="currentColor" />
-              {t('say_hello')}
-            </button>
+            {chatType !== 'channel' ? (
+              <button
+                className="conversation-stage__hello-btn"
+                type="button"
+                onClick={onSayHello}
+              >
+                <SendIcon stroke="currentColor" />
+                {t('say_hello')}
+              </button>
+            ) : null}
           </div>
         )
       ) : (
@@ -553,6 +687,8 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
               key={message.clientId || message.id}
               ref={(el) => { messageRefsMap.current[message.id] = el }}
               className={getWrapperClassName(message, isSelected, isActiveSearchMatch, isFirstInGroup, index)}
+              data-message-id={message.id}
+              data-channel-post={chatType === 'channel' && !message.replyToMessageId && message.side !== 'system' ? 'true' : 'false'}
               onClick={() => handleMessageClick(message.id)}
               onDoubleClick={() => handleDoubleClick(message)}
               onContextMenu={(e) => {
@@ -720,6 +856,37 @@ export function MessageThread({ messages, media, downloadManager, activeChat, ch
                       <span className="message-thread__reaction-count">{reaction.count}</span>
                     </span>
                   ))}
+                </div>
+              ) : null}
+              {chatType === 'channel' && !message.replyToMessageId && message.side !== 'system' ? (
+                <div className="message-thread__channel-meta">
+                  {typeof message.viewCount === 'number' && message.viewCount > 0 ? (
+                    <div className="message-thread__views" aria-label={`${message.viewCount} views`}>
+                      <span className="message-thread__views-icon" aria-hidden="true">
+                        <EyeIcon />
+                      </span>
+                      <span className="message-thread__views-count">{message.viewCount}</span>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="message-thread__comment-button"
+                    onClick={(e) => { e.stopPropagation(); handleStartComment(message) }}
+                    aria-label={
+                      (commentCountByPostId.get(message.id) ?? 0) > 0
+                        ? `${commentCountByPostId.get(message.id)} comments`
+                        : t('comment')
+                    }
+                  >
+                    <span className="message-thread__comment-icon" aria-hidden="true">
+                      <ChatsIcon />
+                    </span>
+                    <span className="message-thread__comment-label">
+                      {(commentCountByPostId.get(message.id) ?? 0) > 0
+                        ? commentCountByPostId.get(message.id)
+                        : t('comment')}
+                    </span>
+                  </button>
                 </div>
               ) : null}
             </MessageBubble>

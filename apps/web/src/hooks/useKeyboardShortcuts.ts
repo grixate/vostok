@@ -210,7 +210,7 @@ export function useKeyboardShortcuts({
 
     if (event.key.toLowerCase() === 'n' && !event.shiftKey) {
       event.preventDefault()
-      chatList.setNewMessageMode((v) => !v)
+      chatList.setNewChatMode((current) => (current ? null : 'direct'))
       return
     }
 

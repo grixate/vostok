@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { t } from '../../lib/i18n.ts'
 import { useUIContext } from '../../contexts/UIContext.tsx'
 import { Tooltip } from '../../components/Tooltip.tsx'
@@ -24,6 +25,21 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
   const { chatFilterInputRef } = useUIContext()
   const connectionStatus = useConnectionStatus()
   const dotColor = connectionStatus === 'connected' ? 'var(--green)' : 'var(--danger)'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+
+    function handlePointerDown(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [menuOpen])
 
   return (
     <div className="sidebar__header">
@@ -72,11 +88,17 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
             className="sidebar__back-btn"
             type="button"
             aria-label={t('back')}
-            onClick={() => { chatList.setNewMessageMode(false); chatList.setNewChatUsername('') }}
+            onClick={() => { chatList.setNewChatMode(null); chatList.setNewChatUsername('') }}
           >
             <BackIcon />
           </button>
-          <span className="sidebar__title">{t('new_message')}</span>
+          <span className="sidebar__title">
+            {chatList.newChatMode === 'group'
+              ? 'New Group'
+              : chatList.newChatMode === 'channel'
+                ? 'New Channel'
+                : t('new_message')}
+          </span>
         </div>
       ) : (
         <div className="sidebar__title-row">
@@ -89,16 +111,34 @@ export function SidebarHeader({ desktop, chatList }: SidebarHeaderProps) {
               aria-label={`Connection: ${connectionStatus}`}
             />
           </div>
-          <Tooltip text={t('new_message')}>
-            <button
-              className="sidebar__compose-btn"
-              type="button"
-              aria-label={t('new_message')}
-              onClick={() => { chatList.setNewMessageMode(true); chatList.setNewChatUsername('') }}
-            >
-              <EditIcon width={18} height={18} />
-            </button>
-          </Tooltip>
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <Tooltip text={t('new_message')}>
+              <button
+                className="sidebar__compose-btn"
+                type="button"
+                aria-label={t('new_message')}
+                onClick={() => setMenuOpen((current) => !current)}
+              >
+                <EditIcon width={18} height={18} />
+              </button>
+            </Tooltip>
+            {menuOpen ? (
+              <div className="msg-context-menu" style={{ top: 'calc(100% + 8px)', right: 0, left: 'auto' }}>
+                <button type="button" onClick={() => { chatList.setNewChatMode('direct'); chatList.setNewChatUsername(''); setMenuOpen(false) }}>
+                  <EditIcon width={16} height={16} />
+                  {t('new_message')}
+                </button>
+                <button type="button" onClick={() => { chatList.setNewChatMode('group'); setMenuOpen(false) }}>
+                  <EditIcon width={16} height={16} />
+                  New Group
+                </button>
+                <button type="button" onClick={() => { chatList.setNewChatMode('channel'); setMenuOpen(false) }}>
+                  <EditIcon width={16} height={16} />
+                  New Channel
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
       {chatList.newMessageMode ? (
