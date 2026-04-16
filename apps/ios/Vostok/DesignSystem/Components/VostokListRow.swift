@@ -42,21 +42,21 @@ struct VostokListRow: View {
                 if let leadingSystemImage {
                     Circle()
                         .fill(VostokColors.accent)
-                        .frame(width: 62, height: 62)
+                        .frame(width: VostokTheme.avatarList, height: VostokTheme.avatarList)
                         .overlay {
                             Image(systemName: leadingSystemImage)
-                                .font(.system(size: 26, weight: .medium))
-                                .foregroundStyle(.white)
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(VostokColors.textOnAccent)
                         }
                 } else {
-                    VostokAvatar(title: title, size: 62)
+                    VostokAvatar(title: title, size: VostokTheme.avatarList)
                 }
             }
-            .padding(.trailing, 10)
+            .padding(.trailing, VostokTheme.spaceSM)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 17, weight: .medium))
+                        .font(VostokTypography.title)
                         .lineLimit(1)
                         .minimumScaleFactor(0.88)
                     Spacer()
@@ -67,27 +67,27 @@ struct VostokListRow: View {
                                 .foregroundStyle(VostokColors.accent)
                         }
                         Text(trailing)
-                            .font(.system(size: 14, weight: .regular))
+                            .font(VostokTypography.body)
                             .foregroundStyle(VostokColors.labelSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                     }
                 }
-                HStack(alignment: .center, spacing: 4) {
+                HStack(alignment: .center, spacing: VostokTheme.spaceXS) {
                     if let subtitleSymbol {
                         Image(systemName: subtitleSymbol)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(VostokColors.labelSecondary)
                     }
                     Text(subtitle)
-                        .font(.system(size: 15, weight: .regular))
+                        .font(VostokTypography.caption)
                         .foregroundStyle(VostokColors.labelSecondary)
                         .lineLimit(2)
                         .minimumScaleFactor(0.9)
                     if isMuted {
                         Image(systemName: "bell.slash.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(VostokColors.labelSecondary)
+                            .font(.system(size: 12))
+                            .foregroundStyle(VostokColors.labelSecondary)
                     }
                     Spacer()
                     if unreadCount > 0 {
@@ -101,16 +101,16 @@ struct VostokListRow: View {
                 }
             }
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 16)
-        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
-        .background(VostokColors.secondaryBackground)
-        .overlay(alignment: .topTrailing) {
+        .padding(.leading, VostokTheme.spaceSM)
+        .padding(.trailing, VostokTheme.spaceLG)
+        .frame(maxWidth: .infinity, minHeight: VostokTheme.chatRowHeight, alignment: .leading)
+        .background(VostokColors.primaryBackground)
+        .overlay(alignment: .bottom) {
             if showsSeparator {
                 Rectangle()
-                    .fill(VostokColors.separatorVibrant)
+                    .fill(VostokColors.separator)
                     .frame(height: 0.5)
-                    .padding(.leading, 82)
+                    .padding(.leading, VostokTheme.avatarList + VostokTheme.spaceSM + VostokTheme.spaceSM)
             }
         }
         .accessibilityElement(children: .ignore)

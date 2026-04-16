@@ -14,19 +14,19 @@ struct VostokAvatar: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Circle()
-                .fill(VostokColors.secondaryBackground)
+                .fill(VostokColors.peerColor(for: title))
                 .frame(width: size, height: size)
                 .overlay(
                     Text(String(title.prefix(1)).uppercased())
-                        .font(VostokTypography.bodyEmphasized)
-                        .foregroundStyle(VostokColors.controlPrimary)
+                        .font(VostokTypography.bodyBold)
+                        .foregroundStyle(VostokColors.textOnAccent)
                 )
 
             if isOnline {
                 Circle()
                     .fill(VostokColors.online)
                     .frame(width: max(8, size * 0.22), height: max(8, size * 0.22))
-                    .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                    .overlay(Circle().stroke(VostokColors.primaryBackground, lineWidth: 1.5))
                     .offset(x: 1, y: 1)
             }
         }

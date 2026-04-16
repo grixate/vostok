@@ -206,18 +206,90 @@ struct ChatDTO: Codable, Equatable, Identifiable, Hashable {
     let id: String
     let type: String
     let title: String
+    let description: String?
     let participantUsernames: [String]
+    let participantUserIDs: [String]?
     let isSelfChat: Bool
     let latestMessageAt: String?
     let messageCount: Int
+    let memberCount: Int?
+    let membershipRole: String?
+    let allowComments: Bool?
+    let permissions: [String: String]?
+    let canPost: Bool?
+    let canManageMembers: Bool?
+    let canEditInfo: Bool?
+    let canDeleteChat: Bool?
+    let canLeaveChat: Bool?
+
+    var isChannel: Bool { type == "channel" }
+    var isGroup: Bool { type == "group" }
+    var isDirect: Bool { type == "direct" }
+    var isOwner: Bool { membershipRole == "owner" }
+    var isAdmin: Bool { membershipRole == "admin" || membershipRole == "owner" }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, title
+        case id, type, title, description, permissions
         case participantUsernames = "participant_usernames"
+        case participantUserIDs = "participant_user_ids"
         case isSelfChat = "is_self_chat"
         case latestMessageAt = "latest_message_at"
         case messageCount = "message_count"
+        case memberCount = "member_count"
+        case membershipRole = "membership_role"
+        case allowComments = "allow_comments"
+        case canPost = "can_post"
+        case canManageMembers = "can_manage_members"
+        case canEditInfo = "can_edit_info"
+        case canDeleteChat = "can_delete_chat"
+        case canLeaveChat = "can_leave_chat"
     }
+}
+
+struct InviteLinkDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let code: String
+    let uses: Int
+    let maxUses: Int?
+    let createdAt: String
+    let expiresAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, code, uses
+        case maxUses = "max_uses"
+        case createdAt = "created_at"
+        case expiresAt = "expires_at"
+    }
+}
+
+struct InviteLinksResponse: Codable {
+    let inviteLinks: [InviteLinkDTO]
+    enum CodingKeys: String, CodingKey { case inviteLinks = "invite_links" }
+}
+
+struct InviteLinkResponse: Codable {
+    let inviteLink: InviteLinkDTO
+    enum CodingKeys: String, CodingKey { case inviteLink = "invite_link" }
+}
+
+struct CreateChannelRequest: Codable {
+    let title: String
+    let description: String?
+    let allowComments: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case title, description
+        case allowComments = "allow_comments"
+    }
+}
+
+struct UpdatePermissionsRequest: Codable {
+    let permissions: [String: String]
+}
+
+struct TransferOwnershipRequest: Codable {
+    let newOwnerUserID: String
+    enum CodingKeys: String, CodingKey { case newOwnerUserID = "new_owner_user_id" }
 }
 
 struct ChatsResponse: Codable {

@@ -32,14 +32,14 @@ struct ContactProfileView: View {
 
                 // Action row
                 HStack(spacing: 40) {
-                    profileAction(icon: "message.fill", label: "Message") {
+                    profileAction(icon: "message.fill", label: L10n.t("message")) {
                         dismiss()
                     }
 
                     NavigationLink {
                         CallView(chatID: chat.id, container: container)
                     } label: {
-                        profileActionLabel(icon: "phone.fill", label: "Audio Call")
+                        profileActionLabel(icon: "phone.fill", label: L10n.t("voice_call"))
                     }
                     .buttonStyle(.plain)
                 }

@@ -9,6 +9,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTextField
 
@@ -20,14 +22,14 @@ fun LoginScreen(authViewModel: AuthViewModel) {
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Login")
+        Text(stringResource(R.string.login))
         VostokTextField(
             value = state.deviceId,
             onValueChange = authViewModel::updateDeviceId,
-            placeholder = "Device ID"
+            placeholder = stringResource(R.string.device_id)
         )
         VostokButton(
-            text = if (state.isLoading) "Logging in..." else "Login",
+            text = if (state.isLoading) stringResource(R.string.logging_in) else stringResource(R.string.login),
             onClick = authViewModel::login
         )
 

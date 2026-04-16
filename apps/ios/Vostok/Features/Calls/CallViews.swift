@@ -29,7 +29,7 @@ struct CallView: View {
             .padding(16)
         }
         .background(backgroundGradient.ignoresSafeArea())
-        .vostokNavBar(title: "Call", large: false)
+        .vostokNavBar(title: L10n.t("call"), large: false)
         .onDisappear {
             viewModel.stopPolling()
         }
@@ -76,28 +76,28 @@ struct CallView: View {
     private var controlsCard: some View {
         VStack(spacing: 14) {
             Picker("Mode", selection: $mode) {
-                Text("Voice").tag("voice")
-                Text("Video").tag("video")
+                Text(L10n.t("voice_call")).tag("voice")
+                Text(L10n.t("video_call")).tag("video")
             }
             .pickerStyle(.segmented)
 
             HStack(spacing: 10) {
                 quickToggle(
-                    title: "Mute",
+                    title: viewModel.isMuted ? L10n.t("unmute") : L10n.t("mute"),
                     systemImage: viewModel.isMuted ? "mic.slash.fill" : "mic.fill",
                     isActive: viewModel.isMuted
                 ) {
                     viewModel.isMuted.toggle()
                 }
                 quickToggle(
-                    title: "Speaker",
+                    title: L10n.t("sound"),
                     systemImage: viewModel.isSpeakerEnabled ? "speaker.wave.3.fill" : "speaker.slash.fill",
                     isActive: viewModel.isSpeakerEnabled
                 ) {
                     viewModel.isSpeakerEnabled.toggle()
                 }
                 quickToggle(
-                    title: "Video",
+                    title: viewModel.isVideoEnabled ? L10n.t("camera_on") : L10n.t("camera_off"),
                     systemImage: viewModel.isVideoEnabled ? "video.fill" : "video.slash.fill",
                     isActive: viewModel.isVideoEnabled
                 ) {
@@ -106,7 +106,7 @@ struct CallView: View {
             }
 
             HStack(spacing: 8) {
-                Button("Refresh") {
+                Button(L10n.t("retry")) {
                     withSession { token in
                         Task { await viewModel.refreshActive(token: token, chatID: chatID) }
                     }
@@ -122,7 +122,7 @@ struct CallView: View {
             }
 
             if viewModel.canStartCall {
-                Button("Start \(mode.capitalized) Call") {
+                Button(L10n.t("start_a_call")) {
                     withSession { token in
                         Task { await viewModel.start(token: token, chatID: chatID, mode: mode) }
                     }
@@ -141,7 +141,7 @@ struct CallView: View {
                 }
 
                 if viewModel.canLeaveCall {
-                    Button("Leave") {
+                    Button(L10n.t("leave_chat")) {
                         withSession { token in
                             Task { await viewModel.leave(token: token) }
                         }
@@ -150,7 +150,7 @@ struct CallView: View {
                 }
 
                 if viewModel.canEndCall {
-                    Button("End", role: .destructive) {
+                    Button(L10n.t("end_call"), role: .destructive) {
                         withSession { token in
                             Task { await viewModel.end(token: token) }
                         }
@@ -165,7 +165,7 @@ struct CallView: View {
 
     private func callDetailsCard(_ call: CallDTO) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Call Details")
+            Text(L10n.t("chat_details"))
                 .font(VostokTypography.bodyEmphasized)
                 .foregroundStyle(VostokColors.labelPrimary)
             labeledRow("Call ID", call.id)
@@ -215,6 +215,7 @@ struct CallView: View {
                         Text("ICE").tag("ice")
                         Text("Renegotiate").tag("renegotiate")
                         Text("Heartbeat").tag("heartbeat")
+
                     }
                     .pickerStyle(.menu)
 
@@ -251,7 +252,7 @@ struct CallView: View {
 
                     if !viewModel.pendingMediaEvents.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Media Events")
+                            Text(L10n.t("media"))
                                 .font(VostokTypography.caption)
                                 .foregroundStyle(VostokColors.labelSecondary)
                             ForEach(Array(viewModel.pendingMediaEvents.enumerated()), id: \.offset) { _, event in
@@ -359,7 +360,7 @@ struct CallView: View {
         LinearGradient(
             colors: [
                 VostokColors.secondaryBackground,
-                VostokColors.chatWallpaperBase.opacity(0.25),
+                VostokColors.accentSoft,
                 VostokColors.primaryBackground
             ],
             startPoint: .topLeading,
@@ -377,7 +378,7 @@ struct IncomingCallView: View {
     var body: some View {
         VStack(spacing: 20) {
             VostokAvatar(title: "C", size: 96, isOnline: true)
-            Text("Incoming Call")
+            Text(L10n.t("call_incoming"))
                 .font(VostokTypography.title)
             HStack(spacing: 24) {
                 Image(systemName: "phone.down.fill")
@@ -400,7 +401,7 @@ struct IncomingCallView: View {
 struct GroupCallView: View {
     var body: some View {
         VStack(spacing: 12) {
-            Text("Group Call")
+            Text(L10n.t("group_call"))
                 .font(VostokTypography.title)
             Text("Join from a chat to sync participant state and endpoint events.")
                 .font(VostokTypography.footnote)

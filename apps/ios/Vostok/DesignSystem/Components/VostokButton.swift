@@ -6,10 +6,10 @@ struct VostokPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(VostokTypography.bodyEmphasis)
-            .foregroundStyle(.white)
+            .foregroundStyle(VostokColors.textOnAccent)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(VostokColors.accent.opacity(configuration.isPressed ? 0.8 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: VostokTheme.radiusMD, style: .continuous))
     }
 }
 
@@ -21,7 +21,7 @@ struct VostokSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(VostokColors.labelSecondary)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(VostokColors.secondaryBackground.opacity(configuration.isPressed ? 0.85 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: VostokTheme.radiusMD, style: .continuous))
     }
 }
 
@@ -31,7 +31,7 @@ struct VostokPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(VostokTypography.bodyEmphasis)
-            .foregroundStyle(.white)
+            .foregroundStyle(VostokColors.textOnAccent)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(VostokColors.accent.opacity(configuration.isPressed ? 0.8 : 1))
             .clipShape(Capsule())

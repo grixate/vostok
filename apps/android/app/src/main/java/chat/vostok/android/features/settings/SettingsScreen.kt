@@ -17,7 +17,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import chat.vostok.android.BuildConfig
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -41,7 +43,7 @@ fun SettingsScreen(
     val clipboard = LocalClipboardManager.current
     val scrollState = rememberScrollState()
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Settings") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.settings)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -67,16 +69,16 @@ fun SettingsScreen(
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(text = "Socket log (latest)")
+                    Text(text = stringResource(R.string.socket_log_latest))
                     socketEvents.takeLast(6).reversed().forEach { line ->
                         Text(text = line)
                     }
                 }
             }
 
-            VostokButton(text = "Force Reconnect", onClick = onForceReconnect)
+            VostokButton(text = stringResource(R.string.force_reconnect), onClick = onForceReconnect)
             VostokButton(
-                text = "Copy Socket Log",
+                text = stringResource(R.string.copy_socket_log),
                 onClick = {
                     val content = if (socketEvents.isEmpty()) {
                         "No socket events yet."
@@ -86,13 +88,13 @@ fun SettingsScreen(
                     clipboard.setText(AnnotatedString(content))
                 }
             )
-            VostokButton(text = "Clear Socket Log", onClick = onClearSocketLog)
+            VostokButton(text = stringResource(R.string.clear_socket_log), onClick = onClearSocketLog)
 
-            VostokButton(text = "Devices", onClick = onOpenDevices)
-            VostokButton(text = "Privacy", onClick = onOpenPrivacy)
-            VostokButton(text = "Profile", onClick = onOpenProfile)
-            VostokButton(text = "Safety Numbers", onClick = onOpenSafetyNumbers)
-            VostokButton(text = "Logout", onClick = onLogout)
+            VostokButton(text = stringResource(R.string.active_sessions), onClick = onOpenDevices)
+            VostokButton(text = stringResource(R.string.privacy), onClick = onOpenPrivacy)
+            VostokButton(text = stringResource(R.string.profile), onClick = onOpenProfile)
+            VostokButton(text = stringResource(R.string.safety_numbers), onClick = onOpenSafetyNumbers)
+            VostokButton(text = stringResource(R.string.sign_out), onClick = onLogout)
         }
     }
 }

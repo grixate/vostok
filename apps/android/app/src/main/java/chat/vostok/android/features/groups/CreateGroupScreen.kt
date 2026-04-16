@@ -11,7 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -19,7 +21,7 @@ import chat.vostok.android.designsystem.components.VostokTopBar
 fun CreateGroupScreen(viewModel: GroupViewModel, onOpenGroupInfo: (String) -> Unit, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Create Group") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.create_group)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -31,22 +33,22 @@ fun CreateGroupScreen(viewModel: GroupViewModel, onOpenGroupInfo: (String) -> Un
                 value = state.title,
                 onValueChange = viewModel::updateTitle,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Group title") }
+                placeholder = { Text(stringResource(R.string.group_title)) }
             )
             OutlinedTextField(
                 value = state.membersInput,
                 onValueChange = viewModel::updateMembersInput,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Members (comma-separated usernames)") }
+                placeholder = { Text(stringResource(R.string.members_comma_separated)) }
             )
             VostokButton(
-                text = if (state.isLoading) "Creating..." else "Create",
+                text = if (state.isLoading) stringResource(R.string.creating) else stringResource(R.string.create),
                 onClick = viewModel::createGroup
             )
-            VostokButton(text = "Back", onClick = onBack)
+            VostokButton(text = stringResource(R.string.back), onClick = onBack)
 
             state.chatId?.let { createdChatId ->
-                VostokButton(text = "Open Group") { onOpenGroupInfo(createdChatId) }
+                VostokButton(text = stringResource(R.string.open_group)) { onOpenGroupInfo(createdChatId) }
             }
 
             state.info?.let { Text(it) }

@@ -11,6 +11,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTextField
 
@@ -22,19 +24,19 @@ fun RegistrationScreen(authViewModel: AuthViewModel) {
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Create Account")
+        Text(stringResource(R.string.create_account))
         VostokTextField(
             value = state.username,
             onValueChange = authViewModel::updateUsername,
-            placeholder = "Choose a username"
+            placeholder = stringResource(R.string.choose_username)
         )
         VostokTextField(
             value = state.deviceName,
             onValueChange = authViewModel::updateDeviceName,
-            placeholder = "Device name"
+            placeholder = stringResource(R.string.device_name)
         )
         VostokButton(
-            text = if (state.isLoading) "Registering..." else "Create Account",
+            text = if (state.isLoading) stringResource(R.string.registering) else stringResource(R.string.create_account),
             onClick = authViewModel::register
         )
         if (state.isLoading) {

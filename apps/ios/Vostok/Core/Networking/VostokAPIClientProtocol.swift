@@ -28,6 +28,17 @@ protocol VostokAPIClientProtocol {
     func groupMembers(token: String, chatID: String) async throws -> GroupMembersResponse
     func updateGroupMember(token: String, chatID: String, userID: String, request: UpdateGroupMemberRequest) async throws -> GroupMemberResponse
     func removeGroupMember(token: String, chatID: String, userID: String) async throws -> GroupMemberResponse
+    func leaveGroup(token: String, chatID: String) async throws -> ChatResponse
+    func deleteGroup(token: String, chatID: String) async throws -> ChatResponse
+    func updatePermissions(token: String, chatID: String, request: UpdatePermissionsRequest) async throws -> ChatResponse
+    func transferOwnership(token: String, chatID: String, request: TransferOwnershipRequest) async throws -> ChatResponse
+
+    func createChannel(token: String, request: CreateChannelRequest) async throws -> ChatResponse
+
+    func inviteLinks(token: String, chatID: String) async throws -> InviteLinksResponse
+    func createInviteLink(token: String, chatID: String) async throws -> InviteLinkResponse
+    func revokeInviteLink(token: String, chatID: String, linkID: String) async throws -> InviteLinkResponse
+    func joinByInviteCode(token: String, code: String) async throws -> ChatResponse
 
     func recipientDevices(token: String, chatID: String) async throws -> RecipientDevicesResponse
     func messages(token: String, chatID: String) async throws -> MessagesResponse

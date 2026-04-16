@@ -13,7 +13,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -25,7 +27,7 @@ fun GroupInfoScreen(chatId: String, viewModel: GroupViewModel, onBack: () -> Uni
         viewModel.loadGroup(chatId)
     }
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Group Info") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.view_group_info)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -33,15 +35,15 @@ fun GroupInfoScreen(chatId: String, viewModel: GroupViewModel, onBack: () -> Uni
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            VostokButton(text = if (state.isLoading) "Refreshing..." else "Refresh") {
+            VostokButton(text = if (state.isLoading) stringResource(R.string.refreshing) else stringResource(R.string.refresh)) {
                 viewModel.loadGroup(chatId)
             }
-            VostokButton(text = "Back", onClick = onBack)
+            VostokButton(text = stringResource(R.string.back), onClick = onBack)
 
             state.info?.let { Text(it) }
             state.error?.let { Text(it) }
 
-            Text("Members")
+            Text(stringResource(R.string.members))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                 items(state.members) { member ->
                     Column(
@@ -49,23 +51,23 @@ fun GroupInfoScreen(chatId: String, viewModel: GroupViewModel, onBack: () -> Uni
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text("${member.username} (${member.role})")
-                        VostokButton(text = "Toggle Role") { viewModel.toggleRole(chatId, member) }
-                        VostokButton(text = "Remove") { viewModel.removeMember(chatId, member) }
+                        VostokButton(text = stringResource(R.string.toggle_role)) { viewModel.toggleRole(chatId, member) }
+                        VostokButton(text = stringResource(R.string.remove)) { viewModel.removeMember(chatId, member) }
                     }
                 }
             }
 
-            Text("Safety Numbers")
+            Text(stringResource(R.string.safety_numbers))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                 items(state.safetyNumbers) { safety ->
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text("${safety.peerUsername} · ${if (safety.verified) "verified" else "unverified"}")
+                        Text("${safety.peerUsername} · ${if (safety.verified) stringResource(R.string.verified) else stringResource(R.string.unverified)}")
                         Text("${safety.peerDeviceName}: ${safety.fingerprint.take(20)}...")
                         if (!safety.verified) {
-                            VostokButton(text = "Verify") {
+                            VostokButton(text = stringResource(R.string.verify)) {
                                 viewModel.verifySafety(chatId, safety.peerDeviceId)
                             }
                         }

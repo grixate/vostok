@@ -71,7 +71,7 @@ struct VostokVoiceBubble: View {
                         .overlay {
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(VostokColors.textOnAccent)
                                 .offset(x: isPlaying ? 0 : 1)
                         }
                 }

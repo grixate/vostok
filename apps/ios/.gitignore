@@ -1,0 +1,7 @@
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# Workspace checks
+Vostok.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist

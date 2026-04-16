@@ -33,7 +33,7 @@ struct LoginView: View {
                     .padding(.bottom, 24)
 
                 // MARK: Title + subtitle
-                Text("Sign In")
+                Text(L10n.t("login"))
                     .font(VostokTypography.titleSection)   // 22px Semibold
                     .foregroundStyle(VostokColors.labelPrimary)
                     .padding(.bottom, 8)
@@ -85,7 +85,7 @@ struct LoginView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text("Sign In")
+                        Text(L10n.t("login"))
                     }
                 }
                 .buttonStyle(VostokPrimaryButtonStyle())

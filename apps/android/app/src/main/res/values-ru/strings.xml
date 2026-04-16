@@ -1,0 +1,312 @@
+<resources>
+    <string name="app_name">Vostok</string>
+
+    <!-- Tabs -->
+    <string name="tab_chats">Чаты</string>
+    <string name="tab_contacts">Контакты</string>
+    <string name="tab_settings">Настройки</string>
+
+    <!-- Common actions -->
+    <string name="send">Отправить</string>
+    <string name="cancel">Отмена</string>
+    <string name="delete">Удалить</string>
+    <string name="edit">Изменить</string>
+    <string name="reply">Ответить</string>
+    <string name="forward">Переслать</string>
+    <string name="copy">Копировать</string>
+    <string name="close">Закрыть</string>
+    <string name="search">Поиск</string>
+    <string name="back">Назад</string>
+    <string name="next">Далее</string>
+    <string name="done">Готово</string>
+    <string name="save">Сохранить</string>
+    <string name="retry">Повторить</string>
+    <string name="loading">Загрузка…</string>
+    <string name="confirm">Подтвердить</string>
+    <string name="dismiss">Скрыть</string>
+    <string name="add">Добавить</string>
+    <string name="remove">Удалить</string>
+    <string name="ok">ОК</string>
+    <string name="off">Выкл</string>
+    <string name="enabled">Включено</string>
+    <string name="disabled">Отключено</string>
+
+    <!-- Auth -->
+    <string name="login">Войти</string>
+    <string name="register">Создать аккаунт</string>
+    <string name="create_account">Создать аккаунт</string>
+    <string name="username">Имя пользователя</string>
+    <string name="password">Пароль</string>
+    <string name="confirm_password">Подтверждение пароля</string>
+    <string name="device_name">Имя устройства</string>
+    <string name="device_id">ID устройства</string>
+    <string name="choose_username">Выберите имя пользователя</string>
+    <string name="registering">Регистрация…</string>
+    <string name="logging_in">Входим…</string>
+    <string name="creating_account">Создаём аккаунт…</string>
+    <string name="server_unreachable">Не удалось подключиться к серверу. Проверьте адрес и попробуйте снова.</string>
+    <string name="invalid_credentials">Неверное имя пользователя или пароль.</string>
+    <string name="welcome_title">Добро пожаловать в Vostok</string>
+    <string name="welcome_subtitle">Безопасный мессенджер для вашего круга</string>
+    <string name="connect_to_server">Подключиться к серверу</string>
+    <string name="restore_from_backup">Восстановить из копии</string>
+    <string name="server_url">Адрес сервера</string>
+    <string name="server_url_placeholder">https://chat.example.com</string>
+
+    <!-- Chat list -->
+    <string name="chats">Чаты</string>
+    <string name="new_message">Новое сообщение</string>
+    <string name="new_group">Новая группа</string>
+    <string name="search_chats">Поиск чатов</string>
+    <string name="no_conversations">Пока нет чатов</string>
+    <string name="no_conversations_subtitle">Начните общение или присоединитесь к группе</string>
+    <string name="start_new_chat">Начать новый чат</string>
+    <string name="new_conversation">Новый</string>
+    <string name="folder_all">Все</string>
+    <string name="channels">Каналы</string>
+
+    <!-- Conversation -->
+    <string name="type_message">Написать сообщение…</string>
+    <string name="edit_message">Редактировать сообщение…</string>
+    <string name="no_messages">Пока нет сообщений</string>
+    <string name="say_hello">Скажите привет!</string>
+    <string name="message_deleted">Сообщение удалено</string>
+    <string name="message_edited">изм.</string>
+    <string name="encrypted">Зашифровано</string>
+    <string name="copy_text">Копировать текст</string>
+    <string name="pin">Закрепить</string>
+    <string name="unpin">Открепить</string>
+    <string name="attachment">Вложение</string>
+    <string name="voice_message">Голосовое сообщение</string>
+    <string name="video_message">Видеосообщение</string>
+
+    <!-- Contacts / Members -->
+    <string name="members">Участники</string>
+    <string name="search_members">Поиск участников</string>
+    <string name="no_members_found">Участники не найдены</string>
+    <string name="n_members">%1$d участников</string>
+
+    <!-- Groups -->
+    <string name="group">Группа</string>
+    <string name="group_name">Название группы</string>
+    <string name="view_group_info">Информация о группе</string>
+    <string name="add_members">Добавить участников</string>
+    <string name="owner">Владелец</string>
+    <string name="admin">Админ</string>
+    <string name="member">Участник</string>
+    <string name="member_role">Участник</string>
+    <string name="make_admin">Сделать админом</string>
+    <string name="make_member">Сделать участником</string>
+    <string name="transfer_ownership">Передать владение</string>
+    <string name="remove_member">Удалить участника</string>
+    <string name="leave_group">Покинуть группу</string>
+    <string name="delete_chat">Удалить чат</string>
+    <string name="permission_everyone">Все участники</string>
+    <string name="permission_admins">Только админы</string>
+    <string name="who_can_send">Кто может писать</string>
+    <string name="who_can_add_members">Кто может добавлять участников</string>
+    <string name="who_can_edit_info">Кто может менять информацию</string>
+    <string name="who_can_pin_messages">Кто может закреплять сообщения</string>
+
+    <!-- Channels -->
+    <string name="create_channel">Создать канал</string>
+    <string name="channel_title">Название канала</string>
+    <string name="description">Описание</string>
+    <string name="allow_comments">Разрешить комментарии</string>
+    <string name="channel_read_only_hint">Подписчики могут читать канал, но публиковать посты могут только администраторы.</string>
+    <string name="n_subscribers">%1$d подписчиков</string>
+
+    <!-- Invite links -->
+    <string name="invite_links">Ссылки-приглашения</string>
+    <string name="copy_invite_link">Скопировать ссылку</string>
+    <string name="invite_link_copied">Ссылка приглашения скопирована.</string>
+    <string name="invite_link_revoked">Ссылка приглашения отозвана.</string>
+    <string name="no_invite_links">Пока нет ссылок приглашения</string>
+    <string name="revoke_invite_link">Отозвать ссылку</string>
+    <string name="invite_link_uses">%1$d использований</string>
+
+    <!-- Calls -->
+    <string name="call">Позвонить</string>
+    <string name="calls">Звонки</string>
+    <string name="voice_call">Голосовой звонок</string>
+    <string name="video_call">Видеозвонок</string>
+    <string name="group_call">Групповой звонок</string>
+    <string name="call_incoming">Входящий звонок</string>
+    <string name="call_outgoing">Вызов…</string>
+    <string name="call_ended">Звонок завершён</string>
+    <string name="call_declined">Звонок отклонён</string>
+    <string name="call_missed">Пропущенный звонок</string>
+    <string name="call_failed">Звонок не удался</string>
+    <string name="end_call">Завершить</string>
+    <string name="accept_call">Ответить</string>
+    <string name="decline_call">Отклонить</string>
+    <string name="mute">Выключить микрофон</string>
+    <string name="unmute">Включить микрофон</string>
+    <string name="camera_on">Включить камеру</string>
+    <string name="camera_off">Выключить камеру</string>
+    <string name="start_a_call">Начать звонок</string>
+    <string name="sound">Звук</string>
+
+    <!-- Settings -->
+    <string name="settings">Настройки</string>
+    <string name="my_profile">Мой профиль</string>
+    <string name="servers">Серверы</string>
+    <string name="notifications_and_sounds">Уведомления и звуки</string>
+    <string name="privacy_and_security">Конфиденциальность</string>
+    <string name="data_and_storage">Данные и хранилище</string>
+    <string name="appearance">Оформление</string>
+    <string name="about_and_debug">О приложении</string>
+    <string name="profile">Профиль</string>
+    <string name="sign_out">Выйти</string>
+
+    <!-- Notifications -->
+    <string name="notifications">Уведомления</string>
+    <string name="badge_count">Счётчик на иконке</string>
+    <string name="message_preview">Предпросмотр</string>
+
+    <!-- Privacy -->
+    <string name="privacy">Конфиденциальность</string>
+    <string name="last_seen">Время последнего визита</string>
+    <string name="read_receipts">Отчёты о прочтении</string>
+    <string name="typing_indicators">Индикатор набора</string>
+    <string name="safety_numbers">Код безопасности</string>
+    <string name="verify">Подтвердить</string>
+    <string name="verified">Подтверждён</string>
+    <string name="no_safety_numbers">Нет доступных кодов безопасности</string>
+
+    <!-- Sessions / Devices -->
+    <string name="active_sessions">Активные сеансы</string>
+    <string name="this_device">Это устройство</string>
+    <string name="unknown_device">Неизвестное устройство</string>
+    <string name="revoke">Завершить</string>
+    <string name="link_device">Привязать устройство</string>
+
+    <!-- Data & Storage -->
+    <string name="storage">Хранилище</string>
+    <string name="keep_media">Хранить медиа</string>
+    <string name="cache_limit">Лимит кэша</string>
+    <string name="clear_all_local_data">Очистить все локальные данные</string>
+    <string name="auto_download_private">Автозагрузка — Личные чаты</string>
+    <string name="auto_download_group">Автозагрузка — Групповые чаты</string>
+    <string name="photos">Фото</string>
+    <string name="videos">Видео</string>
+    <string name="files">Файлы</string>
+    <string name="voice_messages">Голосовые</string>
+    <string name="round_videos">Видеосообщения</string>
+    <string name="no_limit">Без лимита</string>
+    <string name="up_to">До %1$s</string>
+
+    <!-- Appearance -->
+    <string name="language">Язык</string>
+    <string name="theme">Тема</string>
+
+    <!-- About & Debug -->
+    <string name="vostok">Vostok</string>
+    <string name="client_version">Версия клиента</string>
+    <string name="server_version">Версия сервера</string>
+    <string name="platform">Платформа</string>
+    <string name="device">Устройство</string>
+    <string name="encryption">Шифрование</string>
+    <string name="e2ee_protocol">Signal (X3DH + Double Ratchet)</string>
+    <string name="copy_debug_info">Скопировать отладочную информацию</string>
+    <string name="copied">Скопировано!</string>
+    <string name="status">Статус</string>
+
+    <!-- Backup -->
+    <string name="backup">Резервная копия</string>
+    <string name="export_backup">Экспорт копии</string>
+    <string name="import_backup">Импорт копии</string>
+    <string name="backup_password">Пароль копии</string>
+    <string name="quick_restore">Быстрое восстановление</string>
+    <string name="addresses_only">Только адреса</string>
+    <string name="full_credentials">С паролями</string>
+    <string name="restore_title">Восстановление из копии</string>
+    <string name="restore">Восстановить</string>
+    <string name="select_file">Выбрать файл .vostok</string>
+    <string name="restoring_servers">Восстановление серверов</string>
+    <string name="invalid_backup_file">Этот файл не является резервной копией Vostok.</string>
+    <string name="failed_decrypt_backup">Не удалось расшифровать резервную копию.</string>
+    <string name="export_now">Экспортировать</string>
+
+    <!-- Multi-server -->
+    <string name="add_server">Добавить сервер</string>
+    <string name="remove_server">Удалить сервер</string>
+    <string name="connected">Подключён</string>
+    <string name="connecting">Подключение…</string>
+    <string name="disconnected">Отключён</string>
+    <string name="offline">Не в сети</string>
+    <string name="sign_in_required">Требуется вход</string>
+    <string name="connection_error">Ошибка подключения</string>
+
+    <!-- Profile -->
+    <string name="message">Написать</string>
+    <string name="online">в сети</string>
+    <string name="saved_messages">Избранное</string>
+    <string name="your_cloud_storage">Ваше облачное хранилище</string>
+    <string name="copy_handle">Копировать имя</string>
+
+    <!-- Misc -->
+    <string name="no_results">Ничего не найдено</string>
+    <string name="mark_as_read">Отметить прочитанным</string>
+    <string name="mute_notifications">Выключить уведомления</string>
+    <string name="pin_chat">Закрепить чат</string>
+    <string name="archive">Архивировать</string>
+    <string name="media">Медиа</string>
+    <string name="downloaded">Загружено</string>
+    <string name="play">Воспроизвести</string>
+    <string name="pause">Пауза</string>
+    <string name="stop">Стоп</string>
+
+    <!-- i18n: additional UI strings -->
+    <string name="search_username">Поиск по имени</string>
+    <string name="create_group">Создать группу</string>
+    <string name="syncing">Синхронизация…</string>
+    <string name="refresh">Обновить</string>
+    <string name="conversation">Беседа</string>
+    <string name="group_title">Название группы</string>
+    <string name="members_comma_separated">Участники (имена через запятую)</string>
+    <string name="creating">Создание…</string>
+    <string name="create">Создать</string>
+    <string name="open_group">Открыть группу</string>
+    <string name="refreshing">Обновление…</string>
+    <string name="toggle_role">Изменить роль</string>
+    <string name="unverified">не подтверждён</string>
+    <string name="voice_mode">Голосовой режим</string>
+    <string name="video_mode">Видеорежим</string>
+    <string name="group_mode">Групповой режим</string>
+    <string name="working">Выполняется…</string>
+    <string name="start_attach">Начать/Подключить</string>
+    <string name="join_audio">Войти (аудио)</string>
+    <string name="join_audio_video">Войти (аудио+видео)</string>
+    <string name="signal_heartbeat">Сигнал heartbeat</string>
+    <string name="leave">Выйти</string>
+    <string name="end">Завершить</string>
+    <string name="group_call_controls">Управление групповым звонком</string>
+    <string name="cancel_edit">Отменить редактирование</string>
+    <string name="stop_voice">Остановить запись</string>
+    <string name="record_voice">Записать голосовое</string>
+    <string name="capture_round">Записать видео</string>
+    <string name="play_voice">Воспроизвести голосовое</string>
+    <string name="send_voice">Отправить голосовое</string>
+    <string name="play_round">Воспроизвести видео</string>
+    <string name="send_round">Отправить видео</string>
+    <string name="load_safety_numbers">Загрузить коды безопасности</string>
+    <string name="round_clip_duration">Видео: %1$dс</string>
+    <string name="voice_duration">Голосовое: %1$dс</string>
+    <string name="reconnections">Переподключений: %1$d</string>
+    <string name="force_reconnect">Переподключить</string>
+    <string name="copy_socket_log">Копировать лог</string>
+    <string name="clear_socket_log">Очистить лог</string>
+    <string name="socket_log_latest">Лог сокета (последние)</string>
+    <string name="biometric_lock">Блокировка биометрией</string>
+    <string name="refresh_devices">Обновить устройства</string>
+    <string name="current_device">Текущее устройство</string>
+    <string name="linked_device">Связанное устройство</string>
+    <string name="user_id">ID пользователя</string>
+
+    <!-- Time ago -->
+    <string name="ago_now">только что</string>
+    <string name="ago_minutes">%1$d мин. назад</string>
+    <string name="ago_hours">%1$d ч. назад</string>
+    <string name="ago_days">%1$d д. назад</string>
+</resources>

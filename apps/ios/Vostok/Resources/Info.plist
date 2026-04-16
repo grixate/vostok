@@ -52,6 +52,46 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>chat.vostok.backup</string>
+            <key>UTTypeDescription</key>
+            <string>Vostok Backup</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>vostok</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Vostok Backup</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>chat.vostok.backup</string>
+            </array>
+        </dict>
+    </array>
+    <key>UIAppFonts</key>
+    <array>
+        <string>Fonts/Inter-Regular.otf</string>
+        <string>Fonts/Inter-Medium.otf</string>
+        <string>Fonts/Inter-SemiBold.otf</string>
+        <string>Fonts/Inter-Bold.otf</string>
+    </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>Vostok uses the microphone for voice messages and calls.</string>
     <key>NSCameraUsageDescription</key>

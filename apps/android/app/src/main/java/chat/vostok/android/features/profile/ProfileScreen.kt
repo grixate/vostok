@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -18,7 +20,7 @@ fun ProfileScreen(
     deviceId: String?,
     onBack: () -> Unit
 ) {
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Profile") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.profile)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -26,10 +28,10 @@ fun ProfileScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Username: ${username ?: "-"}")
-            Text("User ID: ${userId ?: "-"}")
-            Text("Device ID: ${deviceId ?: "-"}")
-            VostokButton(text = "Back", onClick = onBack)
+            Text("${stringResource(R.string.username)}: ${username ?: "-"}")
+            Text("${stringResource(R.string.user_id)}: ${userId ?: "-"}")
+            Text("${stringResource(R.string.device_id)}: ${deviceId ?: "-"}")
+            VostokButton(text = stringResource(R.string.back), onClick = onBack)
         }
     }
 }

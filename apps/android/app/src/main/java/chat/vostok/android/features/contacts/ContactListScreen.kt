@@ -14,7 +14,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokListItem
 import chat.vostok.android.designsystem.components.VostokTopBar
@@ -33,7 +35,7 @@ fun ContactListScreen(
         state.search.isBlank() || it.username.contains(state.search, ignoreCase = true)
     }
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Contacts") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.tab_contacts)) }) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -49,19 +51,19 @@ fun ContactListScreen(
                     value = state.search,
                     onValueChange = viewModel::updateSearch,
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search username") }
+                    placeholder = { Text(stringResource(R.string.search_username)) }
                 )
             }
 
             item {
                 VostokButton(
-                    text = if (state.isLoading) "Syncing..." else "Refresh",
+                    text = if (state.isLoading) stringResource(R.string.syncing) else stringResource(R.string.refresh),
                     onClick = viewModel::refresh
                 )
             }
 
             item {
-                VostokButton(text = "Create Group", onClick = onOpenCreateGroup)
+                VostokButton(text = stringResource(R.string.create_group), onClick = onOpenCreateGroup)
             }
 
             state.error?.let { error ->

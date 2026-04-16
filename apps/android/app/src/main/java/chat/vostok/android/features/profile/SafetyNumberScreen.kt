@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 import chat.vostok.android.features.groups.GroupViewModel
@@ -29,7 +31,7 @@ fun SafetyNumberScreen(
     val state by viewModel.uiState.collectAsState()
     var chatId by remember { mutableStateOf(state.chatId.orEmpty()) }
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Safety Numbers") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.safety_numbers)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -44,10 +46,10 @@ fun SafetyNumberScreen(
                 placeholder = { Text("Chat ID") }
             )
 
-            VostokButton(text = "Load Safety Numbers") {
+            VostokButton(text = stringResource(R.string.load_safety_numbers)) {
                 if (chatId.isNotBlank()) viewModel.loadGroup(chatId)
             }
-            VostokButton(text = "Back", onClick = onBack)
+            VostokButton(text = stringResource(R.string.back), onClick = onBack)
 
             state.info?.let { Text(it) }
             state.error?.let { Text(it) }
@@ -56,9 +58,9 @@ fun SafetyNumberScreen(
                 items(state.safetyNumbers) { safety ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("${safety.peerUsername} · ${safety.peerDeviceName}")
-                        Text("${if (safety.verified) "verified" else "unverified"} · ${safety.fingerprint}")
+                        Text("${if (safety.verified) stringResource(R.string.verified) else stringResource(R.string.unverified)} · ${safety.fingerprint}")
                         if (!safety.verified && chatId.isNotBlank()) {
-                            VostokButton(text = "Verify") {
+                            VostokButton(text = stringResource(R.string.verify)) {
                                 viewModel.verifySafety(chatId, safety.peerDeviceId)
                             }
                         }

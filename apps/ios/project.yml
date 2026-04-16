@@ -33,6 +33,10 @@ targets:
       - path: Vostok/Resources
         includes:
           - Environment.plist
+      - path: Vostok/Resources/Fonts
+        buildPhase: resources
+      - path: Vostok/Resources/Locales
+        buildPhase: resources
     dependencies:
       - package: GRDBSQLCipher
         product: GRDB
@@ -47,7 +51,7 @@ targets:
         MARKETING_VERSION: 0.9.0
         CURRENT_PROJECT_VERSION: 1
         CODE_SIGN_STYLE: Automatic
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_OBJC_BRIDGING_HEADER: Vostok/Core/Vostok-Bridging-Header.h
 
   VostokNotificationService:
@@ -66,6 +70,24 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios.notification-service
         PRODUCT_NAME: VostokNotificationService
         INFOPLIST_FILE: VostokNotificationService/Info.plist
+        SWIFT_VERSION: 5.10
+        MARKETING_VERSION: 0.9.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+
+  VostokShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VostokShareExtension
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.vostok.ios.share-extension
+        PRODUCT_NAME: VostokShareExtension
+        INFOPLIST_FILE: VostokShareExtension/Info.plist
         SWIFT_VERSION: 5.10
         MARKETING_VERSION: 0.9.0
         CURRENT_PROJECT_VERSION: 1
@@ -108,6 +130,7 @@ schemes:
       targets:
         Vostok: all
         VostokNotificationService: [run, archive]
+        VostokShareExtension: [run, archive]
         VostokTests: [test]
         VostokUITests: [test]
     test:

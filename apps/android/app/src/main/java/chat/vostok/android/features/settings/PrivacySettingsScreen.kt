@@ -11,6 +11,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -18,7 +20,7 @@ import chat.vostok.android.designsystem.components.VostokTopBar
 fun PrivacySettingsScreen(viewModel: SettingsViewModel, onBackToSettings: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Privacy") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.privacy)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -27,7 +29,7 @@ fun PrivacySettingsScreen(viewModel: SettingsViewModel, onBackToSettings: () -> 
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Read receipts")
+                Text(stringResource(R.string.read_receipts))
                 Switch(
                     checked = state.readReceipts,
                     onCheckedChange = viewModel::setReadReceipts
@@ -35,14 +37,14 @@ fun PrivacySettingsScreen(viewModel: SettingsViewModel, onBackToSettings: () -> 
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Biometric lock")
+                Text(stringResource(R.string.biometric_lock))
                 Switch(
                     checked = state.biometricLock,
                     onCheckedChange = viewModel::setBiometricLock
                 )
             }
 
-            VostokButton(text = "Back", onClick = onBackToSettings)
+            VostokButton(text = stringResource(R.string.back), onClick = onBackToSettings)
         }
     }
 }

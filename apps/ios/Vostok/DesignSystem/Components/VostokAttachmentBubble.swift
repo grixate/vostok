@@ -36,7 +36,7 @@ struct VostokAttachmentBubble: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(filename)
-                        .font(VostokTypography.bodyEmphasized)
+                        .font(VostokTypography.bodyBold)
                         .foregroundStyle(VostokColors.labelPrimary)
                         .lineLimit(2)
 

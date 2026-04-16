@@ -28,18 +28,36 @@ data class SecureStorageStatus(
 object SecurePreferencesFactory {
     fun create(context: Context, name: String): SharedPreferences {
         return runCatching {
-            val masterKey = buildMasterKey(context)
-
-            EncryptedSharedPreferences.create(
-                context,
-                name,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            createInternal(context, name)
+        }.getOrElse { firstError ->
+            android.util.Log.w(
+                "SecurePreferencesFactory",
+                "First attempt failed for $name, attempting recovery",
+                firstError
             )
-        }.getOrElse { error ->
-            throw IllegalStateException("Encrypted preferences unavailable for $name", error)
+            // Delete corrupted preferences and Keystore key, then retry once
+            runCatching { context.deleteSharedPreferences(name) }
+            runCatching { clearMasterKey() }
+            runCatching {
+                createInternal(context, name)
+            }.getOrElse { secondError ->
+                throw IllegalStateException(
+                    "Encrypted preferences unavailable for $name after recovery attempt",
+                    secondError
+                )
+            }
         }
+    }
+
+    private fun createInternal(context: Context, name: String): SharedPreferences {
+        val masterKey = buildMasterKey(context)
+        return EncryptedSharedPreferences.create(
+            context,
+            name,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
     fun currentStatus(context: Context): SecureStorageStatus {
@@ -84,6 +102,12 @@ object SecurePreferencesFactory {
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
         }
+    }
+
+    private fun clearMasterKey() {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+        keyStore.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
     }
 
     private fun supportsStrongBoxRequest(): Boolean {

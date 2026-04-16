@@ -9,9 +9,9 @@ private enum ChatFolder: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "All"
-        case .channels: return "Channels"
-        case .bots: return "Bots"
+        case .all: return L10n.t("folder_all")
+        case .channels: return L10n.t("channels")
+        case .bots: return L10n.t("bots")
         }
     }
 }
@@ -25,6 +25,7 @@ struct ChatListView: View {
     @State private var routedChat: ChatDTO?
     @State private var isRoutedChatPresented = false
     @State private var isCreateGroupPresented = false
+    @State private var isCreateChannelPresented = false
     @State private var isNewDirectChatPresented = false
     @State private var showCreateActionSheet = false
     @State private var selectedFolder: ChatFolder = .all
@@ -76,7 +77,7 @@ struct ChatListView: View {
                         let isSaved = chat.isSelfChat
                         VostokListRow(
                             title: chat.title,
-                            subtitle: isSaved ? (viewModel.lastMessagePreview(chatID: chat.id) ?? "Your Cloud Storage") : rowSubtitle(for: chat),
+                            subtitle: isSaved ? (viewModel.lastMessagePreview(chatID: chat.id) ?? L10n.t("your_cloud_storage")) : rowSubtitle(for: chat),
                             subtitleSymbol: isSaved ? nil : rowSubtitleSymbol(for: chat),
                             trailing: isSaved ? "" : relativeDate(chat.latestMessageAt),
                             unreadCount: isSaved ? 0 : viewModel.unreadCount(chatID: chat.id),
@@ -91,17 +92,17 @@ struct ChatListView: View {
                     .listRowInsets(EdgeInsets())
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if !chat.isSelfChat {
-                            Button(viewModel.isPinned(chatID: chat.id) ? "Unpin" : "Pin") {
+                            Button(viewModel.isPinned(chatID: chat.id) ? L10n.t("unpin") : L10n.t("pin")) {
                                 viewModel.togglePin(chatID: chat.id)
                             }
                             .tint(.orange)
 
-                            Button(viewModel.isMuted(chatID: chat.id) ? "Unmute" : "Mute") {
+                            Button(viewModel.isMuted(chatID: chat.id) ? L10n.t("unmute") : L10n.t("mute")) {
                                 viewModel.toggleMute(chatID: chat.id)
                             }
                             .tint(.gray)
 
-                            Button("Archive") {
+                            Button(L10n.t("archive")) {
                                 viewModel.archive(chatID: chat.id)
                             }
                             .tint(.indigo)
@@ -122,10 +123,11 @@ struct ChatListView: View {
                     ProgressView()
                 }
             }
-            .confirmationDialog("New Conversation", isPresented: $showCreateActionSheet, titleVisibility: .visible) {
-                Button("New Chat") { isNewDirectChatPresented = true }
-                Button("New Group") { isCreateGroupPresented = true }
-                Button("Cancel", role: .cancel) {}
+            .confirmationDialog(L10n.t("new_conversation"), isPresented: $showCreateActionSheet, titleVisibility: .visible) {
+                Button(L10n.t("start_new_chat")) { isNewDirectChatPresented = true }
+                Button(L10n.t("new_group")) { isCreateGroupPresented = true }
+                Button(L10n.t("create_channel")) { isCreateChannelPresented = true }
+                Button(L10n.t("cancel"), role: .cancel) {}
             }
             .navigationDestination(for: ChatDTO.self) { chat in
                 ConversationView(chat: chat, container: container)
@@ -139,6 +141,9 @@ struct ChatListView: View {
             }
             .navigationDestination(isPresented: $isCreateGroupPresented) {
                 CreateGroupView(container: container)
+            }
+            .navigationDestination(isPresented: $isCreateChannelPresented) {
+                CreateChannelView(container: container)
             }
             .sheet(isPresented: $isNewDirectChatPresented, onDismiss: {
                 if routedChat != nil {
@@ -154,12 +159,12 @@ struct ChatListView: View {
             .searchable(
                 text: $viewModel.searchQuery,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search"
+                prompt: L10n.t("search")
             )
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 2) {
-                        Text("Chats")
+                        Text(L10n.t("chats"))
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(VostokColors.labelPrimary)
                         HStack(spacing: 5) {
@@ -209,19 +214,19 @@ struct ChatListView: View {
 
     private var realtimeStatusText: String {
         if !realtimeSnapshot.networkAvailable {
-            return "Offline"
+            return L10n.t("offline")
         }
         switch realtimeSnapshot.connectionState {
         case .connected:
-            return "Connected"
+            return L10n.t("connected")
         case .reconnecting:
-            return "Reconnecting"
+            return L10n.t("reconnecting")
         case .connecting:
-            return "Connecting"
+            return L10n.t("connecting")
         case .paused:
-            return "Paused"
+            return L10n.t("paused")
         case .disconnected:
-            return "Disconnected"
+            return L10n.t("disconnected")
         }
     }
 
@@ -384,7 +389,7 @@ struct NewDirectChatView: View {
                     }
                 }
             }
-            .searchable(text: $viewModel.searchQuery, prompt: "Search members")
+            .searchable(text: $viewModel.searchQuery, prompt: L10n.t("search_members"))
             .overlay {
                 if viewModel.isLoading {
                     ProgressView()
@@ -393,17 +398,17 @@ struct NewDirectChatView: View {
                         Image(systemName: "person.crop.circle.badge.questionmark")
                             .font(.system(size: 32))
                             .foregroundStyle(VostokColors.labelSecondary)
-                        Text("No Members")
+                        Text(L10n.t("no_members_found"))
                             .font(VostokTypography.bodyEmphasized)
                             .foregroundStyle(VostokColors.labelSecondary)
                     }
                 }
             }
-            .navigationTitle("New Chat")
+            .navigationTitle(L10n.t("start_new_chat"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(L10n.t("cancel")) { dismiss() }
                 }
             }
             .task { await loadMembers() }

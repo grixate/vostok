@@ -75,22 +75,22 @@ struct ProfileView: View {
 
             // Navigation
             Section {
-                NavigationLink("Linked Devices") {
+                NavigationLink(L10n.t("active_sessions")) {
                     DevicesView(container: container)
                 }
-                NavigationLink("Privacy & Security") {
-                    PrivacySettingsView(viewModel: settingsViewModel)
+                NavigationLink(L10n.t("privacy_and_security")) {
+                    PrivacySettingsView(viewModel: settingsViewModel, container: container)
                 }
             }
 
             // Logout
             Section {
-                Button("Log Out", role: .destructive) {
+                Button(L10n.t("sign_out"), role: .destructive) {
                     appState.logout()
                 }
             }
         }
-        .vostokNavBar(title: "Profile", large: false)
+        .vostokNavBar(title: L10n.t("profile"), large: false)
         .navigationDestination(isPresented: $navigateToSaved) {
             if let chat = savedMessagesChat {
                 ConversationView(chat: chat, container: container)

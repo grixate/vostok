@@ -14,7 +14,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -28,7 +30,7 @@ fun CallScreen(viewModel: CallViewModel, initialChatId: String?, onOpenGroupCall
         }
     }
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Call") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.call)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -49,21 +51,21 @@ fun CallScreen(viewModel: CallViewModel, initialChatId: String?, onOpenGroupCall
                 placeholder = { Text("Call ID") }
             )
             Text("Mode: ${state.mode}")
-            VostokButton(text = "Voice mode") { viewModel.updateMode("voice") }
-            VostokButton(text = "Video mode") { viewModel.updateMode("video") }
-            VostokButton(text = "Group mode") { viewModel.updateMode("group") }
+            VostokButton(text = stringResource(R.string.voice_mode)) { viewModel.updateMode("voice") }
+            VostokButton(text = stringResource(R.string.video_mode)) { viewModel.updateMode("video") }
+            VostokButton(text = stringResource(R.string.group_mode)) { viewModel.updateMode("group") }
 
-            VostokButton(text = if (state.isLoading) "Working..." else "Start/Attach") {
+            VostokButton(text = if (state.isLoading) stringResource(R.string.working) else stringResource(R.string.start_attach)) {
                 viewModel.startOrAttach()
             }
-            VostokButton(text = "Refresh", onClick = viewModel::refresh)
-            VostokButton(text = "Join (audio)") { viewModel.join("audio") }
-            VostokButton(text = "Join (audio_video)") { viewModel.join("audio_video") }
-            VostokButton(text = "Signal heartbeat", onClick = viewModel::sendHeartbeat)
-            VostokButton(text = "Leave", onClick = viewModel::leave)
-            VostokButton(text = "End", onClick = viewModel::end)
-            VostokButton(text = "Group Call Controls", onClick = onOpenGroupCall)
-            VostokButton(text = "Back", onClick = onBack)
+            VostokButton(text = stringResource(R.string.refresh), onClick = viewModel::refresh)
+            VostokButton(text = stringResource(R.string.join_audio)) { viewModel.join("audio") }
+            VostokButton(text = stringResource(R.string.join_audio_video)) { viewModel.join("audio_video") }
+            VostokButton(text = stringResource(R.string.signal_heartbeat), onClick = viewModel::sendHeartbeat)
+            VostokButton(text = stringResource(R.string.leave), onClick = viewModel::leave)
+            VostokButton(text = stringResource(R.string.end), onClick = viewModel::end)
+            VostokButton(text = stringResource(R.string.group_call_controls), onClick = onOpenGroupCall)
+            VostokButton(text = stringResource(R.string.back), onClick = onBack)
 
             state.state?.let { callState ->
                 Text("Call: ${callState.call.id}")

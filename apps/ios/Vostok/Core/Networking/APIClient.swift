@@ -89,6 +89,42 @@ final class APIClient: VostokAPIClientProtocol {
         try await authed(path: "/api/v1/chats/\(chatID)/members/\(userID)/remove", method: "POST", token: token, body: EmptyBody())
     }
 
+    func leaveGroup(token: String, chatID: String) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/leave", method: "POST", token: token, body: EmptyBody())
+    }
+
+    func deleteGroup(token: String, chatID: String) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)", method: "DELETE", token: token)
+    }
+
+    func updatePermissions(token: String, chatID: String, request: UpdatePermissionsRequest) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/group", method: "PUT", token: token, body: request)
+    }
+
+    func transferOwnership(token: String, chatID: String, request: TransferOwnershipRequest) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/transfer-ownership", method: "POST", token: token, body: request)
+    }
+
+    func createChannel(token: String, request: CreateChannelRequest) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/chats/channel", method: "POST", token: token, body: request)
+    }
+
+    func inviteLinks(token: String, chatID: String) async throws -> InviteLinksResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/invite-links", method: "GET", token: token)
+    }
+
+    func createInviteLink(token: String, chatID: String) async throws -> InviteLinkResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/invite-links", method: "POST", token: token, body: EmptyBody())
+    }
+
+    func revokeInviteLink(token: String, chatID: String, linkID: String) async throws -> InviteLinkResponse {
+        try await authed(path: "/api/v1/chats/\(chatID)/invite-links/\(linkID)", method: "DELETE", token: token)
+    }
+
+    func joinByInviteCode(token: String, code: String) async throws -> ChatResponse {
+        try await authed(path: "/api/v1/invite/\(code)/join", method: "POST", token: token, body: EmptyBody())
+    }
+
     func recipientDevices(token: String, chatID: String) async throws -> RecipientDevicesResponse {
         try await authed(path: "/api/v1/chats/\(chatID)/recipient-devices", method: "GET", token: token)
     }

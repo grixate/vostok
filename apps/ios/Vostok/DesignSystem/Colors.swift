@@ -3,67 +3,117 @@ import UIKit
 
 enum VostokColors {
     // MARK: – Backgrounds (adaptive light/dark)
-    static let primaryBackground   = Color(adaptiveLight: "#FFFFFF",  dark: "#1C1C1E")
-    static let secondaryBackground = Color(adaptiveLight: "#F2F2F7",  dark: "#2C2C2E")
+    // Source of truth: packages/ui-tokens/src/index.ts
+    static let primaryBackground   = Color(adaptiveLight: "#EAEAEA",  dark: "#090909")
+    static let secondaryBackground = Color(adaptiveLight: "#FFFFFF",  dark: "#111111")
+    static let tertiaryBackground  = Color(adaptiveLight: "#F5F5F5",  dark: "#1A1A1A")
 
     // MARK: – Fills
-    /// Selected-tab fill / input surface (was `surfaceTertiary`)
-    static let fillTertiary  = Color(adaptiveLight: "#EDEDED", dark: "#333333")
-    /// Chip / toggle track overlay — rgba(120,120,128,0.20)
-    static let fillPrimary   = Color(red: 120/255, green: 120/255, blue: 128/255, opacity: 0.2)
-    /// Muted-badge background — rgba(120,120,128,0.16)
-    static let fillSecondary = Color(red: 120/255, green: 120/255, blue: 128/255, opacity: 0.16)
-    /// Deprecated alias — prefer `fillTertiary`
-    static var surfaceTertiary: Color { fillTertiary }
-
-    // MARK: – Glass / surface overlays
-    static let glassLight  = Color(hex: "#FFFFFF", alpha: 0.65)
-    static let glassDarken = Color(hex: "#F7F7F7")
-    static let glassBurn   = Color(hex: "#DDDDDD")
+    /// Hover / selected state surface
+    static let fillHover     = Color(adaptiveLight: "#EFEFEF", dark: "#1C1C1C")
+    /// Active state surface
+    static let fillActive    = Color(adaptiveLight: "#E3E3E3", dark: "#2A2A2A")
+    /// Input field background
+    static let fillInput     = Color(adaptiveLight: "#F5F5F5", dark: "#1A1A1A")
+    /// Generic overlay fill
+    static let fill = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.06)
+            : UIColor(white: 0, alpha: 0.04)
+    })
 
     // MARK: – Chat surfaces
-    /// Chat wallpaper background — spec #DCE8D4 (was #92B788 — too dark)
-    static let chatWallpaperBase = Color(hex: "#DCE8D4")
-    /// Outgoing message bubble — spec #E1FEC6 light / #3B6E2B dark (was #EFFEDD)
-    static let bubbleOutgoing = Color(adaptiveLight: "#E1FEC6", dark: "#3B6E2B")
-    /// Incoming message bubble (adaptive)
-    static let bubbleIncoming = Color(adaptiveLight: "#FFFFFF",  dark: "#2C2C2E")
+    /// Outgoing message bubble — peach (light) / warm brown (dark)
+    static let bubbleOutgoing = Color(adaptiveLight: "#FFE5CC", dark: "#201B13")
+    /// Incoming message bubble
+    static let bubbleIncoming = Color(adaptiveLight: "#EFEFEF",  dark: "#1C1C1C")
     /// Date-separator / service message overlay
-    static let bubbleService  = Color.black.opacity(0.3)
+    static let bubbleSystem = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0, alpha: 0.30)
+            : UIColor(white: 1, alpha: 0.50)
+    })
 
     // MARK: – Separators
-    static let separatorOpaque  = Color(hex: "#C6C6C8")
-    static let separatorVibrant = Color(adaptiveLight: "#E6E6E6", dark: "#38383A")
+    static let separator = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.035)
+            : UIColor(white: 0, alpha: 0.08)
+    })
+    static let separatorOpaque = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.02)
+            : UIColor(white: 0, alpha: 0.04)
+    })
 
     // MARK: – Labels (adaptive)
-    static let labelPrimary   = Color(adaptiveLight: "#000000", dark: "#FFFFFF")
-    /// rgba(60,60,67,0.6) light / rgba(235,235,245,0.6) dark
-    static let labelSecondary = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 235/255, green: 235/255, blue: 245/255, alpha: 0.6)
-            : UIColor(red:  60/255, green:  60/255, blue:  67/255, alpha: 0.6)
-    })
-    /// Placeholder / disabled text — rgba(60,60,67,0.30)
-    static let labelTertiary  = Color(red: 60/255, green: 60/255, blue: 67/255, opacity: 0.3)
+    static let labelPrimary = Color(adaptiveLight: "#111111", dark: "#FFFFFF")
+    static let labelSecondary = Color(adaptiveLight: "#666666", dark: "#888888")
+    static let labelTertiary = Color(adaptiveLight: "#999999", dark: "#555555")
 
-    // MARK: – Accent / brand
-    static let accent      = Color(hex: "#008BFF")
-    static let accentMuted = Color(hex: "#008BFF", alpha: 0.12)   // badge highlight
+    // MARK: – Accent / brand (orange)
+    static let accent      = Color(hex: "#FF5500")
+    static let accentAlt   = Color(hex: "#FF9500")
+    static let accentAmber = Color(hex: "#FFB347")
+    static let accentHover = Color(hex: "#E64D00")
+    static let accentSoft  = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1, green: 85/255, blue: 0, alpha: 0.15)
+            : UIColor(red: 1, green: 85/255, blue: 0, alpha: 0.10)
+    })
+    static let textAccent    = Color(hex: "#FF5500")
+    static let textOnAccent  = Color.white
 
     // MARK: – State
-    static let danger = Color(hex: "#FF3B30")
-    static let online = Color(hex: "#34C759")
+    static let danger  = Color(adaptiveLight: "#D32F2F", dark: "#E53935")
+    static let success = Color(adaptiveLight: "#2DA44E", dark: "#34C759")
+    static let online  = Color(hex: "#44CF6C")
 
-    // MARK: – Deprecated (non-spec tokens — kept for call-site compatibility)
-    /// Deprecated — use `labelSecondary` for secondary text / icons
-    static var controlPrimary: Color   { labelSecondary }
-    /// Deprecated — use `labelTertiary` for tertiary text / icons
+    // MARK: – Peer avatar colors (8-color palette, deterministic by name hash)
+    static let peerColors: [Color] = [
+        Color(hex: "#FF5C5C"),
+        Color(hex: "#4FAE4E"),
+        Color(hex: "#E6A817"),
+        Color(hex: "#009EE6"),
+        Color(hex: "#7B68EE"),
+        Color(hex: "#E667AF"),
+        Color(hex: "#20BFAB"),
+        Color(hex: "#EB7840"),
+    ]
+
+    /// Returns a deterministic peer color based on a string (name, chat ID, etc.)
+    static func peerColor(for name: String) -> Color {
+        guard !name.isEmpty else { return peerColors[0] }
+        let hash = name.utf8.reduce(0) { ($0 &+ UInt32($1)) &* 31 }
+        return peerColors[Int(hash % UInt32(peerColors.count))]
+    }
+
+    // MARK: – Deprecated aliases (kept for call-site compatibility during migration)
+    /// Deprecated — use `labelSecondary`
+    static var controlPrimary: Color { labelSecondary }
+    /// Deprecated — use `labelTertiary`
     static var controlSecondary: Color { labelTertiary }
+    /// Deprecated — use `tertiaryBackground`
+    static var fillTertiary: Color { tertiaryBackground }
+    /// Deprecated — use `fill`
+    static var fillPrimary: Color { fill }
+    /// Deprecated — use `fill`
+    static var fillSecondary: Color { fill }
+    /// Deprecated — use `secondaryBackground`
+    static var surfaceTertiary: Color { tertiaryBackground }
+    /// Deprecated — use `accentSoft`
+    static var accentMuted: Color { accentSoft }
+    /// Deprecated — use `separator`
+    static var separatorVibrant: Color { separator }
+    /// Deprecated — use `fillInput`
+    static var glassLight: Color { fillInput }
+    static var glassDarken: Color { tertiaryBackground }
+    static var glassBurn: Color { tertiaryBackground }
 }
 
-// MARK: – Private Color helpers
+// MARK: – Color helpers
 
-private extension Color {
+extension Color {
     /// Hex + alpha initialiser (fixed / light-mode colour).
     init(hex: String, alpha: Double = 1.0) {
         let cleaned = hex.replacingOccurrences(of: "#", with: "")

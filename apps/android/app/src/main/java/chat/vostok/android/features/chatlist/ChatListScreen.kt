@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokListItem
 import chat.vostok.android.designsystem.components.VostokTopBar
@@ -32,7 +34,7 @@ fun ChatListScreen(
     onOpenConversation: (String, String?) -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Chats") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.chats)) }) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -66,7 +68,7 @@ fun ChatListScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     if (state.reconnectAttempt > 0) {
                         androidx.compose.material3.Text(
-                            text = "Reconnections: ${state.reconnectAttempt}",
+                            text = stringResource(R.string.reconnections, state.reconnectAttempt),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
@@ -77,7 +79,7 @@ fun ChatListScreen(
 
             item {
                 VostokButton(
-                    text = if (state.isLoading) "Syncing..." else "Refresh",
+                    text = if (state.isLoading) stringResource(R.string.syncing) else stringResource(R.string.refresh),
                     onClick = viewModel::refresh
                 )
             }

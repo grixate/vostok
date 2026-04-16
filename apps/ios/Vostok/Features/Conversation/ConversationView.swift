@@ -20,7 +20,7 @@ struct ConversationView: View {
     @State private var previewImage: Image?
     @State private var previewVideoURL: URL?
     @State private var previewText: String?
-    @State private var previewTitle = "Attachment"
+    @State private var previewTitle = L10n.t("attachment")
     @State private var showingAttachmentPreview = false
     @State private var showingPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -91,20 +91,35 @@ struct ConversationView: View {
                 // VideoRecordingView is rendered inside RoundVideoPreviewOverlay
                 // so it isn't blocked by the full-screen blur layer.
 
-                VostokComposer(
-                    text: $viewModel.composerText,
-                    isVideoMode: $isVideoMode,
-                    replyTitle: replyTitle,
-                    replyText: replyText,
-                    onCancelReply: {
-                        viewModel.cancelReply()
-                    },
-                    onAttach: { showingAttachmentComposer = true },
-                    onSend: {
-                        Task {
-                            await handleComposerSend()
-                        }
-                    },
+                if chat.isChannel && !(chat.canPost ?? false) {
+                    // Read-only hint for channel subscribers
+                    Text(L10n.t("channel_read_only_hint"))
+                        .font(VostokTypography.caption)
+                        .foregroundStyle(VostokColors.labelSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, VostokTheme.spaceLG)
+                        .padding(.vertical, VostokTheme.spaceMD)
+                        .frame(maxWidth: .infinity)
+                        .background(VostokColors.secondaryBackground)
+                } else {
+                    EmptyView()
+                }
+
+                if !chat.isChannel || (chat.canPost ?? false) {
+                    VostokComposer(
+                        text: $viewModel.composerText,
+                        isVideoMode: $isVideoMode,
+                        replyTitle: replyTitle,
+                        replyText: replyText,
+                        onCancelReply: {
+                            viewModel.cancelReply()
+                        },
+                        onAttach: { showingAttachmentComposer = true },
+                        onSend: {
+                            Task {
+                                await handleComposerSend()
+                            }
+                        },
                     onStartRecording: {
                         if isVideoMode {
                             Task { await videoRecordingVM.startRecording() }
@@ -127,6 +142,7 @@ struct ConversationView: View {
                         }
                     }
                 )
+                } // end canPost guard
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -140,7 +156,7 @@ struct ConversationView: View {
                 } else if chat.type == "group" {
                     HStack(spacing: 8) {
                         NavigationLink {
-                            GroupInfoView(chatID: chat.id, container: container)
+                            GroupInfoView(chat: chat, container: container)
                         } label: {
                             topCircleIcon(systemName: "person.3.fill")
                         }
@@ -226,12 +242,12 @@ struct ConversationView: View {
         .animation(.easeInOut(duration: 0.2), value: contextMenuMessage?.id)
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
-        .confirmationDialog("Delete Message", isPresented: Binding(get: {
+        .confirmationDialog(L10n.t("delete_message"), isPresented: Binding(get: {
             deletingMessage != nil
         }, set: { show in
             if !show { deletingMessage = nil }
         })) {
-            Button("Delete", role: .destructive) {
+            Button(L10n.t("delete"), role: .destructive) {
                 guard let message = deletingMessage else { return }
                 deletingMessage = nil
                 if case let .authenticated(session) = appState.sessionState {
@@ -244,18 +260,18 @@ struct ConversationView: View {
                     }
                 }
             }
-            Button("Cancel", role: .cancel) {
+            Button(L10n.t("cancel"), role: .cancel) {
                 deletingMessage = nil
             }
         }
-        .confirmationDialog("Attach Media", isPresented: $showingAttachmentComposer) {
-            Button("Photo or Video") {
+        .confirmationDialog(L10n.t("attach_media"), isPresented: $showingAttachmentComposer) {
+            Button(L10n.t("photo_or_video")) {
                 showingPhotoPicker = true
             }
-            Button("File") {
+            Button(L10n.t("file")) {
                 showingFileImporter = true
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.t("cancel"), role: .cancel) {}
         }
         .photosPicker(
             isPresented: $showingPhotoPicker,
@@ -271,20 +287,20 @@ struct ConversationView: View {
         .sheet(item: $editingMessage) { message in
             NavigationStack {
                 Form {
-                    Section("Edit Text") {
-                        TextField("Message", text: $editDraft, axis: .vertical)
+                    Section(L10n.t("edit_text")) {
+                        TextField(L10n.t("type_message"), text: $editDraft, axis: .vertical)
                     }
                 }
-                .navigationTitle("Edit Message")
+                .navigationTitle(L10n.t("edit_message"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
+                        Button(L10n.t("cancel")) {
                             editingMessage = nil
                         }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
+                        Button(L10n.t("save")) {
                             guard case let .authenticated(session) = appState.sessionState else { return }
                             Task {
                                 await viewModel.edit(
@@ -312,7 +328,7 @@ struct ConversationView: View {
                         VideoAttachmentPlayerView(url: previewVideoURL)
                     } else {
                         ScrollView {
-                            Text(previewText ?? "No preview available.")
+                            Text(previewText ?? L10n.t("no_preview"))
                                 .font(.system(.footnote, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(16)
@@ -323,7 +339,7 @@ struct ConversationView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") {
+                        Button(L10n.t("done")) {
                             showingAttachmentPreview = false
                             cleanupPreviewVideo()
                         }
@@ -331,16 +347,16 @@ struct ConversationView: View {
                 }
             }
         }
-        .alert("Message Error", isPresented: Binding(get: {
+        .alert(L10n.t("message_error"), isPresented: Binding(get: {
             viewModel.errorMessage != nil
         }, set: { show in
             if !show { viewModel.errorMessage = nil }
         })) {
-            Button("OK", role: .cancel) {
+            Button(L10n.t("ok"), role: .cancel) {
                 viewModel.errorMessage = nil
             }
         } message: {
-            Text(viewModel.errorMessage ?? "Unknown error")
+            Text(viewModel.errorMessage ?? L10n.t("unknown_error"))
         }
         .onAppear {
             voiceRecordingVM.sendHandler = { [self] url in
@@ -447,7 +463,7 @@ struct ConversationView: View {
         let payload = decodeAttachmentPayload(message.ciphertext)
         if message.deletedAt != nil {
             VostokMessageBubble(
-                text: "Message deleted",
+                text: L10n.t("message_deleted"),
                 timestamp: shortTime(message.insertedAt),
                 incoming: incoming,
                 isEdited: message.editedAt != nil,
@@ -528,7 +544,7 @@ struct ConversationView: View {
             )
         } else {
             VostokMessageBubble(
-                text: decode(message.ciphertext) ?? "(encrypted)",
+                text: decode(message.ciphertext) ?? L10n.t("encrypted"),
                 timestamp: shortTime(message.insertedAt),
                 incoming: incoming,
                 isEdited: message.editedAt != nil,
@@ -542,18 +558,18 @@ struct ConversationView: View {
 
     private func replyPreview(for message: MessageDTO) -> String? {
         guard let replyID = message.replyToMessageID else { return nil }
-        guard let referenced = viewModel.messages.first(where: { $0.id == replyID }) else { return "Reply" }
+        guard let referenced = viewModel.messages.first(where: { $0.id == replyID }) else { return L10n.t("reply") }
         if referenced.deletedAt != nil {
-            return "Reply: Message deleted"
+            return "\(L10n.t("reply")): \(L10n.t("message_deleted"))"
         }
         if let payload = decodeAttachmentPayload(referenced.ciphertext) {
             if payload.mediaKind == "audio" {
-                return "Reply: Voice message"
+                return "\(L10n.t("reply")): \(L10n.t("voice_message"))"
             }
-            return "Reply: \(payload.filename)"
+            return "\(L10n.t("reply")): \(payload.filename)"
         }
         let text = decode(referenced.ciphertext) ?? referenced.messageKind.capitalized
-        return "Reply: \(text)"
+        return "\(L10n.t("reply")): \(text)"
     }
 
     private func replyTapAction(for message: MessageDTO) -> (() -> Void)? {
@@ -564,10 +580,10 @@ struct ConversationView: View {
     }
 
     private func replySnippet(for message: MessageDTO) -> String {
-        if message.deletedAt != nil { return "Message deleted" }
+        if message.deletedAt != nil { return L10n.t("message_deleted") }
         if let payload = decodeAttachmentPayload(message.ciphertext) {
             if payload.mediaKind == "audio" {
-                return "Voice message"
+                return L10n.t("voice_message")
             }
             return payload.filename
         }
@@ -576,8 +592,8 @@ struct ConversationView: View {
 
     private var replyTitle: String? {
         guard let target = viewModel.replyTarget else { return nil }
-        let sender = target.senderDeviceID == sessionDeviceID ? "You" : chat.title
-        return "Reply to \(sender)"
+        let sender = target.senderDeviceID == sessionDeviceID ? L10n.t("you") : chat.title
+        return "\(L10n.t("reply")) \(sender)"
     }
 
     private var replyText: String? {
@@ -598,7 +614,7 @@ struct ConversationView: View {
     }
 
     private func contextMenuContent(for message: MessageDTO) -> String {
-        if message.deletedAt != nil { return "Message deleted" }
+        if message.deletedAt != nil { return L10n.t("message_deleted") }
         return decode(message.ciphertext) ?? ""
     }
 
@@ -606,14 +622,14 @@ struct ConversationView: View {
         if message.deletedAt != nil { return nil }
         if let payload = decodeAttachmentPayload(message.ciphertext) {
             switch payload.mediaKind {
-            case "audio": return "🎤 Voice message"
+            case "audio": return "🎤 \(L10n.t("voice_message"))"
             case "video":
-                return payload.filename.hasPrefix("round-") ? "📹 Video message" : "🎬 \(payload.filename)"
+                return payload.filename.hasPrefix("round-") ? "📹 \(L10n.t("video_message"))" : "🎬 \(payload.filename)"
             case "image": return "🖼 \(payload.filename)"
             default: return "📎 \(payload.filename)"
             }
         }
-        if message.messageKind == "voice" { return "🎤 Voice message" }
+        if message.messageKind == "voice" { return "🎤 \(L10n.t("voice_message"))" }
         return nil
     }
 
@@ -865,13 +881,13 @@ struct ConversationView: View {
 
     private var conversationSubtitle: String {
         if chat.isSelfChat {
-            return "Your Cloud Storage"
+            return L10n.t("your_cloud_storage")
         }
         if chat.type == "group" {
             let members = max(1, chat.participantUsernames.count)
-            return "\(members) members"
+            return L10n.t("n_members", members)
         }
-        return "last seen recently"
+        return L10n.t("last_seen_recently")
     }
 
     private func topCircleIcon(systemName: String) -> some View {
@@ -892,10 +908,10 @@ struct ConversationView: View {
             Image(systemName: "bookmark.fill")
                 .font(.system(size: 56, weight: .medium))
                 .foregroundStyle(VostokColors.accent)
-            Text("Your Cloud Storage")
+            Text(L10n.t("your_cloud_storage"))
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(VostokColors.labelPrimary)
-            Text("Forward messages here to save them.\nAccess them from any of your devices.")
+            Text(L10n.t("saved_messages_empty_subtitle"))
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(VostokColors.labelSecondary)
                 .multilineTextAlignment(.center)
@@ -945,16 +961,7 @@ private struct ConversationWallpaper: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                VostokColors.chatWallpaperBase
-                LinearGradient(
-                    colors: [
-                        Color.yellow.opacity(0.18),
-                        Color.green.opacity(0.08),
-                        Color.blue.opacity(0.08)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                VostokColors.primaryBackground
 
                 ForEach(0..<rowCount(height: proxy.size.height), id: \.self) { row in
                     ForEach(0..<columnCount(width: proxy.size.width), id: \.self) { column in

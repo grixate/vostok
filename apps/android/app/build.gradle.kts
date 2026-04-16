@@ -65,6 +65,15 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// Resolve Tink conflict: libsignal brings tink (JVM) while security-crypto needs tink-android.
+// Globally substitute tink -> tink-android so only one variant is on the classpath.
+configurations.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("com.google.crypto.tink:tink"))
+            .using(module("com.google.crypto.tink:tink-android:1.19.0"))
+    }
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -101,13 +110,10 @@ dependencies {
 
     implementation("io.getstream:stream-webrtc-android:1.3.1")
 
-    implementation("com.google.firebase:firebase-messaging:24.1.0")
     implementation("org.unifiedpush.android:connector:3.0.9")
 
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06") {
-        exclude(group = "com.google.crypto.tink", module = "tink-android")
-    }
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.camera:camera-camera2:1.4.1")

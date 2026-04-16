@@ -29,7 +29,7 @@ struct RegistrationView: View {
                     .padding(.bottom, 24)
 
                 // MARK: Title + subtitle
-                Text("Create Account")
+                Text(L10n.t("create_account"))
                     .font(VostokTypography.titleSection)   // 22px Semibold
                     .foregroundStyle(VostokColors.labelPrimary)
                     .padding(.bottom, 8)
@@ -78,7 +78,7 @@ struct RegistrationView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text("Create Account")
+                        Text(L10n.t("create_account"))
                     }
                 }
                 .buttonStyle(VostokPrimaryButtonStyle())

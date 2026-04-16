@@ -19,10 +19,10 @@ struct VostokComposer: View {
             Button(action: onAttach) {
                 Image(systemName: "paperclip")
                     .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(VostokColors.controlPrimary)
+                    .foregroundStyle(VostokColors.labelSecondary)
             }
             .frame(width: 44, height: 44)
-            .background(glassCircleBackground)
+            .background(VostokColors.tertiaryBackground)
             .clipShape(Circle())
             .accessibilityLabel("Attach")
             .accessibilityHint("Add photo, video, file, or voice message")
@@ -32,10 +32,10 @@ struct VostokComposer: View {
                     replyPreview(title: replyTitle, text: replyText)
                 }
 
-                HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .center, spacing: VostokTheme.spaceSM) {
                     TextField("Message", text: $text, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 17, weight: .regular))
+                        .font(VostokTypography.body)
                         .lineLimit(1...8)
                         .submitLabel(.send)
                         .onSubmit {
@@ -51,7 +51,7 @@ struct VostokComposer: View {
                         Button(action: onSend) {
                             Image(systemName: "paperplane.fill")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(VostokColors.textOnAccent)
                                 .frame(width: 44, height: 44)
                                 .background(VostokColors.accent, in: Circle())
                         }
@@ -61,13 +61,17 @@ struct VostokComposer: View {
                     }
                 }
                 .padding(.leading, 9)
-                .padding(.trailing, 8)
+                .padding(.trailing, VostokTheme.spaceSM)
                 .padding(.top, 6)
                 .padding(.bottom, 6)
             }
             .frame(minHeight: 44)
-            .background(glassFieldBackground)
+            .background(VostokColors.fillInput)
             .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .strokeBorder(VostokColors.separator, lineWidth: 0.5)
+            )
 
             if !isSendMode {
                 VoiceRecordButton(
@@ -78,46 +82,18 @@ struct VostokComposer: View {
                 )
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 4)
-        .padding(.bottom, 12)
-        .background(
-            LinearGradient(
-                colors: [.clear, VostokColors.secondaryBackground.opacity(0.18)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .padding(.horizontal, VostokTheme.spaceSM)
+        .padding(.top, VostokTheme.spaceXS)
+        .padding(.bottom, VostokTheme.spaceMD)
+        .background(VostokColors.secondaryBackground)
     }
 
     private var isSendMode: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || replyTitle != nil
     }
 
-    private var glassFieldBackground: some View {
-        RoundedRectangle(cornerRadius: 21, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: 21, style: .continuous)
-                    .fill(VostokColors.glassLight.opacity(0.7))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 21, style: .continuous)
-                    .strokeBorder(VostokColors.separatorVibrant.opacity(0.45), lineWidth: 0.5)
-            )
-            .shadow(color: .black.opacity(0.08), radius: 16, y: 4)
-    }
-
-    private var glassCircleBackground: some View {
-        Circle()
-            .fill(.ultraThinMaterial)
-            .overlay(Circle().fill(VostokColors.glassLight.opacity(0.7)))
-            .overlay(Circle().strokeBorder(VostokColors.separatorVibrant.opacity(0.45), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.08), radius: 16, y: 4)
-    }
-
     private func replyPreview(title: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: VostokTheme.spaceSM) {
             Rectangle()
                 .fill(VostokColors.accent)
                 .frame(width: 2, height: 34)
@@ -125,11 +101,11 @@ struct VostokComposer: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(VostokTypography.title)
                     .foregroundStyle(VostokColors.accent)
                     .lineLimit(1)
                 Text(text)
-                    .font(.system(size: 17, weight: .regular))
+                    .font(VostokTypography.body)
                     .foregroundStyle(VostokColors.labelPrimary)
                     .lineLimit(1)
             }
@@ -149,7 +125,7 @@ struct VostokComposer: View {
         }
         .padding(.leading, 9)
         .padding(.trailing, 6)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.top, VostokTheme.spaceSM)
+        .padding(.bottom, VostokTheme.spaceXS)
     }
 }

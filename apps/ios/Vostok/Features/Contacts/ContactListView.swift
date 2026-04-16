@@ -46,7 +46,7 @@ struct ContactListView: View {
                 }
             }
         }
-        .searchable(text: $viewModel.searchQuery, prompt: "Search members")
+        .searchable(text: $viewModel.searchQuery, prompt: L10n.t("search_members"))
         .refreshable {
             await loadIfPossible()
         }
@@ -58,7 +58,7 @@ struct ContactListView: View {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .font(.system(size: 32))
                         .foregroundStyle(VostokColors.labelSecondary)
-                    Text("No Members")
+                    Text(L10n.t("no_members_found"))
                         .font(VostokTypography.bodyEmphasized)
                         .foregroundStyle(VostokColors.labelSecondary)
                 }
@@ -71,7 +71,7 @@ struct ContactListView: View {
                 EmptyView()
             }
         }
-        .vostokNavBar(title: "Members", large: true)
+        .vostokNavBar(title: L10n.t("members"), large: true)
         .task {
             await loadIfPossible()
         }

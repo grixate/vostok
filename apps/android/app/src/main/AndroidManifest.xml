@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <permission
+        android:name="chat.vostok.android.permission.PUSH_RECEIVE"
+        android:protectionLevel="signature" />
+
     <application
         android:name=".app.VostokApp"
         android:allowBackup="false"
@@ -27,17 +31,10 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".core.push.FcmService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <receiver
             android:name=".core.push.UnifiedPushReceiver"
-            android:exported="true" />
+            android:exported="true"
+            android:permission="chat.vostok.android.permission.PUSH_RECEIVE" />
 
         <receiver
             android:name=".core.push.PushActionReceiver"

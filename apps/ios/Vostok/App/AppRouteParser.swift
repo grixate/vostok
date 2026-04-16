@@ -3,16 +3,41 @@ import Foundation
 enum AppRoute: Equatable {
     case chat(chatID: String)
     case user(username: String)
+    case invite(code: String)
 }
 
 enum AppRouteParser {
     static func route(from url: URL) -> AppRoute? {
+        if let code = inviteCode(from: url) {
+            return .invite(code: code)
+        }
         if let chatID = chatID(from: url) {
             return .chat(chatID: chatID)
         }
         if let username = username(from: url) {
             return .user(username: username)
         }
+        return nil
+    }
+
+    private static func inviteCode(from url: URL) -> String? {
+        let scheme = (url.scheme ?? "").lowercased()
+        let host = (url.host ?? "").lowercased()
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+
+        // vostok://invite/<code>
+        if scheme == "vostok" && host == "invite", let code = pathComponents.first {
+            return code.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // https://example.com/invite/<code>
+        let lowered = pathComponents.map { $0.lowercased() }
+        if (scheme == "http" || scheme == "https"),
+           let idx = lowered.firstIndex(of: "invite"),
+           pathComponents.indices.contains(idx + 1) {
+            return pathComponents[idx + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
         return nil
     }
 

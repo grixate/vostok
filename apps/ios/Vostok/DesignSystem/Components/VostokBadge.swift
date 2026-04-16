@@ -2,8 +2,8 @@ import SwiftUI
 
 struct VostokBadge: View {
     enum Style {
-        case accent   // blue fill, white text — unread / active
-        case muted    // light gray fill, primary text — silenced / muted
+        case accent   // orange fill, white text — unread / active
+        case muted    // subtle fill, primary text — silenced / muted
     }
 
     let count: Int

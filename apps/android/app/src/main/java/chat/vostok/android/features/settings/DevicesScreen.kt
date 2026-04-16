@@ -13,6 +13,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import chat.vostok.android.R
 import chat.vostok.android.designsystem.components.VostokButton
 import chat.vostok.android.designsystem.components.VostokTopBar
 
@@ -20,7 +22,7 @@ import chat.vostok.android.designsystem.components.VostokTopBar
 fun DevicesScreen(viewModel: SettingsViewModel, onBackToSettings: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar("Devices") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(stringResource(R.string.active_sessions)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -29,10 +31,10 @@ fun DevicesScreen(viewModel: SettingsViewModel, onBackToSettings: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             VostokButton(
-                text = if (state.isLoadingDevices) "Refreshing..." else "Refresh Devices",
+                text = if (state.isLoadingDevices) stringResource(R.string.refreshing) else stringResource(R.string.refresh_devices),
                 onClick = viewModel::refreshDevices
             )
-            VostokButton(text = "Back", onClick = onBackToSettings)
+            VostokButton(text = stringResource(R.string.back), onClick = onBackToSettings)
 
             state.error?.let { Text(it) }
             state.info?.let { Text(it) }
@@ -45,10 +47,10 @@ fun DevicesScreen(viewModel: SettingsViewModel, onBackToSettings: () -> Unit) {
                     ) {
                         Text(text = device.deviceName)
                         Text(text = "Device: ${device.id}")
-                        Text(text = if (device.isCurrent) "Current device" else "Linked device")
+                        Text(text = if (device.isCurrent) stringResource(R.string.current_device) else stringResource(R.string.linked_device))
                         Text(text = "Prekeys: ${device.oneTimePrekeyCount}")
                         if (!device.isCurrent && device.revokedAt == null) {
-                            VostokButton(text = "Revoke") {
+                            VostokButton(text = stringResource(R.string.revoke)) {
                                 viewModel.revokeDevice(device.id)
                             }
                         }

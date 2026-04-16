@@ -51,6 +51,15 @@ abstract class VostokDatabase : RoomDatabase() {
             }
         }
 
+        /** Creates a new database instance with a custom name (for per-server databases). */
+        fun create(context: Context, name: String, passphrase: ByteArray): VostokDatabase {
+            val factory = SupportOpenHelperFactory(passphrase)
+            return Room.databaseBuilder(context, VostokDatabase::class.java, name)
+                .openHelperFactory(factory)
+                .addMigrations(MIGRATION_2_3)
+                .build()
+        }
+
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE signal_session ADD COLUMN signalAddressName TEXT NOT NULL DEFAULT ''")

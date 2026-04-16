@@ -26,7 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import chat.vostok.android.R
 import androidx.compose.ui.viewinterop.AndroidView
 import chat.vostok.android.designsystem.components.VostokTopBar
 import chat.vostok.android.designsystem.components.VostokButton
@@ -66,7 +68,7 @@ fun ConversationScreen(
         }
     }
 
-    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(chatTitle?.takeIf { it.isNotBlank() } ?: "Conversation") }) { innerPadding ->
+    androidx.compose.material3.Scaffold(topBar = { VostokTopBar(chatTitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.conversation)) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,11 +82,11 @@ fun ConversationScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                VostokButton(text = "Call") { onOpenCall?.invoke(chatId) }
-                VostokButton(text = "Group") { onOpenGroupInfo?.invoke(chatId) }
-                VostokButton(text = "Media") { onOpenMedia?.invoke(chatId) }
+                VostokButton(text = stringResource(R.string.call)) { onOpenCall?.invoke(chatId) }
+                VostokButton(text = stringResource(R.string.group)) { onOpenGroupInfo?.invoke(chatId) }
+                VostokButton(text = stringResource(R.string.media)) { onOpenMedia?.invoke(chatId) }
                 VostokButton(
-                    text = if (isVoiceRecording) "Stop Voice" else "Record Voice"
+                    text = if (isVoiceRecording) stringResource(R.string.stop_voice) else stringResource(R.string.record_voice)
                 ) {
                     if (isVoiceRecording) {
                         voiceFile = voiceRecorder.stop()
@@ -99,12 +101,12 @@ fun ConversationScreen(
                         isVoiceRecording = true
                     }
                 }
-                VostokButton(text = "Capture Round") {
+                VostokButton(text = stringResource(R.string.capture_round)) {
                     showRoundCapture = true
                 }
                 if (state.editingMessageId != null) {
                     TextButton(onClick = viewModel::cancelEdit) {
-                        Text("Cancel edit")
+                        Text(stringResource(R.string.cancel_edit))
                     }
                 }
             }
@@ -126,10 +128,10 @@ fun ConversationScreen(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            TextButton(onClick = { viewModel.startEdit(message) }) { Text("Edit") }
-                            TextButton(onClick = { viewModel.togglePin(chatId, message.id) }) { Text("Pin") }
+                            TextButton(onClick = { viewModel.startEdit(message) }) { Text(stringResource(R.string.edit)) }
+                            TextButton(onClick = { viewModel.togglePin(chatId, message.id) }) { Text(stringResource(R.string.pin)) }
                             TextButton(onClick = { viewModel.toggleReaction(chatId, message.id) }) { Text("👍") }
-                            TextButton(onClick = { viewModel.delete(chatId, message.id) }) { Text("Delete") }
+                            TextButton(onClick = { viewModel.delete(chatId, message.id) }) { Text(stringResource(R.string.delete)) }
                         }
                     }
                 }
@@ -142,7 +144,7 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 voiceFile?.let { file ->
-                    VostokButton(text = "Play Voice") {
+                    VostokButton(text = stringResource(R.string.play_voice)) {
                         runCatching {
                             voicePlayer?.release()
                             voicePlayer = MediaPlayer().apply {
@@ -156,7 +158,7 @@ fun ConversationScreen(
                             }
                         }
                     }
-                    VostokButton(text = "Send Voice") {
+                    VostokButton(text = stringResource(R.string.send_voice)) {
                         val payload = runCatching { file.readBytes() }.getOrNull()
                         if (payload != null) {
                             viewModel.sendVoiceUpload(
@@ -175,7 +177,7 @@ fun ConversationScreen(
                             )
                         }
                     }
-                    Text("Voice: ${voiceDurationSeconds.coerceAtLeast(1)}s")
+                    Text(stringResource(R.string.voice_duration, voiceDurationSeconds.coerceAtLeast(1)))
                 }
             }
 
@@ -193,7 +195,7 @@ fun ConversationScreen(
             }
 
             roundPreviewFile?.let { file ->
-                Text("Round clip: ${roundDurationSeconds.coerceAtLeast(1)}s")
+                Text(stringResource(R.string.round_clip_duration, roundDurationSeconds.coerceAtLeast(1)))
                 AndroidView(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -215,10 +217,10 @@ fun ConversationScreen(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    VostokButton(text = "Play Round") {
+                    VostokButton(text = stringResource(R.string.play_round)) {
                         roundVideoView?.start()
                     }
-                    VostokButton(text = "Send Round") {
+                    VostokButton(text = stringResource(R.string.send_round)) {
                         val payload = runCatching { file.readBytes() }.getOrNull()
                         if (payload != null) {
                             viewModel.sendRoundVideoUpload(
@@ -246,7 +248,7 @@ fun ConversationScreen(
                 onSend = {
                     viewModel.send(chatId, recipientDeviceIds)
                 },
-                sendLabel = if (state.editingMessageId == null) "Send" else "Save"
+                sendLabel = if (state.editingMessageId == null) stringResource(R.string.send) else stringResource(R.string.save)
             )
 
             state.error?.let { Text(it) }
