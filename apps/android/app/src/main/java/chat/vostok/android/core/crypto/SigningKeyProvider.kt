@@ -3,6 +3,7 @@ package chat.vostok.android.core.crypto
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import java.security.KeyPairGenerator
@@ -68,7 +69,15 @@ internal object Ed25519PublicKeyEncoding {
         if (encoded.size == x509Prefix.size + 32 && encoded.copyOfRange(0, x509Prefix.size).contentEquals(x509Prefix)) {
             return encoded.copyOfRange(x509Prefix.size, encoded.size)
         }
-        throw IllegalArgumentException("Unsupported Ed25519 public key encoding")
+        // Some Android Keystore implementations produce a SubjectPublicKeyInfo whose
+        // algorithm identifier carries extra parameters, so the fixed prefix above
+        // doesn't match. Parse it generically via ASN.1 and pull out the raw key bits.
+        runCatching {
+            val spki = SubjectPublicKeyInfo.getInstance(encoded)
+            val raw = spki.publicKeyData.bytes
+            if (raw.size == 32) return raw
+        }
+        throw IllegalArgumentException("Unsupported Ed25519 public key encoding (size=${encoded.size})")
     }
 }
 
@@ -169,9 +178,22 @@ private class AndroidKeystoreSigningKeyProvider : SigningKeyProvider {
     override val kind: SigningProviderKind = SigningProviderKind.ANDROID_KEYSTORE
 
     fun isSupported(): Boolean {
+        // Probe: some Android images (notably emulator API 35) accept "Ed25519" as an
+        // algorithm name but silently hand back an EC/P-256 key. Generate a throwaway
+        // key and verify the actual algorithm before committing to the keystore path.
         return runCatching {
-            KeyPairGenerator.getInstance("Ed25519", "AndroidKeyStore")
-        }.isSuccess
+            val generator = KeyPairGenerator.getInstance("Ed25519", "AndroidKeyStore")
+            val spec = KeyGenParameterSpec.Builder(
+                PROBE_ALIAS,
+                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+            ).build()
+            generator.initialize(spec)
+            val kp = generator.generateKeyPair()
+            val algo = kp.public.algorithm ?: ""
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            runCatching { keyStore.deleteEntry(PROBE_ALIAS) }
+            algo.equals("Ed25519", ignoreCase = true) || algo.equals("EdDSA", ignoreCase = true)
+        }.getOrDefault(false)
     }
 
     override fun hasIdentity(): Boolean {
@@ -212,5 +234,6 @@ private class AndroidKeystoreSigningKeyProvider : SigningKeyProvider {
 
     private companion object {
         const val ALIAS = "vostok_auth_signing_ed25519"
+        const val PROBE_ALIAS = "vostok_auth_signing_ed25519_probe"
     }
 }
